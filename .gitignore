@@ -1,0 +1,47 @@
+node_modules
+.pnpm-store
+.next
+out
+dist
+build
+*.log
+.DS_Store
+Thumbs.db
+
+# env
+.env
+.env.local
+.env.production
+.env.*.local
+
+# payload
+src/payload-types.ts
+.payload-cache
+
+# editors
+.vscode
+.idea
+
+# data
+data/
+volumes/
+*.sqlite
+*.db
+
+# local dev artifacts
+dev.log
+.dev.pid
+cookies.txt
+.dev-cookies
+tsconfig.tsbuildinfo
+.git-sha
+docker-compose.override.yml
+
+# IDE
+*.swp
+
+# Claude Code local config (personal state) — but project-shared slash commands
+# and agents under .claude/commands/ and .claude/agents/ ARE checked in.
+.claude/*
+!.claude/commands/
+!.claude/agents/

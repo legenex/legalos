@@ -1,0 +1,114 @@
+import { NextResponse, type NextRequest } from 'next/server'
+import { z } from 'zod'
+import { getPayload } from 'payload'
+import config from '@payload-config'
+import { runLeadPipeline } from '@/lib/lead-pipeline/run'
+import { resolveSiteByHost } from '@/lib/site-resolver'
+import { pickAttributionFromObject } from '@/lib/lead-pipeline/attribution'
+
+export const dynamic = 'force-dynamic'
+
+const ContactSchema = z.object({
+  first_name: z.string().optional(),
+  last_name: z.string().optional(),
+  email: z.string().optional(),
+  phone: z.string().optional(),
+  state: z.string().optional(),
+  zip: z.string().optional(),
+})
+
+const Body = z.object({
+  // Server resolves site from host header by default. site_slug is allowed for preview/test.
+  site_slug: z.string().optional(),
+  funnel_type: z.enum(['quiz', 'landing-page', 'contact-form', 'page', 'advertorial']),
+  funnel_id: z.string().optional(),
+  funnel_path: z.string().optional(),
+  source_entity_id: z.string().optional(),
+  test_capture: z.boolean().optional(),
+  contact: ContactSchema,
+  quiz_answers: z.record(z.unknown()).optional(),
+  attribution: z.record(z.unknown()).optional(),
+  trustedform_cert_url: z.string().optional(),
+  jornaya_lead_id: z.string().optional(),
+})
+
+export async function POST(req: NextRequest) {
+  let json: unknown
+  try {
+    json = await req.json()
+  } catch {
+    return NextResponse.json({ ok: false, error: 'invalid json' }, { status: 400 })
+  }
+
+  const parsed = Body.safeParse(json)
+  if (!parsed.success) {
+    return NextResponse.json({ ok: false, error: 'invalid payload', issues: parsed.error.issues }, { status: 400 })
+  }
+  const data = parsed.data
+
+  // Resolve Site
+  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? ''
+  const payload = await getPayload({ config })
+
+  let siteId: number | null = null
+  let siteSlug = ''
+  let siteName = ''
+  let primaryHost: string | null = null
+
+  if (data.site_slug) {
+    const res = await payload.find({
+      collection: 'sites',
+      where: { slug: { equals: data.site_slug } },
+      limit: 1,
+      overrideAccess: true,
+    })
+    const s = res.docs[0]
+    if (s) {
+      siteId = Number(s.id)
+      siteSlug = s.slug
+      siteName = s.name
+    }
+  } else {
+    const resolved = await resolveSiteByHost(host)
+    if (resolved) {
+      const s = await payload.findByID({ collection: 'sites', id: resolved.siteId, overrideAccess: true })
+      siteId = Number(s.id)
+      siteSlug = s.slug
+      siteName = s.name
+      primaryHost = resolved.primaryHost
+    }
+  }
+
+  if (!siteId) {
+    return NextResponse.json({ ok: false, error: 'could not resolve site' }, { status: 400 })
+  }
+
+  // Attribution: trust the client's UTM-style values but fill in server-side ip/user_agent.
+  const attribution = pickAttributionFromObject(data.attribution ?? null)
+  attribution.user_agent = req.headers.get('user-agent') ?? attribution.user_agent
+  attribution.ip = (req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? attribution.ip) ?? undefined
+  if (!attribution.landing_path && data.funnel_path) attribution.landing_path = data.funnel_path
+
+  const result = await runLeadPipeline({
+    siteId,
+    siteSlug,
+    siteName,
+    primaryHost,
+    funnel_type: data.funnel_type,
+    funnel_id: data.funnel_id,
+    funnel_path: data.funnel_path,
+    source_entity_id: data.source_entity_id,
+    test_capture: data.test_capture,
+    contact: data.contact,
+    quiz_answers: data.quiz_answers,
+    attribution,
+    trustedform_cert_url: data.trustedform_cert_url,
+    jornaya_lead_id: data.jornaya_lead_id,
+  })
+
+  return NextResponse.json(result, { status: result.ok ? 200 : 500 })
+}
+
+export async function OPTIONS() {
+  return NextResponse.json({}, { status: 200, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } })
+}

@@ -1,0 +1,225 @@
+LegalOS — teammate Claude bootstrap (read fully, then begin)
+============================================================
+
+You are Claude Code running in VS Code on a team member's PC. They just installed you and pasted a single prompt asking you to set them up to edit LegalOS. They have NOTHING locally — no clone, no Docker, no Node, nothing. They will NEVER edit locally — everything happens on our production server via SSH.
+
+Your job:
+  (A) Get them authorized to SSH into the server (one-time, ~3 min).
+  (B) For the rest of the session, use SSH for every read and write
+      against the server. NEVER touch local files.
+  (C) Every edit they ask for goes live at https://mo.legenex.com in
+      ~2 seconds via the server's `legalos-dev` systemd service
+      (which runs `pnpm dev` with Next.js's file watcher).
+
+Read this whole file before doing anything.
+
+------------------------------------------------------------
+PROJECT FACTS
+------------------------------------------------------------
+
+  Server host:          root@51.81.202.161
+  SSH alias to set up:  legalos
+  Project path:         /var/www/vhosts/legenex.com/mo.legenex.com
+  Live site:            https://mo.legenex.com
+  Hot reload mechanism: systemd `legalos-dev` runs `pnpm dev` — file
+                        watcher picks up saves in ~2 seconds, no
+                        rebuild needed.
+  Admin URL:            https://mo.legenex.com/admin (their .env on
+                        the server has SUPER_ADMIN_EMAIL + PASSWORD)
+
+------------------------------------------------------------
+PHASE 1 — ONE-TIME SSH SETUP
+------------------------------------------------------------
+
+Use TodoWrite to track these:
+  [ ] Check / generate SSH key
+  [ ] Add SSH config entry for `legalos`
+  [ ] Print public key + tell user to send to Morne
+  [ ] Wait for user to confirm Morne authorized it
+  [ ] Test connection
+
+ONE STEP PER MESSAGE. Confirm each before continuing.
+
+Step 1.1 — Detect OS via Bash
+  Run: `node -p "process.platform"` if Node is installed.
+  Or check shell type: `echo $SHELL` (Mac/Linux) vs `$PSVersionTable` (Windows).
+  Win = 'win32', Mac = 'darwin', Linux = 'linux'.
+  Make sure SSH is available: `ssh -V` (should be OpenSSH on all
+  three modern OSes). If not, on Windows guide them to enable
+  "OpenSSH Client" under Optional Features.
+
+Step 1.2 — Check / generate SSH key
+  Check if a key already exists:
+    Mac/Linux: `ls -la ~/.ssh/id_ed25519.pub 2>/dev/null || ls -la ~/.ssh/id_rsa.pub 2>/dev/null`
+    Windows: `Test-Path $env:USERPROFILE\.ssh\id_ed25519.pub`
+
+  If neither exists, generate (no passphrase — keeps Claude's
+  workflow fluid):
+    ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519 -C "<user-name>@legalos"
+
+  Tell the user: "I generated you an ed25519 SSH key at ~/.ssh/id_ed25519."
+
+Step 1.3 — Add SSH config entry
+  Append to ~/.ssh/config (create the file + dir if needed; chmod 600):
+
+    Host legalos
+        HostName 51.81.202.161
+        User root
+        IdentityFile ~/.ssh/id_ed25519
+        StrictHostKeyChecking accept-new
+
+  Idempotent: check if a `Host legalos` block already exists; if so,
+  leave it alone.
+
+Step 1.4 — Print public key + hand off to Morne
+  Run: `cat ~/.ssh/id_ed25519.pub` (or .pub for whichever key exists).
+
+  Tell the user verbatim:
+
+    "Copy the entire `ssh-ed25519 ... <name>@legalos` line above and
+     send it to Morne via Signal (1Password if you have it). Tell him:
+     'Please add this to authorized_keys.' He'll paste it onto the
+     server in about 30 seconds. Tell me when he confirms."
+
+  STOP. Wait for the user to confirm. Do NOT proceed.
+
+Step 1.5 — Test the connection
+  Once the user confirms Morne authorized them:
+    ssh -o BatchMode=yes -o ConnectTimeout=5 legalos true
+
+  Exit code 0 = success. Tell the user: "Connection works — you're
+  ready to edit."
+
+  If it fails:
+    - The user may have mistyped the key when sending to Morne. Re-print
+      with `cat ~/.ssh/id_ed25519.pub` and ask them to re-send.
+    - Or Morne hasn't actually authorized yet — ask them to ping again.
+
+End of Phase 1. Mark TodoWrite items complete.
+
+------------------------------------------------------------
+PHASE 2 — EDITING (the rest of every session)
+------------------------------------------------------------
+
+The user will ask for changes in plain language. Examples:
+  "Change the home page heading to 'X'"
+  "Make the primary buttons darker"
+  "Add a new section about pricing"
+
+For every change, the rules are:
+
+  ! NEVER USE Read/Edit/Write/Glob/Grep TOOLS — they operate on the
+    user's local PC, which has NO project files. They will silently
+    do nothing useful.
+
+  ALWAYS use the Bash tool with SSH commands targeting the alias
+  `legalos`. Examples:
+
+    # Read a file
+    ssh legalos cat /var/www/vhosts/legenex.com/mo.legenex.com/src/path/file.tsx
+
+    # Search the codebase
+    ssh legalos grep -rn 'searchterm' /var/www/vhosts/legenex.com/mo.legenex.com/src
+
+    # List a directory
+    ssh legalos ls /var/www/vhosts/legenex.com/mo.legenex.com/src/components
+
+    # Edit (small in-place change with sed)
+    ssh legalos sed -i 's|<oldtext>|<newtext>|' /var/www/vhosts/legenex.com/mo.legenex.com/<path>
+
+    # Edit (full file rewrite via heredoc — use single-quoted 'PAYLOAD'
+    # so local shell doesn't interpolate $vars or backticks)
+    ssh legalos "cat > /var/www/vhosts/legenex.com/mo.legenex.com/<path>" <<'PAYLOAD'
+    <new file contents go here verbatim>
+    PAYLOAD
+
+After each edit, say to the user:
+
+  "Live at https://mo.legenex.com in ~2 seconds. Hard-refresh (Ctrl+Shift+R
+   on Windows / Cmd+Shift+R on Mac) to see it."
+
+If the user reports the change didn't show up, check the dev server
+log for compile errors:
+
+    ssh legalos 'journalctl -u legalos-dev -n 40 --no-pager'
+
+If the dev server is stuck, restart it (slow path of last resort):
+
+    ssh legalos systemctl restart legalos-dev
+
+------------------------------------------------------------
+PHASE 3 — COMMIT TO GIT (only when user asks)
+------------------------------------------------------------
+
+The user may periodically say "commit", "save", "push to git", or
+similar. Saves are ALREADY live on the server — git commit is just
+preserving history for rollback / collaboration.
+
+When asked:
+
+    ssh legalos 'cd /var/www/vhosts/legenex.com/mo.legenex.com && git add -A && git status --short'
+
+Show the user the diff summary. Ask for a commit message (suggest one
+based on the changes).
+
+    ssh legalos 'cd /var/www/vhosts/legenex.com/mo.legenex.com && git commit -m "<message>" && git push origin main'
+
+That's the whole "deploy" — there is no scripts/deploy.sh to run.
+
+------------------------------------------------------------
+CONSTRAINTS (NEVER violate)
+------------------------------------------------------------
+
+  - NEVER edit local files. The user has no local clone — local edits
+    don't reach the server, don't reach https://mo.legenex.com.
+  - NEVER suggest cloning the repo locally.
+  - NEVER suggest installing Node, pnpm, Docker, or any prerequisite
+    on the user's PC. They don't need any of it.
+  - NEVER edit `.env` unless the user explicitly asks.
+  - NEVER run `docker compose down` or `systemctl stop legalos-dev`.
+  - NEVER use `npm` — this project uses `pnpm`.
+  - NEVER push to git as part of the normal edit flow — wait for the
+    user to explicitly say "commit".
+  - If a Payload collection field changes, generate a migration:
+    `ssh legalos 'cd /var/www/.../mo.legenex.com && pnpm payload migrate:create <name> && pnpm payload migrate'`
+    and commit the migration file when the user says "commit".
+
+------------------------------------------------------------
+FILE MAP (for when the user asks "where is X")
+------------------------------------------------------------
+
+  src/components/                                 Public-facing React components
+  src/app/(app)/admin/                            Custom admin UI
+  src/app/(public)/                               Visitor-facing pages
+  src/collections/                                Payload data collections
+  src/components/blocks/                          Block renderers
+  src/lib/lead-pipeline/                          Lead capture pipeline
+  src/app/(app)/admin/sites/[slug]/settings/      Per-site admin
+  src/lib/plesk/                                  Plesk REST API client
+  src/lib/ai/invoke.ts                            Anthropic SDK wrapper
+  src/migrations/                                 Database migrations
+  CLAUDE.md                                       Architecture + conventions
+  docs/DEPLOY.md                                  (Old Docker-deploy reference)
+
+------------------------------------------------------------
+WHEN STUCK
+------------------------------------------------------------
+
+  - `ssh legalos true` fails with "Permission denied": the user's key
+    isn't authorized yet. Ask them to re-confirm with Morne.
+
+  - `ssh legalos true` fails with "Connection refused" or timeout:
+    the server may be down. Ping Morne via Signal.
+
+  - An edit didn't show up at https://mo.legenex.com after 5s:
+    check journalctl for compile errors (see Phase 2). The dev server
+    may have crashed on a syntax error — fix the typo, save again.
+
+  - The user asks something you don't have context for: read it off
+    the server: `ssh legalos cat /var/www/vhosts/legenex.com/mo.legenex.com/<path>`
+
+  - Anything else: tell the user to ping Morne with a screenshot.
+
+------------------------------------------------------------
+END OF PLAYBOOK — BEGIN PHASE 1, STEP 1.1 NOW.
+------------------------------------------------------------

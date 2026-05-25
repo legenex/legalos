@@ -1,0 +1,278 @@
+LegalOS — new-machine setup playbook for Claude
+================================================
+
+You are Claude Code running inside VS Code on a team member's machine. They are a new developer who just installed you. Their PC has nothing project-related on it — no clone, no .env, no Node, possibly nothing.
+
+Your job:
+  (A) Drive them through setup until their local dev server is running.
+  (B) After setup, help them edit code naturally.
+  (C) When they say "deploy", commit + push + SSH-apply to production.
+
+Read this entire file before responding. Then begin Phase 1.
+
+----------------------------------------------------------------
+PROJECT FACTS YOU NEED
+----------------------------------------------------------------
+
+  Repo URL:           https://github.com/Morne080/legalos.git
+  Production URL:     https://mo.legenex.com
+  Production host:    root@51.81.202.161 (SSH alias to be configured as 'legalos')
+  Server work tree:   /var/www/vhosts/legenex.com/mo.legenex.com
+  Server bare repo:   /var/www/vhosts/legenex.com/git/legalos.git
+  Production mode:    Docker — `docker compose up -d` brings up app +
+                      postgres + redis. App has restart:unless-stopped
+                      so it survives reboots.
+  Deploy path:        ssh legalos → checkout latest into work tree →
+                      `bash scripts/deploy.sh` rebuilds image, runs
+                      migrations, restarts container, health-checks.
+                      Takes ~2-3 minutes per deploy.
+
+----------------------------------------------------------------
+PHASE 1 — SETUP
+----------------------------------------------------------------
+
+Run as a series of small steps. ONE STEP PER MESSAGE. Confirm each
+succeeded before moving to the next. Use TodoWrite to track:
+
+  [ ] Detect OS
+  [ ] Install Git
+  [ ] Install Node 20+
+  [ ] Install pnpm 9.15
+  [ ] Install Docker Desktop
+  [ ] Pick clone folder
+  [ ] Clone repo
+  [ ] Paste .env
+  [ ] pnpm install
+  [ ] docker compose up postgres + redis
+  [ ] pnpm seed
+  [ ] Generate SSH key
+  [ ] Send SSH key to Morne (manual handoff)
+  [ ] Add SSH config entry
+  [ ] Test SSH connection
+  [ ] Start pnpm dev
+  [ ] First successful edit visible at localhost:3000
+
+Step 1.1 — Detect OS
+  Run `node -p "process.platform"` via Bash (Windows = 'win32',
+  Mac = 'darwin', Linux = 'linux'). If node isn't installed yet,
+  inspect environment variables: $env:OS on Windows, `uname -s` on
+  Mac/Linux. Tell the user what you detected.
+
+Step 1.2 — Check prerequisites
+  Run each of these. For each missing tool, install via the
+  appropriate package manager and confirm with --version after.
+
+    Tool         Check               Windows install                                                    Mac install
+    ----         -----               ---------------                                                    -----------
+    Git          git --version       winget install --id Git.Git -e                                     brew install git
+    Node 20+     node --version      winget install --id OpenJS.NodeJS.LTS -e                           brew install node@20
+    pnpm 9.15    pnpm --version      corepack enable; corepack prepare pnpm@9.15.0 --activate           same
+    Docker       docker --version    winget install --id Docker.DockerDesktop -e                        brew install --cask docker
+
+  On Windows, after a `winget install`, the user must close + reopen
+  PowerShell so PATH refreshes. If `code --install-extension` style
+  commands don't find `code`, that's why. Tell them, then exit and
+  ask them to reopen Claude after restarting the terminal.
+
+  After Docker installs, the user must manually launch Docker Desktop
+  and wait for the whale icon to show "Docker Desktop is running."
+  Pause and confirm with them.
+
+Step 1.3 — Pick clone folder
+  Suggest the default:
+    Windows: $env:USERPROFILE\Documents\legalos
+    Mac:     ~/Documents/legalos
+  Ask the user to confirm or pick a different path.
+
+Step 1.4 — Clone
+  git clone https://github.com/Morne080/legalos.git <folder>
+  cd <folder>
+
+Step 1.5 — .env file
+  Tell the user: "Morne sent you the .env file contents via Signal /
+  1Password. Paste them here and I'll save them to the project."
+  After they paste, write the contents to <folder>/.env using the
+  Write tool (no transformation — paste exactly).
+  Confirm with `cat .env | head -3` (Mac) or `Get-Content .env -Head 3`
+  (Windows) — first 3 lines should look like PAYLOAD_SECRET=..., DATABASE_URI=...
+
+Step 1.6 — Install dependencies
+  pnpm install
+  (1-3 minutes — wait for "Done in Xs", no ERR_ lines)
+
+Step 1.7 — Start local DB containers
+  docker compose up -d postgres redis
+  Then wait for them to be healthy:
+  docker ps --format "{{.Names}}\t{{.Status}}"
+  Confirm both show "Up" before continuing.
+
+Step 1.8 — Seed the local DB
+  pnpm seed
+  Should print messages about creating Sites and templates.
+
+Step 1.9 — SSH key for deploys
+  Check if one already exists:
+    ls ~/.ssh/id_ed25519.pub 2>$null  (Windows PowerShell: Test-Path ~/.ssh/id_ed25519.pub)
+  If missing, generate:
+    ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
+  Print the public key (cat ~/.ssh/id_ed25519.pub) and tell the user:
+    "Copy this entire line and send it to Morne via Signal. He'll add it
+     to the server's authorized_keys. Tell me when he confirms it's done.
+     I'll wait."
+  STOP and wait for their confirmation. Do not proceed until they say so.
+
+Step 1.10 — SSH config entry
+  Add to ~/.ssh/config (create if doesn't exist):
+    Host legalos
+        HostName 51.81.202.161
+        User root
+        IdentityFile ~/.ssh/id_ed25519
+        StrictHostKeyChecking accept-new
+  Use Edit/Write — append if the Host legalos block isn't already there.
+
+Step 1.11 — Test SSH
+  ssh -o BatchMode=yes -o ConnectTimeout=5 legalos true
+  Exit code 0 = success. If non-zero, the user's key isn't authorized
+  yet — ask them to re-confirm with Morne.
+
+Step 1.12 — Start pnpm dev
+  Run `pnpm dev` in the BACKGROUND (use run_in_background). It must
+  keep running for them to test changes. Wait for "Ready in Xs" in
+  the log.
+
+Step 1.13 — Hand off to editing
+  Tell the user:
+    "You're set up. Local dev is at http://localhost:3000. Open
+     /admin and sign in (credentials are in your .env: SUPER_ADMIN_EMAIL
+     and SUPER_ADMIN_PASSWORD). Then tell me what you want to change.
+     When you're happy and want to push to production, just say 'deploy'."
+
+End of Phase 1. Mark all TodoWrite items completed.
+
+----------------------------------------------------------------
+PHASE 2 — EDITING
+----------------------------------------------------------------
+
+The user will ask for changes in natural language. Examples:
+  "Change the home page heading"
+  "Add a 'pricing' link to the nav"
+  "Fix the typo on /privacy"
+
+For each request:
+  1. Use Read/Edit/Write on local files at <clone-folder>/src/...
+  2. The local pnpm dev hot-reloads automatically.
+  3. Tell the user: "Done — refresh http://localhost:3000 to see it."
+  4. Do NOT commit or push automatically.
+
+If a change involves a Payload collection (new field), run:
+  pnpm payload migrate:create <name>
+and commit the resulting migration file with the code change.
+
+----------------------------------------------------------------
+PHASE 3 — DEPLOY (when user says "deploy" or similar)
+----------------------------------------------------------------
+
+Step 3.1 — Show the diff
+  git status
+  git diff --stat
+  Confirm with user that this is what they intend to push.
+
+Step 3.2 — Commit message
+  Suggest one based on the changes (e.g., "tweak home heading").
+  Ask user to confirm or edit.
+
+Step 3.3 — Commit + push
+  git add -A
+  git commit -m "<message>"
+  git push origin main
+  Wait for the push to complete. Verify "main -> main" in output.
+
+Step 3.4 — Apply on server
+  Plesk auto-deploy via webhook is unreliable, so we always apply
+  manually via SSH:
+
+  ssh legalos 'set -e; \
+    git --git-dir=/var/www/vhosts/legenex.com/git/legalos.git \
+        --work-tree=/var/www/vhosts/legenex.com/mo.legenex.com checkout -f main && \
+    cd /var/www/vhosts/legenex.com/mo.legenex.com && \
+    bash scripts/deploy.sh'
+
+  This: (a) pulls latest code into the work tree, (b) runs deploy.sh
+  which rebuilds the Docker image, runs `pnpm payload migrate`,
+  recreates the app container, health-checks 127.0.0.1:3000, and
+  prunes old images.
+
+  Total time: 2-3 minutes. Output streams to the user's terminal so
+  they can see build progress / failures.
+
+Step 3.5 — Verify
+  After deploy.sh finishes (look for "✓ deploy complete" in the
+  output), confirm:
+
+  ssh legalos cat /var/www/vhosts/legenex.com/mo.legenex.com/.git-sha
+  curl -s https://mo.legenex.com/admin -o /dev/null -w "%{http_code}\n"
+
+  - .git-sha should equal `git rev-parse HEAD` from local.
+  - HTTP code should be 200 or 307.
+  - The version pill at https://mo.legenex.com/admin (bottom-right)
+    should show "build N" (green dot) where N is the latest commit
+    count.
+
+Step 3.6 — Confirm
+  Tell the user: "Deployed. Live at https://mo.legenex.com — refresh
+  to see the change. The version pill in the admin should show the
+  new build number."
+
+----------------------------------------------------------------
+CONSTRAINTS (NEVER VIOLATE)
+----------------------------------------------------------------
+
+  - Do NOT edit .env unless the user explicitly asks.
+  - Do NOT run `docker compose down` or `systemctl stop legalos-dev`.
+  - Do NOT delete files without explicit confirmation.
+  - Do NOT use `npm` — this project uses `pnpm` exclusively.
+  - Do NOT deploy automatically. Wait for the user to say "deploy".
+  - Do NOT commit before showing the diff first.
+  - Do NOT skip the SSH-key authorization handshake — the user MUST
+    have sent their public key to Morne and gotten confirmation
+    before you try `ssh legalos`.
+  - On every step, ONE message per step. No dumping.
+
+----------------------------------------------------------------
+WHEN STUCK
+----------------------------------------------------------------
+
+  - If `pnpm install` fails: try `corepack prepare pnpm@9.15.0 --activate`
+    again and retry. Common cause: pnpm version mismatch.
+  - If docker compose fails: confirm Docker Desktop is running (whale
+    icon visible).
+  - If pnpm dev errors on startup: check .env was saved correctly
+    (cat .env | head -3 should show real values, not blanks).
+  - If ssh legalos prompts for a password: the user's key isn't
+    authorized. They need to (re)send the public key to Morne.
+  - If push fails with "Permission denied (publickey)": their GitHub
+    auth isn't set up. Run `git push` and let Git prompt them for
+    GitHub credentials in the browser.
+  - For anything else, tell the user to ping Morne with a screenshot
+    of what went wrong.
+
+----------------------------------------------------------------
+FILE MAP (for when the user asks "where is X")
+----------------------------------------------------------------
+
+  src/components/                                 Public-facing React components
+  src/app/(app)/admin/                            Custom admin UI
+  src/app/(public)/                               Visitor-facing pages
+  src/collections/                                Payload data collections
+  src/components/blocks/                          Block renderers for site pages
+  src/lib/lead-pipeline/                          Lead capture pipeline
+  src/app/(app)/admin/sites/[slug]/settings/      Per-site admin settings
+  src/lib/plesk/                                  Plesk REST API client
+  src/lib/ai/invoke.ts                            Anthropic SDK wrapper
+  src/migrations/                                 Database migrations
+  CLAUDE.md                                       Architecture + conventions
+  docs/DEPLOY.md                                  Deploy + troubleshooting
+
+----------------------------------------------------------------
+END OF PLAYBOOK. BEGIN PHASE 1 NOW.
+----------------------------------------------------------------

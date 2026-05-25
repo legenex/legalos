@@ -1,0 +1,21 @@
+import * as migration_20260513_221103_init from './20260513_221103_init';
+import * as migration_20260518_134859_site_status_draft from './20260518_134859_site_status_draft';
+import * as migration_20260518_134900_site_status_draft_default from './20260518_134900_site_status_draft_default';
+
+export const migrations = [
+  {
+    up: migration_20260513_221103_init.up,
+    down: migration_20260513_221103_init.down,
+    name: '20260513_221103_init',
+  },
+  {
+    up: migration_20260518_134859_site_status_draft.up,
+    down: migration_20260518_134859_site_status_draft.down,
+    name: '20260518_134859_site_status_draft'
+  },
+  {
+    up: migration_20260518_134900_site_status_draft_default.up,
+    down: migration_20260518_134900_site_status_draft_default.down,
+    name: '20260518_134900_site_status_draft_default'
+  },
+];

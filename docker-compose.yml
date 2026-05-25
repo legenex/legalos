@@ -1,0 +1,71 @@
+# Production stack for Plesk Debian 12.
+# Everything binds to 127.0.0.1 only so Plesk's nginx is the sole ingress.
+# Plesk reverse-proxies mo.legenex.com -> 127.0.0.1:3000 and tenant domains
+# get added to Plesk via REST API on connect (see src/lib/plesk/).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-legalos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-legalos}
+      POSTGRES_DB: ${POSTGRES_DB:-legalos}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-legalos}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+
+  app:
+    build:
+      context: .
+      args:
+        LEGALOS_GIT_SHA: ${LEGALOS_GIT_SHA:-unknown}
+        LEGALOS_BUILD_NUMBER: ${LEGALOS_BUILD_NUMBER:-0}
+        LEGALOS_BUILD_TIME: ${LEGALOS_BUILD_TIME:-unknown}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      DATABASE_URI: postgres://${POSTGRES_USER:-legalos}:${POSTGRES_PASSWORD:-legalos}@postgres:5432/${POSTGRES_DB:-legalos}
+      REDIS_URL: redis://redis:6379
+      PAYLOAD_SECRET: ${PAYLOAD_SECRET}
+      NEXT_PUBLIC_SERVER_URL: ${NEXT_PUBLIC_SERVER_URL}
+      LEGALOS_FALLBACK_HOST: ${LEGALOS_FALLBACK_HOST}
+      LEGALOS_PREVIEW_DOMAIN: ${LEGALOS_PREVIEW_DOMAIN}
+      LEGALOS_CNAME_TARGET: ${LEGALOS_CNAME_TARGET}
+      LEGALOS_A_TARGET: ${LEGALOS_A_TARGET}
+      LEGALOS_DEV_SKIP_DNS: ${LEGALOS_DEV_SKIP_DNS:-false}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD}
+      # Plesk REST API for tenant-domain provisioning
+      PLESK_API_URL: ${PLESK_API_URL}
+      PLESK_API_KEY: ${PLESK_API_KEY}
+      PLESK_PROXY_TARGET: ${PLESK_PROXY_TARGET:-http://127.0.0.1:3000}
+      PLESK_OWNER_LOGIN: ${PLESK_OWNER_LOGIN:-admin}
+      PLESK_OWNER_EMAIL: ${PLESK_OWNER_EMAIL}
+      PLESK_IP_ADDRESS: ${PLESK_IP_ADDRESS}
+      PLESK_INSECURE_SKIP_TLS_VERIFY: ${PLESK_INSECURE_SKIP_TLS_VERIFY:-false}
+    ports:
+      - "127.0.0.1:3000:3000"
+
+volumes:
+  postgres_data:
+  redis_data:
