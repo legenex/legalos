@@ -23,6 +23,12 @@ export const Quizzes: CollectionConfig = {
   },
   fields: [
     { name: 'site', type: 'relationship', relationTo: 'sites', required: true, index: true },
+    {
+      name: 'domain',
+      type: 'relationship',
+      relationTo: 'domains',
+      admin: { description: 'Optional. If set, this quiz is reachable on the chosen domain. Domain must already be attached to this site.' },
+    },
     { name: 'name', type: 'text', required: true },
     { name: 'slug', type: 'text', required: true, index: true },
     {

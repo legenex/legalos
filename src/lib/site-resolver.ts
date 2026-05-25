@@ -40,6 +40,8 @@ export const resolveSiteByHost = async (rawHost: string | null | undefined): Pro
 
   if (direct.docs.length > 0) {
     const domain = direct.docs[0]
+    // Unassigned domain in the pool: do not resolve (treat as 404).
+    if (!domain.site) return null
     const siteId = typeof domain.site === 'object' ? domain.site.id : domain.site
     // Look up the primary host for this site (for canonical redirect / link emission).
     const primaryRow = await payload.find({
@@ -65,6 +67,7 @@ export const resolveSiteByHost = async (rawHost: string | null | undefined): Pro
 
   if (redirectRow.docs.length > 0) {
     const target = redirectRow.docs[0]
+    if (!target.site) return null
     const siteId = typeof target.site === 'object' ? target.site.id : target.site
     const entry: CacheEntry = { siteId, primaryHost: target.host, redirectTo: target.host, expiresAt: now + CACHE_TTL_MS }
     HOST_CACHE.set(host, entry)

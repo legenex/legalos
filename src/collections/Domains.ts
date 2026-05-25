@@ -30,14 +30,24 @@ export const Domains: CollectionConfig = {
         })
         const conflict = conflicts.docs.find((d) => operation === 'create' || d.id !== originalDoc?.id)
         if (conflict) {
-          throw new Error(`Host "${normalized}" is already mapped to another Site.`)
+          throw new Error(`Host "${normalized}" is already in use.`)
+        }
+        // Preview domains are auto-issued per-site and must always have a site.
+        if ((data.kind ?? 'custom') === 'preview' && !data.site) {
+          throw new Error('Preview domains require a site.')
         }
         return { ...data, host: normalized }
       },
     ],
   },
   fields: [
-    { name: 'site', type: 'relationship', relationTo: 'sites', required: true, index: true },
+    {
+      name: 'site',
+      type: 'relationship',
+      relationTo: 'sites',
+      index: true,
+      admin: { description: 'Brand/site this domain serves. Leave blank to keep the domain in the unassigned pool until you attach it.' },
+    },
     {
       name: 'host',
       type: 'text',

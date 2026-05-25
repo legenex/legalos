@@ -74,6 +74,7 @@ export default async function SitesPage({ searchParams }: { searchParams: Search
 
   const primaryByEntry = new Map<string | number, { host: string; status: string }>()
   for (const d of domains.docs) {
+    if (d.site == null) continue
     const sid = typeof d.site === 'object' ? d.site.id : d.site
     primaryByEntry.set(sid, { host: d.host, status: d.status ?? 'pending' })
   }

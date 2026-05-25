@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { headers } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 import { getPayload } from 'payload'
@@ -8,6 +9,35 @@ import { resolvePhoneForPath } from '@/lib/resolve-phone'
 import LegalOSMarketing from '@/components/LegalOSMarketing'
 import { BlockRenderer, type Block, type SiteForRender } from '@/components/blocks/BlockRenderer'
 import { SiteScripts, type TrackingConfigShape } from '@/components/public/SiteScripts'
+import CheckMyClaimHome from '@/components/public/check-my-claim/Home'
+import CmcAdvertisingDisclosure from '@/components/public/check-my-claim/AdvertisingDisclosure'
+import CmcPrivacyPolicy from '@/components/public/check-my-claim/PrivacyPolicy'
+import CmcTermsOfService from '@/components/public/check-my-claim/TermsOfService'
+import CmcSubmitted from '@/components/public/check-my-claim/Submitted'
+import CmcThanks from '@/components/public/check-my-claim/Thanks'
+import CmcSorry from '@/components/public/check-my-claim/Sorry'
+import CmcPartnerList from '@/components/public/check-my-claim/PartnerList'
+import CmcSb37List from '@/components/public/check-my-claim/Sb37List'
+
+// Map of normalized path → custom component for the check-my-claim brand.
+// Path comparison is case-insensitive (live site accepts /PartnerList and /partnerlist).
+const CMC_PAGES: Record<string, () => ReactNode> = {
+  '/': CheckMyClaimHome,
+  '/partnerlist': CmcPartnerList,
+  '/partners': CmcPartnerList,
+  '/submitted': CmcSubmitted,
+  '/thanks': CmcThanks,
+  '/sorry': CmcSorry,
+  '/sb-37-list': CmcSb37List,
+  '/privacypolicy': CmcPrivacyPolicy,
+  '/privacy-policy': CmcPrivacyPolicy,
+  '/privacy': CmcPrivacyPolicy,
+  '/termsofservice': CmcTermsOfService,
+  '/terms-of-service': CmcTermsOfService,
+  '/terms': CmcTermsOfService,
+  '/advertisingdisclosure': CmcAdvertisingDisclosure,
+  '/disclosures': CmcAdvertisingDisclosure,
+}
 
 const hasLeadFormBlock = (blocks: unknown[] | null | undefined): boolean => {
   if (!Array.isArray(blocks)) return false
@@ -121,6 +151,22 @@ export default async function PublicCatchAll({ params }: Props) {
   if (site.status === 'draft' && !isAdminPreview) notFound()
   if (site.status === 'paused' && !isAdminPreview) {
     return <PausedSite name={site.name ?? 'This site'} />
+  }
+
+  // 0. Brand-specific custom renderers (handled before the Page lookup so
+  // brands can ship fully custom UI without needing seed Page records).
+  const siteSlug = (site as { slug?: string }).slug
+  if (siteSlug === 'check-my-claim') {
+    const CmcComponent = CMC_PAGES[path.toLowerCase()]
+    if (CmcComponent) {
+      const tc = await loadTrackingConfig(site.id)
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+          <SiteScripts tc={tc} hasForm={false} />
+          <CmcComponent />
+        </div>
+      )
+    }
   }
 
   // 1. Look for an explicit Page that matches this path.

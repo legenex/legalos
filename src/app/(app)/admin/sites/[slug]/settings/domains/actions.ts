@@ -1,7 +1,6 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import crypto from 'crypto'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getCurrentUser } from '@/lib/auth'
@@ -10,86 +9,6 @@ import { checkDomainDns } from '@/lib/dns-check'
 import { pollDomainSslStatus } from '@/lib/ssl-poll'
 import { provisionDomainInPlesk, unprovisionDomainInPlesk } from '@/lib/plesk/provision-domain'
 import { pleskIsConfigured } from '@/lib/plesk/client'
-
-const randomToken = (len = 24): string => crypto.randomBytes(Math.ceil(len / 2)).toString('hex').slice(0, len)
-
-const normalizeHost = (raw: string): string =>
-  raw.toLowerCase().trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '')
-
-const dnsRecordsFor = (host: string, token: string): Array<{ type: string; name: string; value: string; note?: string }> => {
-  const cnameTarget = process.env.LEGALOS_CNAME_TARGET ?? 'cname.legenex.com'
-  const aTarget = process.env.LEGALOS_A_TARGET
-  const records: Array<{ type: string; name: string; value: string; note?: string }> = [
-    {
-      type: 'CNAME',
-      name: host,
-      value: cnameTarget,
-      note: 'Subdomains and www. Preferred. Apex domains may need an A record instead.',
-    },
-    {
-      type: 'TXT',
-      name: `_legalos.${host}`,
-      value: `legalos-verify=${token}`,
-      note: 'Always-accepted fallback. Use this if your DNS provider does not support CNAME at apex.',
-    },
-  ]
-  if (aTarget) {
-    records.splice(1, 0, {
-      type: 'A',
-      name: host,
-      value: aTarget,
-      note: 'Apex / root domain. Required if you cannot CNAME.',
-    })
-  }
-  return records
-}
-
-/* ------------------------------ Add custom domain ----------------------------- */
-
-export async function addCustomDomain(args: { siteId: number; siteSlug: string; host: string }): Promise<
-  | { ok: true; domain_id: number; verification_token: string; dns_records: Array<{ type: string; name: string; value: string; note?: string }> }
-  | { ok: false; error: string }
-> {
-  const user = await getCurrentUser()
-  if (!user) return { ok: false, error: 'unauthenticated' }
-  const host = normalizeHost(args.host)
-  if (!host || !host.includes('.')) return { ok: false, error: 'invalid host' }
-
-  const payload = await getPayload({ config })
-  const conflict = await payload.find({
-    collection: 'domains',
-    where: { host: { equals: host } },
-    limit: 1,
-    overrideAccess: true,
-  })
-  if (conflict.docs[0]) return { ok: false, error: `host ${host} is already mapped to a Site` }
-
-  const token = randomToken(24)
-  const records = dnsRecordsFor(host, token)
-
-  try {
-    const created = (await payload.create({
-      collection: 'domains',
-      data: {
-        site: args.siteId,
-        host,
-        kind: 'custom',
-        primary: false,
-        status: 'pending',
-        ssl_status: 'pending',
-        verification_token: token,
-        dns_records: records,
-      } as never,
-      user: user as never,
-      overrideAccess: false,
-    })) as { id: number }
-    invalidateHostCache()
-    revalidatePath(`/admin/sites/${args.siteSlug}/settings/domains`)
-    return { ok: true, domain_id: Number(created.id), verification_token: token, dns_records: records }
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : 'create failed' }
-  }
-}
 
 /* --------------------------------- Verify -------------------------------------- */
 
@@ -119,6 +38,7 @@ export async function verifyAndPromoteDomain(args: {
   const payload = await getPayload({ config })
   const domain = await payload.findByID({ collection: 'domains', id: args.domainId, overrideAccess: true })
   if (!domain) return { ok: false, error: 'domain not found' }
+  if (!domain.site) return { ok: false, error: 'domain is unassigned — attach to a brand before verifying' }
   if (domain.kind !== 'custom') return { ok: false, error: 'preview domains do not require verification' }
 
   const skipAllowed = (process.env.LEGALOS_DEV_SKIP_DNS ?? 'false').toLowerCase() === 'true'
@@ -180,8 +100,15 @@ export async function verifyAndPromoteDomain(args: {
     pleskDomainId = prov.plesk_domain_id
     pleskError = prov.error
   } else if (!pleskIsConfigured()) {
-    pleskError = 'PLESK_API_URL / PLESK_API_KEY not set — domain marked active but you must add it to Plesk manually'
-    pleskOk = false
+    if (skipAllowed) {
+      // Local dev escape hatch: no Plesk here, but skip-allowed env says
+      // "we're in dev, take the optimistic path." DNS already verified above,
+      // so accept the domain as active without trying to provision a vhost.
+      pleskOk = true
+    } else {
+      pleskError = 'PLESK_API_URL / PLESK_API_KEY not set — domain marked active but you must add it to Plesk manually'
+      pleskOk = false
+    }
   }
 
   // DNS is verified and Plesk has (maybe) provisioned. We DO NOT flip primary
@@ -195,13 +122,15 @@ export async function verifyAndPromoteDomain(args: {
   // retry pool — once the underlying issue is fixed (e.g. PLESK_API_URL env
   // corrected) the next tick will re-run the full pipeline and self-heal.
   const siteId = typeof domain.site === 'object' ? domain.site.id : domain.site
-  const finalStatus = pleskOk ? 'provisioning' : 'error'
+  const localDevShortcut = !pleskIsConfigured() && skipAllowed
+  const finalStatus = localDevShortcut ? 'active' : pleskOk ? 'provisioning' : 'error'
+  const finalSslStatus = localDevShortcut ? 'active' : 'pending'
   await payload.update({
     collection: 'domains',
     id: args.domainId,
     data: {
       status: finalStatus,
-      ssl_status: 'pending',
+      ssl_status: finalSslStatus,
       plesk_domain_id: pleskDomainId,
       provisioning_error: pleskError ?? null,
       last_checked_at: new Date().toISOString(),
@@ -214,10 +143,9 @@ export async function verifyAndPromoteDomain(args: {
   // Fire-and-forget end-to-end verification. Walks for up to ~6 minutes hitting
   // https://<host>/api/legalos/self-check, confirms the JSON response carries
   // the right site_id, and only then flips status/ssl_status to 'active'.
-  // On timeout it sets status='error' with the last failure reason in
-  // provisioning_error. Skip when Plesk failed — there's no vhost to hit, so
-  // the poller would just hammer a default page for 6 min before giving up.
-  if (pleskOk) {
+  // Skipped when (a) Plesk failed — no vhost to hit, or (b) we took the local
+  // dev shortcut — no public app on this machine for the poller to reach.
+  if (pleskOk && !localDevShortcut) {
     void pollDomainSslStatus({ domainId: args.domainId, host: domain.host, siteId }).catch(() => {})
   }
 
@@ -349,7 +277,7 @@ export async function removeDomain(args: { domainId: number; siteSlug: string })
   const domain = await payload.findByID({ collection: 'domains', id: args.domainId, overrideAccess: true })
   if (!domain) return { ok: false, error: 'domain not found' }
   if (domain.kind === 'preview') return { ok: false, error: 'preview domain cannot be removed' }
-  if (domain.primary) {
+  if (domain.primary && domain.site) {
     // Promote another domain (preferred: the preview) to primary first.
     const siteId = typeof domain.site === 'object' ? domain.site.id : domain.site
     const others = await payload.find({

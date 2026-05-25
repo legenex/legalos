@@ -14,6 +14,13 @@ const SURVEY_URL_BASE = 'https://qualify.checkmyclaim.co/s/mva'
 const cta = (medium: string): string =>
   `${SURVEY_URL_BASE}?utm_source=CMC-Website&utm_campaign=Home-Page&utm_medium=${medium}`
 
+const ArrowRight = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+    <line x1="5" y1="12" x2="19" y2="12" />
+    <polyline points="12 5 19 12 12 19" />
+  </svg>
+)
+
 const Star = ({ filled }: { filled: boolean }) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill={filled ? '#0285E9' : '#e5e7eb'}>
     <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
@@ -109,6 +116,7 @@ const TypeCard = ({
 
 export default function CheckMyClaimHome() {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [openFaq, setOpenFaq] = useState<number>(0)
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -553,6 +561,465 @@ export default function CheckMyClaimHome() {
         </div>
       </section>
 
+      {/* ───────────── How It Works ───────────── */}
+      <section className="section">
+        <div className="container">
+          <div className="section__header fade-in">
+            <h2 className="section__heading">Our Simple 3-Step Process</h2>
+            <p className="section__sub">
+              Getting help after an accident shouldn&apos;t be hard. Here&apos;s how Check My Claim makes it simple.
+            </p>
+          </div>
+
+          <div className="hiw-grid">
+            {[
+              {
+                step: 'Step 1',
+                title: 'Complete Our Free Eligibility Check',
+                desc: 'Answer a few quick questions about your accident. This service is 100% free with no obligations.',
+                icon: (
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                    <path d="M9 11l3 3L22 4" />
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                  </svg>
+                ),
+              },
+              {
+                step: 'Step 2',
+                title: 'Get Your Results Instantly',
+                desc: 'Our AI-powered tool analyzes your information to determine if you might qualify for compensation.',
+                icon: (
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                    <polyline points="13 2 13 9 20 9" />
+                    <path d="M20 13.5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l7 7" />
+                  </svg>
+                ),
+              },
+              {
+                step: 'Step 3',
+                title: 'We Connect You to a Vetted Attorney',
+                desc: 'If eligible, we’ll match you with a trusted attorney from our network who works on a no win, no fee basis.',
+                icon: (
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  </svg>
+                ),
+              },
+            ].map((s, i) => (
+              <div key={s.step} className="hiw-card fade-in" style={{ transitionDelay: `${i * 100}ms` }}>
+                <div className="hiw-card__icon">{s.icon}</div>
+                <p className="hiw-card__step">{s.step}</p>
+                <h3 className="hiw-card__title">{s.title}</h3>
+                <p className="hiw-card__desc">{s.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: 56 }}>
+            <a href={cta('6th-Button')} className="btn-primary">
+              Start Your Free Survey Now
+              <ArrowRight />
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* ───────────── USPs ───────────── */}
+      <section className="section">
+        <div className="container">
+          <div className="section__header fade-in">
+            <h2 className="section__heading">We Make Injury Claims Easy</h2>
+            <p className="section__sub">
+              Navigating the legal process shouldn&apos;t be complicated. We&apos;ve streamlined everything to get you the help you need, when you need it.
+            </p>
+          </div>
+
+          <div className="usp-grid">
+            {[
+              {
+                title: 'Fast Eligibility Check',
+                desc:
+                  'Get instant results in minutes. Simply answer a few quick questions about your accident to see if you may qualify for compensation.',
+                icon: (
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  </svg>
+                ),
+              },
+              {
+                title: 'Seamless Attorney Matching',
+                desc:
+                  'If eligible, we connect you with the best-suited attorney from our vetted network—no endless searching or cold calling required.',
+                icon: (
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                ),
+              },
+              {
+                title: 'Always 100% Free',
+                desc:
+                  'Our claim check service is completely free. We never charge you—our job is simply to check eligibility and connect you with attorneys.',
+                icon: (
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                    <line x1="12" y1="1" x2="12" y2="23" />
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                  </svg>
+                ),
+              },
+            ].map((u, i) => (
+              <div key={u.title} className="usp-card fade-in" style={{ transitionDelay: `${i * 100}ms` }}>
+                <div className="usp-card__icon">{u.icon}</div>
+                <h3 className="usp-card__title">{u.title}</h3>
+                <p className="usp-card__desc">{u.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: 56 }}>
+            <a href={cta('7th-Button')} className="btn-primary">
+              Get Started Now
+              <ArrowRight />
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* ───────────── Fighting For You (dark) ───────────── */}
+      <section className="section--dark fighting">
+        <div className="container">
+          <div className="two-col" style={{ alignItems: 'center' }}>
+            <div className="fade-left">
+              <div className="fighting__badge">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+                YOUR TRUSTED PARTNER
+              </div>
+              <h2 className="section__heading section__heading--white">We&apos;ll Never Stop Fighting For You</h2>
+              <p className="fighting__sub">
+                We work with only the best attorneys to get you the compensation you deserve.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
+                {[
+                  'Vetted attorneys with proven track records',
+                  'Thousands of successful claims nationwide',
+                  'Personalized legal care for every client',
+                  '100% commitment to your success',
+                ].map((t) => (
+                  <div key={t} className="fighting__row">
+                    <span className="fighting__row-icon">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </span>
+                    <span className="fighting__row-text">{t}</span>
+                  </div>
+                ))}
+              </div>
+
+              <a href={cta('9th-Button')} className="btn-primary">
+                Get Your Free Claim Check
+                <ArrowRight />
+              </a>
+            </div>
+
+            <div className="fade-right" style={{ position: 'relative' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/699c27e1ee245bcd8cd77386/d2af9541c_Screenshot2026-02-23at123641.png"
+                alt="Attorney"
+                className="fighting__photo"
+                loading="lazy"
+              />
+              <div className="fighting__photo-overlay" />
+              <div className="fighting__badge-tr">
+                <p style={{ color: 'white', fontWeight: 800, fontSize: 20 }}>$50M+</p>
+                <p style={{ color: 'rgba(255,255,255,.85)', fontSize: 11 }}>Recovered</p>
+              </div>
+              <div className="fighting__badge-bl">
+                <p style={{ color: '#0285E9', fontWeight: 800, fontSize: 22 }}>98%</p>
+                <p style={{ color: '#595E64', fontSize: 11 }}>Success Rate</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ───────────── No Win No Fee ───────────── */}
+      <section className="section">
+        <div className="container">
+          <div className="two-col" style={{ alignItems: 'center' }}>
+            <div className="fade-left" style={{ position: 'relative' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/699c27e1ee245bcd8cd77386/00a60e981_portrait-of-a-confident-young-businesswoman-workin-2026-01-09-09-11-16-utc.jpg"
+                alt="Attorney"
+                className="nwnf__photo"
+                loading="lazy"
+              />
+              <div className="nwnf__overlay" />
+              <div className="nwnf__badge">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0285E9" strokeWidth="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+                <div>
+                  <p style={{ color: '#111E30', fontWeight: 800, fontSize: 18, lineHeight: 1 }}>100% FREE</p>
+                  <p style={{ color: '#595E64', fontSize: 11, marginTop: 2 }}>Zero Risk Guarantee</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="fade-right">
+              <div className="fighting__badge" style={{ color: '#0285E9', background: 'rgba(2,133,233,.10)' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+                OUR GUARANTEE
+              </div>
+              <h2 className="section__heading">Our Attorneys Don&apos;t Get Paid Unless You Do</h2>
+              <p style={{ color: '#111E30', fontWeight: 700, fontSize: 18, marginTop: 8, marginBottom: 12 }}>
+                THE NO WIN, NO FEE GUARANTEE
+              </p>
+              <p style={{ color: '#595E64', fontSize: 16, lineHeight: 1.625, marginBottom: 24 }}>
+                Check My Claim connects you with attorneys that work on a contingency fee basis. That means there are no upfront costs, no hidden fees, no bills.
+                The lawyer they assign you only get paid if you win your case. If they take on your case, that means they truly believe you have a real shot at
+                getting the right legal professional working for you.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 24 }}>
+                {[
+                  'Free claim eligibility check, always 100% free',
+                  'Connected to attorneys who work on contingency',
+                  'Attorneys only get paid if you win your case',
+                  'No upfront costs or surprise bills from matched attorneys',
+                ].map((t) => (
+                  <div key={t} className="nwnf__bullet">
+                    <span className="nwnf__bullet-icon">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </span>
+                    <span style={{ color: '#111E30', fontWeight: 500 }}>{t}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="nwnf__highlight">YOU HAVE NOTHING TO LOSE!</div>
+
+              <div style={{ marginTop: 24 }}>
+                <a href={cta('10th-Button')} className="btn-primary">
+                  Start Your Free Claim Check
+                  <ArrowRight />
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ───────────── Recent Wins ───────────── */}
+      <section className="section">
+        <div className="container">
+          <div className="section__header fade-in">
+            <h2 className="section__heading">We&apos;ll Never Stop Fighting For You</h2>
+            <p className="section__sub">We work with only the best attorneys to get you the compensation you deserve.</p>
+          </div>
+
+          <div className="wins-grid">
+            {[
+              { amount: '$132,700', name: 'Mike P, 31', loc: 'Memphis, TN' },
+              { amount: '$197,500', name: 'John M, 54', loc: 'Tampa, FL' },
+              { amount: '$114,600', name: 'Sarah J, 43', loc: 'Los Angeles, CA' },
+            ].map((w, i) => (
+              <div key={w.name} className="win-card fade-in" style={{ transitionDelay: `${i * 100}ms` }}>
+                <div className="win-card__icon">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0285E9" strokeWidth="2">
+                    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22M18 2H6v7a6 6 0 0 0 12 0V2z" />
+                  </svg>
+                </div>
+                <p className="win-card__label">Recent Win</p>
+                <p className="win-card__amount">{w.amount}</p>
+                <p className="win-card__name">{w.name}</p>
+                <p className="win-card__loc">{w.loc}</p>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: 48 }}>
+            <a href={cta('11th-Button')} className="btn-primary">
+              Check My Claim Now
+              <ArrowRight />
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* ───────────── About Us ───────────── */}
+      <section className="section section--grey" id="about">
+        <div className="container">
+          <div className="two-col" style={{ alignItems: 'center' }}>
+            <div className="fade-left">
+              <h2 className="section__heading">About Check My Claim</h2>
+              <p style={{ color: '#595E64', fontSize: 16, lineHeight: 1.625, marginTop: 16, marginBottom: 16 }}>
+                At Check My Claim, our mission is simple: to empower accident victims to fully understand their legal options and connect them with the right attorneys,
+                so they can get the compensation they deserve.
+              </p>
+              <p style={{ color: '#595E64', fontSize: 16, lineHeight: 1.625, marginBottom: 32 }}>
+                We&apos;re an independent matching service. Our free, AI-driven eligibility check takes 2 minutes. No win, no fee — if your case qualifies and an attorney
+                takes it, you owe nothing unless they win.
+              </p>
+
+              <div className="about-stats">
+                {[
+                  { v: '10,000+', l: 'People Helped' },
+                  { v: '500+', l: 'Vetted Attorneys' },
+                  { v: '$0', l: 'Upfront Cost' },
+                  { v: '100%', l: 'Commitment' },
+                ].map((s) => (
+                  <div key={s.l} className="about-stat">
+                    <p className="about-stat__v">{s.v}</p>
+                    <p className="about-stat__l">{s.l}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="fade-right">
+              <div className="about-card">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/699c8efa75d8857518d34273/76654a39d_CheckMyClaimLogo.png"
+                  alt="Check My Claim"
+                  style={{ width: 224, margin: '0 auto 24px', display: 'block' }}
+                  loading="lazy"
+                />
+                {[
+                  'Free AI-powered eligibility check',
+                  'No win, no fee—zero risk',
+                  'Matched with top attorneys nationwide',
+                  'Fast, compassionate support',
+                ].map((t) => (
+                  <div key={t} className="about-feature">
+                    <span className="about-feature__dot" />
+                    <span>{t}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ───────────── FAQ ───────────── */}
+      <section className="section faq-section" id="faq">
+        <div className="container" style={{ maxWidth: 1152 }}>
+          <div className="section__header fade-in">
+            <div className="faq-badge">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              FAQ
+            </div>
+            <h2 className="section__heading">Frequently Asked Questions</h2>
+            <p className="section__sub">Got questions? We&apos;ve got answers.</p>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {[
+              {
+                q: 'Personal injury lawyer: how does Check My Claim help you find one?',
+                a:
+                  'If you are searching for a personal injury lawyer after an accident, Check My Claim helps you start with a quick eligibility check instead of calling random firms. If your case looks like a fit, we connect you with a vetted attorney for a review. Check My Claim is not a law firm and does not provide legal advice.',
+              },
+              {
+                q: 'Personal injury attorney vs personal injury lawyer: what is the difference?',
+                a:
+                  'In most states, the terms personal injury attorney and personal injury lawyer are used the same way. What matters is whether the lawyer handles your type of accident and can explain fees and next steps clearly.',
+              },
+              {
+                q: 'Injury lawyer: when should I talk to one after an accident?',
+                a:
+                  'If you have injuries, medical visits, time off work, or an insurance offer that feels low, it is worth getting a legal review. Check My Claim helps you check eligibility quickly and connect with an injury lawyer if your claim qualifies.',
+              },
+              {
+                q: 'Lawyer for motor vehicle accident: do I need one to file a claim?',
+                a:
+                  'You can often start a claim without a lawyer, but legal review can help if fault is disputed, injuries are serious, or the insurer is delaying or lowballing.',
+              },
+              {
+                q: 'Motor vehicle accident attorneys: how do I find the right one?',
+                a:
+                  'Look for an attorney who regularly handles motor vehicle accident cases, explains fees upfront, and is responsive. Check My Claim helps you avoid wasted calls by screening your situation first.',
+              },
+              {
+                q: 'Car accident personal injury lawyer: what can they help with?',
+                a:
+                  'A car accident personal injury lawyer can review liability, medical documentation, damages, and settlement offers. Check My Claim starts with a quick eligibility check and can connect you with a vetted attorney.',
+              },
+              {
+                q: 'Car accident personal injury attorney: how fast can I speak to one?',
+                a:
+                  'Timing depends on availability, but the fastest path is to have your basic details ready and start with a structured claim check. Check My Claim helps you capture the key facts quickly.',
+              },
+              {
+                q: 'Auto accident personal injury lawyer: do I qualify if I was partly at fault?',
+                a:
+                  'In many states, you may still have options even if you share some fault, but the rules can affect the outcome. Check My Claim helps you check eligibility based on your situation.',
+              },
+              {
+                q: 'Car accident injury lawyers: what should I ask before hiring?',
+                a:
+                  'Ask about experience with your injury type, typical timelines, how fees work, and what they need from you to evaluate the claim. Check My Claim helps you start with an eligibility check.',
+              },
+            ].map((item, i) => {
+              const isOpen = openFaq === i
+              return (
+                <div key={item.q} className="faq-item fade-in" style={{ transitionDelay: `${i * 40}ms` }}>
+                  <button className="faq-item__btn" onClick={() => setOpenFaq(isOpen ? -1 : i)}>
+                    <span className={`faq-item__qicon${isOpen ? ' open' : ''}`}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                        <line x1="12" y1="17" x2="12.01" y2="17" />
+                      </svg>
+                    </span>
+                    <span className={`faq-item__q${isOpen ? ' open' : ''}`}>{item.q}</span>
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      className="faq-item__chev"
+                      style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }}
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+                  {isOpen ? <div className="faq-item__a">{item.a}</div> : null}
+                </div>
+              )
+            })}
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: 48 }}>
+            <p style={{ color: '#595E64', marginBottom: 16 }}>Still have questions? Start your free claim check now.</p>
+            <a href={cta('13th-Button')} className="btn-primary">
+              Get Started Now
+              <ArrowRight />
+            </a>
+          </div>
+        </div>
+      </section>
+
       <footer className="footer" id="contact">
         <div className="footer__inner">
           <div className="footer__grid">
@@ -769,4 +1236,83 @@ img, video { display: block; max-width: 100%; height: auto; }
 .footer__policy-link { font-size: 0.875rem; color: rgba(255,255,255,.60); transition: color 0.2s; }
 .footer__policy-link:hover { color: var(--color-blue-start); }
 @media (min-width: 768px) { .footer__bottom { flex-direction: row; justify-content: space-between; text-align: left; align-items: flex-start; } .footer__policy-links { justify-content: flex-end; } }
+
+/* ───────── How It Works ───────── */
+.hiw-grid { display: grid; grid-template-columns: 1fr; gap: 32px; max-width: 960px; margin-inline: auto; }
+@media (min-width: 768px) { .hiw-grid { grid-template-columns: repeat(3, 1fr); } }
+.hiw-card { text-align: center; }
+.hiw-card__icon { width: 64px; height: 64px; border-radius: 16px; background: var(--grad-blue-135); display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; box-shadow: var(--shadow-lg); transition: transform .5s ease; }
+.hiw-card:hover .hiw-card__icon { transform: scale(1.08); }
+.hiw-card__step { color: var(--color-blue); font-weight: 700; font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+.hiw-card__title { font-size: 1.25rem; font-weight: 700; color: var(--color-navy); margin-bottom: 12px; }
+.hiw-card__desc { color: var(--color-muted); font-size: 0.95rem; line-height: 1.625; }
+
+/* ───────── USPs ───────── */
+.usp-grid { display: grid; grid-template-columns: 1fr; gap: 24px; max-width: 960px; margin-inline: auto; }
+@media (min-width: 768px) { .usp-grid { grid-template-columns: repeat(3, 1fr); } }
+.usp-card { background: linear-gradient(to bottom right, #ffffff, var(--color-bg-light)); border: 1px solid var(--color-border); border-radius: 16px; padding: 32px; transition: box-shadow .3s ease, border-color .3s ease; }
+.usp-card:hover { border-color: rgba(2,133,233,.30); box-shadow: var(--shadow-lg); }
+.usp-card__icon { width: 56px; height: 56px; border-radius: 16px; background: var(--grad-blue-135); display: flex; align-items: center; justify-content: center; margin-bottom: 20px; box-shadow: var(--shadow-md); transition: transform .3s ease; }
+.usp-card:hover .usp-card__icon { transform: scale(1.08); }
+.usp-card__title { font-size: 1.25rem; font-weight: 700; color: var(--color-navy); margin-bottom: 12px; }
+.usp-card__desc { color: var(--color-muted); font-size: 0.95rem; line-height: 1.625; }
+
+/* ───────── Fighting For You ───────── */
+.section--dark { background: var(--grad-dark); position: relative; padding-block: 80px; overflow: hidden; }
+.section--dark::before { content: ""; position: absolute; inset: 0; opacity: 0.03; background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E"); pointer-events: none; }
+@media (min-width: 768px) { .section--dark { padding-block: 112px; } }
+.fighting .container { position: relative; z-index: 2; }
+.fighting__badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(2,133,233,.20); border-radius: var(--radius-pill); padding: 8px 16px; color: var(--color-blue); font-weight: 700; font-size: 12px; letter-spacing: 0.05em; margin-bottom: 24px; }
+.fighting__sub { color: #d1d5db; font-size: 1.125rem; line-height: 1.625; margin-bottom: 32px; }
+.fighting__row { display: flex; align-items: center; gap: 16px; background: rgba(255,255,255,.10); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,.20); border-radius: 12px; padding: 14px 16px; transition: background-color 0.2s; }
+.fighting__row:hover { background: rgba(255,255,255,.15); }
+.fighting__row-icon { width: 40px; height: 40px; border-radius: 12px; background: var(--grad-blue-135); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.fighting__row-text { color: #ffffff; font-weight: 500; font-size: 0.95rem; }
+.fighting__photo { width: 100%; height: auto; border-radius: 24px; box-shadow: var(--shadow-2xl); display: block; }
+.fighting__photo-overlay { position: absolute; inset: 0; border-radius: 24px; background: linear-gradient(to top, rgba(17,30,48,.30), transparent); pointer-events: none; }
+.fighting__badge-tr { position: absolute; top: 16px; right: 16px; background: var(--grad-blue-135); border-radius: 12px; padding: 10px 18px; box-shadow: var(--shadow-lg); }
+.fighting__badge-bl { position: absolute; bottom: -20px; left: -20px; background: #ffffff; border: 4px solid var(--color-bg-light); border-radius: 16px; padding: 12px 20px; box-shadow: var(--shadow-2xl); }
+
+/* ───────── No Win, No Fee ───────── */
+.nwnf__photo { width: 100%; height: auto; border-radius: 24px; box-shadow: var(--shadow-2xl); display: block; }
+.nwnf__overlay { position: absolute; inset: 0; border-radius: 24px; background: linear-gradient(to top, rgba(17,30,48,.60), transparent); pointer-events: none; }
+.nwnf__badge { position: absolute; bottom: -24px; right: -24px; background: #ffffff; border: 4px solid var(--color-navy); border-radius: 16px; padding: 14px 18px; box-shadow: var(--shadow-2xl); display: flex; align-items: center; gap: 12px; }
+.nwnf__bullet { display: flex; align-items: flex-start; gap: 12px; }
+.nwnf__bullet-icon { width: 22px; height: 22px; border-radius: 50%; background: var(--grad-blue-135); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+.nwnf__highlight { background: rgba(2,133,233,.10); border: 1px solid rgba(2,133,233,.30); border-radius: 16px; padding: 24px; color: var(--color-blue); font-weight: 800; font-size: 1.5rem; text-align: center; letter-spacing: 0.02em; }
+
+/* ───────── Recent Wins ───────── */
+.wins-grid { display: grid; grid-template-columns: 1fr; gap: 24px; max-width: 896px; margin-inline: auto; }
+@media (min-width: 768px) { .wins-grid { grid-template-columns: repeat(3, 1fr); } }
+.win-card { background: #ffffff; border: 1px solid var(--color-border); border-radius: 16px; padding: 32px; text-align: center; transition: box-shadow .3s ease, border-color .3s ease; }
+.win-card:hover { border-color: rgba(2,133,233,.40); box-shadow: var(--shadow-lg); }
+.win-card__icon { width: 48px; height: 48px; border-radius: 50%; background: rgba(2,133,233,.15); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
+.win-card__label { color: var(--color-muted); font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+.win-card__amount { font-size: 2rem; font-weight: 800; background: var(--grad-blue); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 4px; }
+.win-card__name { color: var(--color-navy); font-weight: 600; }
+.win-card__loc { color: var(--color-muted); font-size: 0.875rem; }
+
+/* ───────── About ───────── */
+.about-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; max-width: 480px; }
+.about-stat { background: var(--color-bg-light); border-radius: 12px; padding: 16px; text-align: center; }
+.about-stat__v { color: var(--color-navy); font-size: 1.75rem; font-weight: 800; }
+.about-stat__l { color: var(--color-muted); font-size: 0.875rem; }
+.about-card { background: linear-gradient(135deg, #E8F4FD, rgba(2,133,233,.20)); border-radius: 24px; padding: 32px; }
+@media (min-width: 768px) { .about-card { padding: 48px; } }
+.about-feature { display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,.85); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); border-radius: 12px; padding: 12px 16px; color: var(--color-navy); font-size: 0.95rem; margin-bottom: 12px; }
+.about-feature__dot { width: 10px; height: 10px; border-radius: 50%; background: var(--color-blue); flex-shrink: 0; }
+
+/* ───────── FAQ ───────── */
+.faq-section { background: linear-gradient(to bottom right, #F9FAFB, #ffffff); }
+.faq-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(2,133,233,.10); color: var(--color-blue); font-weight: 700; font-size: 12px; letter-spacing: 0.05em; padding: 8px 16px; border-radius: var(--radius-pill); margin-bottom: 16px; }
+.faq-item { background: #ffffff; border: 1px solid var(--color-border); border-radius: 16px; overflow: hidden; transition: box-shadow .3s ease; }
+.faq-item:hover { box-shadow: var(--shadow-md); }
+.faq-item__btn { width: 100%; display: flex; align-items: center; gap: 16px; padding: 20px 24px; text-align: left; transition: background-color 0.2s; }
+.faq-item__btn:hover { background: var(--color-bg-light); }
+.faq-item__qicon { width: 36px; height: 36px; border-radius: 50%; background: rgba(2,133,233,.10); color: var(--color-blue); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all .3s ease; }
+.faq-item__qicon.open { background: var(--grad-blue-135); color: #ffffff; }
+.faq-item__q { flex: 1; color: var(--color-navy); font-weight: 600; font-size: 1rem; }
+.faq-item__q.open { color: var(--color-blue); }
+.faq-item__chev { color: var(--color-muted); transition: transform .3s ease; flex-shrink: 0; }
+.faq-item__a { padding: 0 24px 24px 76px; color: var(--color-muted); font-size: 0.95rem; line-height: 1.625; }
 `
