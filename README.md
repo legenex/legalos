@@ -229,3 +229,4 @@ Plesk (nginx, ports 80/443, Let's Encrypt termination)
 - Banned-vocab and em-dash linters run on every AI output; failures trigger up to 2 retries before surfacing.
 - Preview domains (`{slug}.preview.legenex.com`) are auto-issued, always primary until a custom domain is verified, and cannot be deleted from the UI.
 - `ssl_status='active'` only after a real HTTPS handshake succeeds via the SSL poller — never assumed.
+
