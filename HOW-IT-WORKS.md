@@ -345,6 +345,7 @@ This is why we don't add tenant domains manually in Plesk — the admin UI does 
 | [README.md](./README.md) | Stack overview, one-time production deploy setup, architecture diagram |
 | [WORKFLOW.md](./WORKFLOW.md) | Daily flow + first-time setup commands (both macOS and Windows) |
 | [HOW-IT-WORKS.md](./HOW-IT-WORKS.md) | (This doc) Plain-English explanation of why the setup is the way it is |
+| [NICK-SETUP.md](./NICK-SETUP.md) | Step-by-step macOS onboarding guide for a new contributor (zero → first merged PR) |
 | [CLAUDE.md](./CLAUDE.md) | Instructions for Claude Code sessions working in this repo |
 | [ONBOARDING.md](./ONBOARDING.md) | Redirect to WORKFLOW.md (kept for back-compat) |
 | [docs/DEPLOY.md](./docs/DEPLOY.md) | Detailed deploy mechanics + troubleshooting |

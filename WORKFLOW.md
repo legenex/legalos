@@ -30,6 +30,8 @@ gh pr create --base main --title "<title>" --body "<what + why>"
 
 ## First-time setup
 
+> If you're a new contributor onboarding from scratch on macOS, [NICK-SETUP.md](./NICK-SETUP.md) is the longer step-by-step walkthrough (zero → first merged PR, with troubleshooting). The section below is the quick reference.
+
 ### Both machines need
 
 - **Node 20.x** (matched to the server)
