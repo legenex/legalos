@@ -4,73 +4,49 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
-## CRITICAL: Live-edit workflow — never edit local files
+## CRITICAL: Workflow — local → GitHub → server
 
-**Production runs `pnpm dev` directly on the server**, managed by the `legalos-dev` systemd service. Files live at `/var/www/vhosts/legenex.com/mo.legenex.com/` on `root@51.81.202.161`. Next.js's file watcher picks up any save in ~2 seconds and hot-reloads `https://mo.legenex.com`.
+We work in **local clones**, commit on **feature branches**, open **PRs against `main`**, and let Plesk's webhook deploy on merge. The live server is downstream of `main`; it is never edited directly. This is true for human contributors and for Claude.
 
-This means: **the user prompts Claude → Claude edits → 5 seconds later it's live.** There is no separate deploy step. There is no local dev. There is no `git push` workflow.
+### Rules (no exceptions unless the user explicitly overrides for a one-off)
 
-### Rules (no exceptions unless the user explicitly overrides)
+- **NEVER SSH into the server to edit files.** Plesk's next deploy will overwrite live edits with whatever is in `origin/main`, silently destroying work that isn't in git. A teammate's push will trigger that deploy at any moment.
+- **NEVER push directly to `main`.** Always: branch → commit → push branch → open PR → merge via GitHub. Even a one-line tweak goes through a PR (the PR is what makes the change visible to the teammate before it deploys).
+- **ALWAYS `git pull --rebase origin main`** before starting work on a new branch, and again before pushing if main has moved. Two people, one repo — stale branches cause conflicts.
+- **Branch naming:** `<type>/<short-kebab-desc>` where type is `feat`, `fix`, `chore`, `docs`, `refactor`. Optionally prefix with initials for clarity (`mo/feat/...`, `claude/fix/...`).
+- **Read the conversation context** before assuming the local clone is up to date — the teammate may have just merged something. Run `git fetch && git log --oneline HEAD..origin/main` to check.
 
-- **NEVER use `Read`, `Edit`, `Write`, `Glob`, or `Grep` tools on local files** in `c:\Users\morne\Documents\oslegenex.com\` (or any clone). The local clone is a backup, not the source of truth. Edits there don't reach the live site.
-- **ALWAYS use SSH to read and write the server's files.** The server is the source of truth.
-- **NEVER push to git as the primary operation.** Only push periodically as a backup of the server state (when the user says "commit" or at the end of a session).
-- **NEVER run `bash scripts/deploy.sh`** — that rebuilds the Docker image (2-3 min). It is no longer the deploy path. The systemd `legalos-dev` service is what serves the site.
-- **NEVER suggest `docker compose up app`** — the Docker app container is intentionally stopped. `legalos-dev` is what's running.
+### How a change reaches production
 
-### Standard operations (via SSH)
+1. From a local clone: `git checkout main && git pull --rebase origin main`
+2. `git checkout -b <type>/<desc>`
+3. Edit files locally. Verify with `pnpm typecheck` (and `pnpm dev` if you want to see it).
+4. `git add <files> && git commit -m "<type>(<scope>): <message>"`
+5. `git push -u origin <branch-name>`
+6. `gh pr create` (or open in the GitHub UI). Describe what changed and why.
+7. Merge via GitHub. Plesk's webhook pulls into the bare repo at `/var/www/vhosts/legenex.com/git/legalos.git/`, checks out into `mo.legenex.com/`, and runs `scripts/deploy.sh`. Live in ~30s.
+8. Verify at `https://mo.legenex.com`. Hard-refresh: Ctrl+Shift+R (Windows) / Cmd+Shift+R (Mac).
 
-```bash
-# Read a file
-ssh root@51.81.202.161 cat /var/www/vhosts/legenex.com/mo.legenex.com/<path>
+### Read-only SSH is still fine
 
-# Search the codebase
-ssh root@51.81.202.161 grep -rn '<pattern>' /var/www/vhosts/legenex.com/mo.legenex.com/src
-
-# List a directory
-ssh root@51.81.202.161 ls /var/www/vhosts/legenex.com/mo.legenex.com/<dir>
-
-# Edit (small in-place change)
-ssh root@51.81.202.161 sed -i 's|<old>|<new>|' /var/www/vhosts/legenex.com/mo.legenex.com/<path>
-
-# Edit (full file rewrite via heredoc — use the call operator and 'PAYLOAD' to avoid local shell interpolation)
-ssh root@51.81.202.161 "cat > /var/www/vhosts/legenex.com/mo.legenex.com/<path>" <<'PAYLOAD'
-<new file contents>
-PAYLOAD
-
-# Watch the dev server's compile output / errors after an edit
-ssh root@51.81.202.161 'journalctl -u legalos-dev -n 30 --no-pager'
-
-# Restart the service (only if it's crashed and won't recover; saves should not normally require this)
-ssh root@51.81.202.161 systemctl restart legalos-dev
-```
-
-### After any edit
-
-- Tell the user the change is live at `https://mo.legenex.com` in ~2 seconds.
-- Hard-refresh hint: Ctrl+Shift+R (Windows) / Cmd+Shift+R (Mac).
-- Do NOT mention git, deploys, or commits unless the user asks.
-
-### Periodic git sync (only when explicitly asked)
-
-When the user says "commit" (or "save my work", "push to git"):
+Reading server logs, checking deploy state, or inspecting runtime data is fine over SSH — it just doesn't mutate the live tree.
 
 ```bash
-ssh root@51.81.202.161 'cd /var/www/vhosts/legenex.com/mo.legenex.com && git add -A && git status --short'
-# Show the user the diff summary, ask for a commit message, then:
-ssh root@51.81.202.161 'cd /var/www/vhosts/legenex.com/mo.legenex.com && git commit -m "<message>" && git push origin main'
+ssh root@51.81.202.161 'journalctl -u legalos-dev -n 30 --no-pager'      # dev-server compile log
+ssh root@51.81.202.161 cat /var/www/vhosts/legenex.com/mo.legenex.com/.git-sha   # commit currently deployed
+ssh root@51.81.202.161 'systemctl status legalos-dev'
 ```
 
-That's it. No image rebuild, no migration step, no health check — the change is already live; the commit is just preserving history.
+If something is wrong on the server and the user explicitly asks for a one-off hotfix on the live tree (e.g., "site is down, fix it now"), an SSH edit is acceptable — but immediately mirror the change into a PR after, before the next deploy wipes it.
 
-### Things that DO require a manual command (no longer hot-reloaded)
+### Things that need extra steps after the deploy
 
-| What changed | Run on the server |
+| What changed | Manual step |
 |---|---|
-| Added a package (`pnpm add ...`) | `ssh root@51.81.202.161 'cd /var/www/.../mo.legenex.com && pnpm install && systemctl restart legalos-dev'` |
-| Edited `.env` | `ssh root@51.81.202.161 systemctl restart legalos-dev` |
-| Changed a Payload collection field | `ssh root@51.81.202.161 'cd /var/www/.../mo.legenex.com && pnpm payload migrate:create <name> && pnpm payload migrate'` then commit the new migration file |
-| Edited `next.config.mjs` | `ssh root@51.81.202.161 systemctl restart legalos-dev` |
+| Added a package (`pnpm add ...`) | After merge, `ssh root@51.81.202.161 'cd /var/www/vhosts/legenex.com/mo.legenex.com && pnpm install && systemctl restart legalos-dev'` |
+| Edited `.env` (the live one) | `ssh root@51.81.202.161 systemctl restart legalos-dev` — `.env` is NOT in git; treat it as server-only config |
+| Changed a Payload collection field | Generate the migration locally (`pnpm payload migrate:create <name>`), commit it, push, merge. On the server after deploy: dev-mode auto-push already applied the schema; if `pnpm payload migrate` would hang on its interactive prompt over SSH, insert the migration row directly into the `payload_migrations` table to record it. |
+| Edited `next.config.mjs` | After merge, `ssh root@51.81.202.161 systemctl restart legalos-dev` |
 | Service stuck / weird state | `ssh root@51.81.202.161 systemctl restart legalos-dev` |
 
 ---
