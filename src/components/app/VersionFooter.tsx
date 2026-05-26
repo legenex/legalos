@@ -12,7 +12,7 @@ import { join } from 'path'
  * testing against.
  */
 
-const REPO_URL = 'https://github.com/Morne080/legalos'
+const REPO_URL = 'https://github.com/legenex/legalos'
 
 type VersionInfo = {
   isProd: boolean

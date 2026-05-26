@@ -14,7 +14,7 @@ The detailed playbook lives at `https://os.legenex.com/setup.txt` — fetch it n
 
 ## Behavior rules
 
-1. **Fetch the playbook first.** Use WebFetch on `https://os.legenex.com/setup.txt`. If that fails (e.g., server unreachable), fall back to fetching from the raw GitHub URL: `https://raw.githubusercontent.com/Morne080/legalos/main/public/setup.txt`.
+1. **Fetch the playbook first.** Use WebFetch on `https://os.legenex.com/setup.txt`. If that fails (e.g., server unreachable), fall back to fetching from the raw GitHub URL: `https://raw.githubusercontent.com/legenex/legalos/main/public/setup.txt`.
 
 2. **Track progress with TodoWrite.** Create a todo list mirroring Phase 1's checklist. Update in real time.
 
