@@ -36,35 +36,9 @@ To preview a Site without DNS, append `?site=<slug>` to any URL — e.g. http://
 
 ## Pushing updates to production
 
-After the one-time deploy below is done, the day-to-day workflow is:
+See [WORKFLOW.md](./WORKFLOW.md) for the full local → GitHub → server flow. In short: feature branch → PR → merge to `main`. Plesk's webhook auto-deploys merges in ~30s. Roll back by reverting the bad commit on GitHub (the revert PR is itself a normal merge, so Plesk auto-deploys the rollback).
 
-```bash
-# on your laptop:
-git add -A
-git commit -m "describe what changed"
-git push
-# ...that's it. The Plesk Git extension picks up the push via webhook,
-# pulls the new commit, and runs scripts/deploy.sh which rebuilds and restarts.
-```
-
-If the deploy script fails (a build error, a failing health check), Plesk shows the output in the Git tab. The previous container keeps running until the new one passes the 30-second health check, so a broken commit doesn't take the site down — it just won't replace what's already running.
-
-To force a manual redeploy (e.g. an env-var change without a code push):
-
-```bash
-# on the server:
-cd /path/to/project
-bash scripts/deploy.sh
-```
-
-To roll back:
-
-```bash
-# on your laptop:
-git revert <bad-commit-sha>
-git push
-# the revert is itself a normal push, so Plesk auto-deploys the rollback
-```
+Do **not** push directly to `main`. Do **not** SSH-edit the live working tree — the next deploy will wipe it.
 
 ## Production deploy (Plesk on Debian 12)
 
