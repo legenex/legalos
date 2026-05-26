@@ -62,3 +62,88 @@ html, body {
 .card-edge {
   box-shadow: var(--shadow-card);
 }
+
+/* --- Marketing page animations --- */
+
+@keyframes shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px) translateX(0px); }
+  33% { transform: translateY(-12px) translateX(6px); }
+  66% { transform: translateY(8px) translateX(-4px); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.brand-gradient-text {
+  background: linear-gradient(110deg, #FF5C75 0%, #FFFFFF 50%, #5CC1E1 100%);
+  background-size: 220% 220%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 6s ease-in-out infinite;
+}
+
+/* For use on light backgrounds — red to blue with no white middle */
+.brand-gradient-text-rb {
+  background: linear-gradient(110deg, #EF4F6B 0%, #FF5C75 30%, #4F86E1 70%, #5CC1E1 100%);
+  background-size: 220% 220%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 6s ease-in-out infinite;
+}
+
+/* Animated radial glow that slowly sweeps across a section */
+@keyframes glowSweep {
+  0%, 100% { transform: translate3d(-25%, 0, 0) scale(1); opacity: 0.6; }
+  50% { transform: translate3d(25%, 0, 0) scale(1.15); opacity: 1; }
+}
+.glow-sweep { animation: glowSweep 14s ease-in-out infinite; will-change: transform, opacity; }
+
+/* Slow rotating/pulsing aurora used on the CTA */
+@keyframes auroraDrift {
+  0%, 100% { background-position: 0% 0%, 100% 100%; }
+  50% { background-position: 100% 50%, 0% 50%; }
+}
+.aurora-cta {
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 30%, rgba(255,255,255,0.18) 0%, transparent 50%),
+    radial-gradient(ellipse 80% 60% at 80% 70%, rgba(92,193,225,0.18) 0%, transparent 50%);
+  background-size: 200% 200%, 200% 200%;
+  animation: auroraDrift 16s ease-in-out infinite;
+}
+
+.float-slow { animation: float 18s ease-in-out infinite; }
+.float-slower { animation: float 26s ease-in-out infinite reverse; }
+.pulse-glow { animation: pulseGlow 4s ease-in-out infinite; }
+.fade-up { animation: fadeUp 0.8s ease-out both; }
+
+/* Hero grid pattern */
+.hero-grid {
+  background-image:
+    linear-gradient(rgba(255,92,117,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(92,193,225,0.06) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 35%, black 40%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 35%, black 40%, transparent 80%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-gradient-text,
+  .float-slow,
+  .float-slower,
+  .pulse-glow,
+  .fade-up { animation: none; }
+}
