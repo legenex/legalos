@@ -104,12 +104,6 @@ export function Sidebar({ userEmail }: { userEmail: string }) {
         />
       </nav>
 
-      <div className="border-t border-[var(--color-border)] px-4 py-2">
-        <Link href="/cms" className="block text-xs text-[var(--color-ink-dim)] hover:text-[var(--color-ink-muted)] py-1">
-          Open raw Payload admin →
-        </Link>
-      </div>
-
       <SignOutButton userEmail={userEmail} />
     </aside>
   )

@@ -7,7 +7,6 @@ export default function LandingPagesPage() {
       title="Landing Pages"
       sub="All landing pages across every site."
       icon={Rocket}
-      deepLink={{ href: '/cms/collections/landing-pages', label: 'Manage landing pages in raw Payload admin' }}
     />
   )
 }

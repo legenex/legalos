@@ -7,7 +7,6 @@ export default function QuizzesPage() {
       title="Quizzes"
       sub="All quizzes across every site."
       icon={HelpCircle}
-      deepLink={{ href: '/cms/collections/quizzes', label: 'Manage quizzes in raw Payload admin' }}
     />
   )
 }

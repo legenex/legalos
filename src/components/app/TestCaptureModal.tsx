@@ -143,14 +143,6 @@ function TestCaptureModal({ siteSlug, onClose }: { siteSlug: string; onClose: ()
                   </li>
                 ))}
               </ul>
-              {result.lead_id ? (
-                <a
-                  href={`/cms/collections/leads/${result.lead_id}`}
-                  className="mt-3 inline-block text-[13px] text-[var(--color-info)] hover:underline"
-                >
-                  Open Lead in raw admin →
-                </a>
-              ) : null}
             </div>
           ) : null}
         </div>

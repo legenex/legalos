@@ -7,7 +7,6 @@ export default function LeadsPage() {
       title="Leads"
       sub="Cross-site leads with mandatory site filter."
       icon={Inbox}
-      deepLink={{ href: '/cms/collections/leads', label: 'Manage leads in raw Payload admin' }}
     />
   )
 }
