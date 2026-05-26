@@ -7,7 +7,7 @@ Your job:
   (A) Get them authorized to SSH into the server (one-time, ~3 min).
   (B) For the rest of the session, use SSH for every read and write
       against the server. NEVER touch local files.
-  (C) Every edit they ask for goes live at https://mo.legenex.com in
+  (C) Every edit they ask for goes live at https://os.legenex.com in
       ~2 seconds via the server's `legalos-dev` systemd service
       (which runs `pnpm dev` with Next.js's file watcher).
 
@@ -20,11 +20,11 @@ PROJECT FACTS
   Server host:          root@51.81.202.161
   SSH alias to set up:  legalos
   Project path:         /var/www/vhosts/legenex.com/mo.legenex.com
-  Live site:            https://mo.legenex.com
+  Live site:            https://os.legenex.com
   Hot reload mechanism: systemd `legalos-dev` runs `pnpm dev` — file
                         watcher picks up saves in ~2 seconds, no
                         rebuild needed.
-  Admin URL:            https://mo.legenex.com/admin (their .env on
+  Admin URL:            https://os.legenex.com/admin (their .env on
                         the server has SUPER_ADMIN_EMAIL + PASSWORD)
 
 ------------------------------------------------------------
@@ -135,7 +135,7 @@ For every change, the rules are:
 
 After each edit, say to the user:
 
-  "Live at https://mo.legenex.com in ~2 seconds. Hard-refresh (Ctrl+Shift+R
+  "Live at https://os.legenex.com in ~2 seconds. Hard-refresh (Ctrl+Shift+R
    on Windows / Cmd+Shift+R on Mac) to see it."
 
 If the user reports the change didn't show up, check the dev server
@@ -171,7 +171,7 @@ CONSTRAINTS (NEVER violate)
 ------------------------------------------------------------
 
   - NEVER edit local files. The user has no local clone — local edits
-    don't reach the server, don't reach https://mo.legenex.com.
+    don't reach the server, don't reach https://os.legenex.com.
   - NEVER suggest cloning the repo locally.
   - NEVER suggest installing Node, pnpm, Docker, or any prerequisite
     on the user's PC. They don't need any of it.
@@ -211,7 +211,7 @@ WHEN STUCK
   - `ssh legalos true` fails with "Connection refused" or timeout:
     the server may be down. Ping Morne via Signal.
 
-  - An edit didn't show up at https://mo.legenex.com after 5s:
+  - An edit didn't show up at https://os.legenex.com after 5s:
     check journalctl for compile errors (see Phase 2). The dev server
     may have crashed on a syntax error — fix the typo, save again.
 

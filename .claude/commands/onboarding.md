@@ -4,7 +4,7 @@ description: Bootstrap a brand-new LegalOS dev — fetch + follow the playbook a
 
 You're being invoked by a new team member who has VS Code + Claude Code installed, an empty workspace, and nothing else. Your job is to drive their entire setup from zero to "editing locally + can deploy with one word."
 
-The detailed playbook lives at `https://mo.legenex.com/setup.txt` — fetch it now and follow it exactly. It has:
+The detailed playbook lives at `https://os.legenex.com/setup.txt` — fetch it now and follow it exactly. It has:
 
 - The project facts (repo URL, server host, etc.)
 - Phase 1: setup (prerequisite check matrix, clone, .env, install, SSH key handshake, dev server start) — one step per message
@@ -14,7 +14,7 @@ The detailed playbook lives at `https://mo.legenex.com/setup.txt` — fetch it n
 
 ## Behavior rules
 
-1. **Fetch the playbook first.** Use WebFetch on `https://mo.legenex.com/setup.txt`. If that fails (e.g., server unreachable), fall back to fetching from the raw GitHub URL: `https://raw.githubusercontent.com/Morne080/legalos/main/public/setup.txt`.
+1. **Fetch the playbook first.** Use WebFetch on `https://os.legenex.com/setup.txt`. If that fails (e.g., server unreachable), fall back to fetching from the raw GitHub URL: `https://raw.githubusercontent.com/Morne080/legalos/main/public/setup.txt`.
 
 2. **Track progress with TodoWrite.** Create a todo list mirroring Phase 1's checklist. Update in real time.
 

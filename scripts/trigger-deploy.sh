@@ -5,7 +5,7 @@
 # watches, and return immediately.
 #
 # Setup:
-#   1. Plesk → mo.legenex.com → Git → Repository Settings → Deploy actions:
+#   1. Plesk → os.legenex.com → Git → Repository Settings → Deploy actions:
 #        bash scripts/trigger-deploy.sh
 #   2. As root, add a cron entry that runs scripts/cron-deploy.sh every minute
 #      (see scripts/cron-deploy.sh header for the exact command).

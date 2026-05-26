@@ -1,6 +1,6 @@
 # Production stack for Plesk Debian 12.
 # Everything binds to 127.0.0.1 only so Plesk's nginx is the sole ingress.
-# Plesk reverse-proxies mo.legenex.com -> 127.0.0.1:3000 and tenant domains
+# Plesk reverse-proxies os.legenex.com -> 127.0.0.1:3000 and tenant domains
 # get added to Plesk via REST API on connect (see src/lib/plesk/).
 
 services:

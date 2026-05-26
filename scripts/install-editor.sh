@@ -5,7 +5,7 @@
 #   bash scripts/install-editor.sh
 #
 # After it finishes:
-#   1. In Plesk, add a subdomain `editor.mo.legenex.com` (or similar).
+#   1. In Plesk, add a subdomain `editor.os.legenex.com` (or similar).
 #      Document root doesn't matter — we override with a reverse proxy.
 #   2. Set the subdomain's nginx additional directives (HTTP and HTTPS):
 #        location / {
@@ -96,11 +96,11 @@ bold "  code-server is running. Next steps in Plesk:"
 bold "================================================================="
 cat <<EOF
 
-  1. Plesk -> Websites & Domains -> mo.legenex.com -> Add Subdomain
+  1. Plesk -> Websites & Domains -> os.legenex.com -> Add Subdomain
      - Name: editor
-     - Parent: mo.legenex.com
+     - Parent: os.legenex.com
 
-  2. editor.mo.legenex.com -> Apache & nginx Settings ->
+  2. editor.os.legenex.com -> Apache & nginx Settings ->
      Additional nginx directives (paste in BOTH HTTP and HTTPS):
 
        location / {
@@ -112,15 +112,15 @@ cat <<EOF
          proxy_set_header Accept-Encoding gzip;
        }
 
-  3. editor.mo.legenex.com -> SSL/TLS Certificates ->
+  3. editor.os.legenex.com -> SSL/TLS Certificates ->
      Get free Let's Encrypt certificate for the subdomain.
 
   4. Send your teammate:
-     - URL:      https://editor.mo.legenex.com
+     - URL:      https://editor.os.legenex.com
      - Password: $PASSWORD
 
   They open the URL in any browser, paste the password, and they're
-  editing the live project. Saves go live at https://mo.legenex.com
+  editing the live project. Saves go live at https://os.legenex.com
   in ~2 seconds via the hot-reload pnpm dev that's already running.
 
   To change the password later:

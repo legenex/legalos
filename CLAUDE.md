@@ -24,8 +24,8 @@ We work in **local clones**, commit on **feature branches**, open **PRs against 
 4. `git add <files> && git commit -m "<type>(<scope>): <message>"`
 5. `git push -u origin <branch-name>`
 6. `gh pr create` (or open in the GitHub UI). Describe what changed and why.
-7. Merge via GitHub. Plesk's webhook pulls into the bare repo at `/var/www/vhosts/legenex.com/git/legalos.git/`, checks out into `mo.legenex.com/`, and runs `scripts/deploy.sh`. Live in ~30s.
-8. Verify at `https://mo.legenex.com`. Hard-refresh: Ctrl+Shift+R (Windows) / Cmd+Shift+R (Mac).
+7. Merge via GitHub. Plesk's webhook pulls into the bare repo at `/var/www/vhosts/legenex.com/git/legalos.git/`, checks out into `os.legenex.com/`, and runs `scripts/deploy.sh`. Live in ~30s.
+8. Verify at `https://os.legenex.com`. Hard-refresh: Ctrl+Shift+R (Windows) / Cmd+Shift+R (Mac).
 
 ### Read-only SSH is still fine
 

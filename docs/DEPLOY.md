@@ -1,6 +1,6 @@
 # Deploying LegalOS
 
-Server: `mo.legenex.com` (51.81.202.161) — Plesk + Docker Compose on Debian 12.
+Server: `os.legenex.com` (51.81.202.161) — Plesk + Docker Compose on Debian 12.
 
 ---
 
@@ -10,7 +10,7 @@ Server: `mo.legenex.com` (51.81.202.161) — Plesk + Docker Compose on Debian 12
 git push
 ```
 
-Within ~3 min the change is live at https://mo.legenex.com.
+Within ~3 min the change is live at https://os.legenex.com.
 
 That's the whole flow. Everything below is for understanding it, verifying it, or recovering when it breaks.
 
@@ -47,7 +47,7 @@ That's the whole flow. Everything below is for understanding it, verifying it, o
         docker compose build → up -d → migrate → curl health-check
                                     │
                                     ▼
-                    ✓ Live at https://mo.legenex.com
+                    ✓ Live at https://os.legenex.com
 ```
 
 The split exists because **Plesk's git deploy hook runs in a chroot** with no `docker`, no `dirname`, no `date`. So the hook can only do bash-builtin work (drop a flag), and the real deploy runs from a separate cron context that has a normal PATH.
@@ -60,7 +60,7 @@ After `git push`, wait ~2 min then:
 
 **1. Confirm the new commit is checked out — easiest signal:**
 
-Open https://mo.legenex.com/admin and look at the **version pill in the bottom-right corner**:
+Open https://os.legenex.com/admin and look at the **version pill in the bottom-right corner**:
 
 ```
 ● build N  •  just now
@@ -75,7 +75,7 @@ If the pill still shows the OLD build number after a deploy, the new image didn'
 
 Alternatively check the raw stamp:
 ```
-https://mo.legenex.com/.git-sha
+https://os.legenex.com/.git-sha
 ```
 Should match `git rev-parse HEAD` from your laptop.
 
@@ -88,7 +88,7 @@ You're looking for a recent banner:
 ====================================================================
 Cron deploy run at 2026-05-14T...
 ====================================================================
-[deploy ...] ✓ deploy complete. Visit https://mo.legenex.com/admin
+[deploy ...] ✓ deploy complete. Visit https://os.legenex.com/admin
 Exit: 0
 ```
 
@@ -126,7 +126,7 @@ bash scripts/deploy.sh
 
 Output streams to your terminal directly. Takes 1-3 min. On success the last line is:
 ```
-[deploy ...] ✓ deploy complete. Visit https://mo.legenex.com/admin
+[deploy ...] ✓ deploy complete. Visit https://os.legenex.com/admin
 ```
 
 ---
@@ -154,8 +154,8 @@ nano .env   # fill in production values
 Required (deploy.sh blocks without them):
 - `PAYLOAD_SECRET` — long random string, never reuse from dev
 - `DATABASE_URI` — `postgres://legalos:<pwd>@postgres:5432/legalos`
-- `NEXT_PUBLIC_SERVER_URL` — `https://mo.legenex.com`
-- `LEGALOS_FALLBACK_HOST` — `mo.legenex.com`
+- `NEXT_PUBLIC_SERVER_URL` — `https://os.legenex.com`
+- `LEGALOS_FALLBACK_HOST` — `os.legenex.com`
 - `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`
 
 ### 3. First-time setup (builds image, migrates, seeds)
@@ -172,7 +172,7 @@ crontab -l   # verify
 ```
 
 ### 5. Wire Plesk's Git extension
-- Plesk → Websites & Domains → mo.legenex.com → **Git**
+- Plesk → Websites & Domains → os.legenex.com → **Git**
 - Repository Settings → **Additional deployment actions**: `bash scripts/trigger-deploy.sh`
 - Save
 
@@ -187,7 +187,7 @@ crontab -l   # verify
   PLESK_OWNER_LOGIN=admin
   PLESK_OWNER_EMAIL=team@legenex.com
   PLESK_IP_ADDRESS=51.81.202.161
-  # Plesk serves its API on 8443 with a cert issued for mo.legenex.com.
+  # Plesk serves its API on 8443 with a cert issued for os.legenex.com.
   # When the app container connects via the IP (above), the cert hostname
   # doesn't match and Node fetch rejects. Traffic stays on the host
   # (container → docker bridge → host loopback to :8443), so skipping
@@ -223,7 +223,7 @@ Or check `cat .git-sha` for the deployed commit.
 
 ### Browser still shows old version after successful deploy
 - Hard-refresh: Ctrl+Shift+R (or Cmd+Shift+R on Mac)
-- Check `https://mo.legenex.com/.git-sha` — if it matches your latest commit, the server is updated and it's purely a browser-cache issue
+- Check `https://os.legenex.com/.git-sha` — if it matches your latest commit, the server is updated and it's purely a browser-cache issue
 - If `.git-sha` is stale, deploy didn't actually run — check the log
 
 ### "duplicate location" or 403 on the public URL
@@ -277,7 +277,7 @@ git --git-dir=/var/www/vhosts/legenex.com/git/legalos.git \
 cd /var/www/vhosts/legenex.com/mo.legenex.com && bash scripts/deploy.sh
 ```
 
-Alternatively in the Plesk web UI: **Websites & Domains → mo.legenex.com → Git → Pull Updates**. That re-runs the trigger-deploy hook.
+Alternatively in the Plesk web UI: **Websites & Domains → os.legenex.com → Git → Pull Updates**. That re-runs the trigger-deploy hook.
 
 ---
 

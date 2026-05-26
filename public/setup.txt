@@ -15,7 +15,7 @@ PROJECT FACTS YOU NEED
 ----------------------------------------------------------------
 
   Repo URL:           https://github.com/Morne080/legalos.git
-  Production URL:     https://mo.legenex.com
+  Production URL:     https://os.legenex.com
   Production host:    root@51.81.202.161 (SSH alias to be configured as 'legalos')
   Server work tree:   /var/www/vhosts/legenex.com/mo.legenex.com
   Server bare repo:   /var/www/vhosts/legenex.com/git/legalos.git
@@ -210,16 +210,16 @@ Step 3.5 — Verify
   output), confirm:
 
   ssh legalos cat /var/www/vhosts/legenex.com/mo.legenex.com/.git-sha
-  curl -s https://mo.legenex.com/admin -o /dev/null -w "%{http_code}\n"
+  curl -s https://os.legenex.com/admin -o /dev/null -w "%{http_code}\n"
 
   - .git-sha should equal `git rev-parse HEAD` from local.
   - HTTP code should be 200 or 307.
-  - The version pill at https://mo.legenex.com/admin (bottom-right)
+  - The version pill at https://os.legenex.com/admin (bottom-right)
     should show "build N" (green dot) where N is the latest commit
     count.
 
 Step 3.6 — Confirm
-  Tell the user: "Deployed. Live at https://mo.legenex.com — refresh
+  Tell the user: "Deployed. Live at https://os.legenex.com — refresh
   to see the change. The version pill in the admin should show the
   new build number."
 

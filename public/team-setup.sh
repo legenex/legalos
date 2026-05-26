@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # LegalOS team-member setup (macOS / Linux)
 # Paste this one line into Terminal to set yourself up:
-#   curl -fsSL https://mo.legenex.com/team-setup.sh | bash
+#   curl -fsSL https://os.legenex.com/team-setup.sh | bash
 #
 # What it does:
 #   1. Installs VS Code if you don't have it (via Homebrew on Mac).
@@ -95,7 +95,7 @@ echo ""
 echo "Daily workflow:"
 echo "  - Edit any file in the sidebar."
 echo "  - Save (Cmd+S)."
-echo "  - Watch https://mo.legenex.com update in ~2 seconds."
+echo "  - Watch https://os.legenex.com update in ~2 seconds."
 echo ""
 echo "Read /var/www/vhosts/legenex.com/mo.legenex.com/ONBOARDING.md (in VS Code)"
 echo "for daily-workflow details and what NOT to do."

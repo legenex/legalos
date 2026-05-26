@@ -57,7 +57,7 @@ export default async function PublicLayout({ children }: { children: ReactNode }
 
   // Preview mode (?site=<slug>) — middleware stamps x-legalos-preview-site.
   // This must take precedence over host resolution because the host here
-  // is always mo.legenex.com (the admin host), which would otherwise resolve
+  // is always os.legenex.com (the admin host), which would otherwise resolve
   // to no site and the brand CSS variables would never be emitted.
   if (previewSiteSlug) {
     const payload = await getPayload({ config })

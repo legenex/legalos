@@ -23,7 +23,7 @@ git add <files>
 git commit -m "<type>(<scope>): <message>"
 git push -u origin <branch-name>
 gh pr create --base main --title "<title>" --body "<what + why>"
-# merge via GitHub UI → ~30s later live at https://mo.legenex.com
+# merge via GitHub UI → ~30s later live at https://os.legenex.com
 ```
 
 ---
@@ -167,7 +167,9 @@ Every change goes through a PR, even one-liners. The PR is what makes the change
 
 ## After-merge verification
 
-Plesk's webhook pulls into the bare repo at `/var/www/vhosts/legenex.com/git/legalos.git/`, checks out into `mo.legenex.com/`, runs `scripts/deploy.sh`. The `legalos-dev` systemd service serves the site and hot-reloads off the new files.
+Plesk's webhook pulls into the bare repo at `/var/www/vhosts/legenex.com/git/legalos.git/`, checks out into the live working tree, runs `scripts/deploy.sh`. The `legalos-dev` systemd service serves the site and hot-reloads off the new files.
+
+> Note on the directory name: the on-disk path is still `/var/www/vhosts/legenex.com/mo.legenex.com/` even though the public domain is now `os.legenex.com`. Plesk's "Rename Domain" only renames the domain entry, not the document root. The directory name is internal-only and doesn't affect anything user-visible.
 
 ```bash
 # Confirm the deployed commit matches the merge:
@@ -199,7 +201,7 @@ The webhook covers most changes. These need a follow-up over SSH:
 
 ## Hotfix exception
 
-If `https://mo.legenex.com` is *down* and a branch+PR is too slow:
+If `https://os.legenex.com` is *down* and a branch+PR is too slow:
 
 1. SSH and apply the minimum fix to restore service.
 2. **Immediately** mirror the same change into a `hotfix/<desc>` branch in your local clone.
@@ -225,8 +227,8 @@ git fetch --prune                  # remove stale remote-tracking refs
 
 | Question | Answer |
 |---|---|
-| Live URL | https://mo.legenex.com |
-| Admin URL | https://mo.legenex.com/admin |
+| Live URL | https://os.legenex.com |
+| Admin URL | https://os.legenex.com/admin |
 | Local dev URL | http://localhost:3000 |
 | Server | `root@51.81.202.161` (read-only SSH; no file mutations) |
 | Live commit | `ssh root@51.81.202.161 cat /var/www/vhosts/legenex.com/mo.legenex.com/.git-sha` |

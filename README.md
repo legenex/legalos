@@ -52,9 +52,9 @@ Do **not** push directly to `main`. Do **not** SSH-edit the live working tree �
 
 2. **In Plesk → Tools & Settings → API Keys → Add API Key.** Note the key — set it as `PLESK_API_KEY` in `.env`.
 
-3. **Add `mo.legenex.com` as a Plesk domain** (Plesk → Domains → Add Domain). Make sure the Let's Encrypt extension is installed (Plesk → Extensions). Issue a cert for `mo.legenex.com`.
+3. **Add `os.legenex.com` as a Plesk domain** (Plesk → Domains → Add Domain). Make sure the Let's Encrypt extension is installed (Plesk → Extensions). Issue a cert for `os.legenex.com`.
 
-4. **Configure `mo.legenex.com` to reverse-proxy to localhost:3000.** Plesk → mo.legenex.com → Apache & nginx Settings → Additional nginx directives (HTTP and HTTPS):
+4. **Configure `os.legenex.com` to reverse-proxy to localhost:3000.** Plesk → os.legenex.com → Apache & nginx Settings → Additional nginx directives (HTTP and HTTPS):
    ```nginx
    location / {
      proxy_pass http://127.0.0.1:3000;
@@ -71,12 +71,12 @@ Do **not** push directly to `main`. Do **not** SSH-edit the live working tree �
 
 5. **At your `legenex.com` DNS provider**, add (one-time, used by every tenant):
    ```
-   A      cname       <Plesk server IP>     # tenant CNAME target → matches LEGALOS_CNAME_TARGET=mo.legenex.com (resolves to same IP)
+   A      cname       <Plesk server IP>     # tenant CNAME target → matches LEGALOS_CNAME_TARGET=os.legenex.com (resolves to same IP)
    A      *.preview   <Plesk server IP>     # wildcard for {slug}.preview.legenex.com
    A      mo          <Plesk server IP>     # admin hostname
    ```
 
-   Optional: a separate `cname.legenex.com` A record if you want CNAME-target separation from the admin hostname. Otherwise tenants CNAME directly at `mo.legenex.com`.
+   Optional: a separate `cname.legenex.com` A record if you want CNAME-target separation from the admin hostname. Otherwise tenants CNAME directly at `os.legenex.com`.
 
 ### First deploy
 
@@ -95,7 +95,7 @@ git push -u origin main
 #### B. Connect Plesk's Git extension to that GitHub repo
 
 1. In Plesk → **Extensions** → install **Git** if not already (free, bundled).
-2. Plesk → **Websites & Domains** → `mo.legenex.com` → **Git** → **Add Repository**.
+2. Plesk → **Websites & Domains** → `os.legenex.com` → **Git** → **Add Repository**.
 3. **Remote repository URL:** the SSH URL from GitHub.
 4. **Server path:** something outside the web root, e.g. `/var/www/vhosts/legenex.com/legalos/`. Make sure this directory is NOT served by Plesk's nginx — only the reverse-proxy block from step 4 above is.
 5. **Deployment mode:** *Automatic deployment (recommended)*. Plesk gives you a webhook URL.
@@ -117,13 +117,13 @@ Fill in production values. At minimum:
 
 ```
 PAYLOAD_SECRET=<openssl rand -hex 48>
-NEXT_PUBLIC_SERVER_URL=https://mo.legenex.com
-LEGALOS_FALLBACK_HOST=mo.legenex.com
+NEXT_PUBLIC_SERVER_URL=https://os.legenex.com
+LEGALOS_FALLBACK_HOST=os.legenex.com
 ANTHROPIC_API_KEY=<your key>
 PLESK_API_URL=https://your-plesk-host:8443
 PLESK_API_KEY=<from one-time setup step 2>
 PLESK_IP_ADDRESS=<server IP>
-LEGALOS_CNAME_TARGET=mo.legenex.com
+LEGALOS_CNAME_TARGET=os.legenex.com
 LEGALOS_A_TARGET=<server IP>
 LEGALOS_DEV_SKIP_DNS=false
 SUPER_ADMIN_EMAIL=team@legenex.com
@@ -140,7 +140,7 @@ This brings up Docker (app + Postgres + Redis), waits for everything to be healt
 
 #### E. Wire the auto-deploy hook
 
-Back in Plesk → mo.legenex.com → Git → your repo → **Additional deployment actions**, set:
+Back in Plesk → os.legenex.com → Git → your repo → **Additional deployment actions**, set:
 
 ```
 bash {DOCROOT}/scripts/deploy.sh
@@ -156,7 +156,7 @@ Now every push to `main` will:
 5. Script health-checks `127.0.0.1:3000` before declaring success
 6. Old Docker images get pruned
 
-Visit `https://mo.legenex.com/admin` and log in.
+Visit `https://os.legenex.com/admin` and log in.
 
 ### How tenant domains flow through Plesk
 
@@ -175,7 +175,7 @@ Removing a custom domain calls `DELETE /api/v2/domains/{plesk_domain_id}` so Ple
 ## Architecture
 
 ```
-Internet → mo.legenex.com / tenant-domain.com
+Internet → os.legenex.com / tenant-domain.com
    ↓
 Plesk (nginx, ports 80/443, Let's Encrypt termination)
    ↓ reverse-proxy

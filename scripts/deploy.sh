@@ -2,7 +2,7 @@
 # Plesk Git extension runs this as the "Additional deployment actions" command
 # after every pull. Idempotent. Safe to run repeatedly.
 #
-# Setup in Plesk: Websites & Domains → mo.legenex.com → Git → Deploy actions:
+# Setup in Plesk: Websites & Domains → os.legenex.com → Git → Deploy actions:
 #   bash scripts/deploy.sh
 #
 # Plesk's git deploy runner uses an extremely stripped-down environment with no
@@ -138,4 +138,4 @@ done
 log "Pruning old images (>24h, untagged)..."
 docker image prune -af --filter "until=24h" >/dev/null 2>&1 || true
 
-log "✓ deploy complete. Visit https://mo.legenex.com/admin"
+log "✓ deploy complete. Visit https://os.legenex.com/admin"
