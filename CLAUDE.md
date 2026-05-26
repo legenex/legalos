@@ -4,72 +4,47 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
-## CRITICAL: Live-edit workflow — never edit local files
+## CRITICAL: Standard workflow — edit local, push, webhook deploys
 
-**Production runs `pnpm dev` directly on the server**, managed by the `legalos-dev` systemd service. Files live at `/var/www/vhosts/legenex.com/mo.legenex.com/` on `root@51.81.202.161`. Next.js's file watcher picks up any save in ~2 seconds and hot-reloads `https://mo.legenex.com`.
+**The flow is:** edit files in this local repo → `git commit && git push` → GitHub webhook fires → Plesk pulls into `/var/www/vhosts/legenex.com/os.legenex.com/` on `root@51.81.202.161` → Next.js `legalos-dev` service hot-reloads → change is live at `https://os.legenex.com` in ~10 seconds.
 
-This means: **the user prompts Claude → Claude edits → 5 seconds later it's live.** There is no separate deploy step. There is no local dev. There is no `git push` workflow.
+There is no Docker rebuild. There is no `scripts/deploy.sh` step (the file is retained as historical reference only).
 
-### Rules (no exceptions unless the user explicitly overrides)
+### Rules
 
-- **NEVER use `Read`, `Edit`, `Write`, `Glob`, or `Grep` tools on local files** in `c:\Users\morne\Documents\oslegenex.com\` (or any clone). The local clone is a backup, not the source of truth. Edits there don't reach the live site.
-- **ALWAYS use SSH to read and write the server's files.** The server is the source of truth.
-- **NEVER push to git as the primary operation.** Only push periodically as a backup of the server state (when the user says "commit" or at the end of a session).
-- **NEVER run `bash scripts/deploy.sh`** — that rebuilds the Docker image (2-3 min). It is no longer the deploy path. The systemd `legalos-dev` service is what serves the site.
-- **NEVER suggest `docker compose up app`** — the Docker app container is intentionally stopped. `legalos-dev` is what's running.
+- **ALWAYS edit files in this local clone.** Never SSH-edit server source files — they'll be overwritten on the next deploy.
+- **ALWAYS commit + push to deploy.** That's the only mechanism that ships changes to the server.
+- **SSH is read-only for source.** Use SSH for logs (`journalctl -u legalos-dev`), service state (`systemctl status legalos-dev`), restarts after a `.env` / `next.config.mjs` change, or one-off Plesk admin work. Never edit `src/` there.
+- **NEVER suggest `docker compose up app` or `bash scripts/deploy.sh`.** The Docker app container is stopped; deploys are pull + HMR, not rebuild.
 
-### Standard operations (via SSH)
+### Standard operations
 
 ```bash
-# Read a file
-ssh root@51.81.202.161 cat /var/www/vhosts/legenex.com/mo.legenex.com/<path>
+# Make a change — edit locally, then:
+git add -A && git commit -m "what changed" && git push
 
-# Search the codebase
-ssh root@51.81.202.161 grep -rn '<pattern>' /var/www/vhosts/legenex.com/mo.legenex.com/src
+# Tail the server's compile output to confirm the change picked up
+ssh root@51.81.202.161 'journalctl -u legalos-dev -n 30 --no-pager -f'
 
-# List a directory
-ssh root@51.81.202.161 ls /var/www/vhosts/legenex.com/mo.legenex.com/<dir>
+# Read server-side state (logs / service / db) — read-only
+ssh root@51.81.202.161 'systemctl status legalos-dev --no-pager'
 
-# Edit (small in-place change)
-ssh root@51.81.202.161 sed -i 's|<old>|<new>|' /var/www/vhosts/legenex.com/mo.legenex.com/<path>
-
-# Edit (full file rewrite via heredoc — use the call operator and 'PAYLOAD' to avoid local shell interpolation)
-ssh root@51.81.202.161 "cat > /var/www/vhosts/legenex.com/mo.legenex.com/<path>" <<'PAYLOAD'
-<new file contents>
-PAYLOAD
-
-# Watch the dev server's compile output / errors after an edit
-ssh root@51.81.202.161 'journalctl -u legalos-dev -n 30 --no-pager'
-
-# Restart the service (only if it's crashed and won't recover; saves should not normally require this)
+# Restart the service (only if it's crashed or after a .env / next.config.mjs change)
 ssh root@51.81.202.161 systemctl restart legalos-dev
 ```
 
-### After any edit
+### After any push
 
-- Tell the user the change is live at `https://mo.legenex.com` in ~2 seconds.
+- Tell the user the change is live at `https://os.legenex.com` in ~10 seconds (deploy + HMR).
 - Hard-refresh hint: Ctrl+Shift+R (Windows) / Cmd+Shift+R (Mac).
-- Do NOT mention git, deploys, or commits unless the user asks.
 
-### Periodic git sync (only when explicitly asked)
-
-When the user says "commit" (or "save my work", "push to git"):
-
-```bash
-ssh root@51.81.202.161 'cd /var/www/vhosts/legenex.com/mo.legenex.com && git add -A && git status --short'
-# Show the user the diff summary, ask for a commit message, then:
-ssh root@51.81.202.161 'cd /var/www/vhosts/legenex.com/mo.legenex.com && git commit -m "<message>" && git push origin main'
-```
-
-That's it. No image rebuild, no migration step, no health check — the change is already live; the commit is just preserving history.
-
-### Things that DO require a manual command (no longer hot-reloaded)
+### Things that require an extra step after the push
 
 | What changed | Run on the server |
 |---|---|
-| Added a package (`pnpm add ...`) | `ssh root@51.81.202.161 'cd /var/www/.../mo.legenex.com && pnpm install && systemctl restart legalos-dev'` |
-| Edited `.env` | `ssh root@51.81.202.161 systemctl restart legalos-dev` |
-| Changed a Payload collection field | `ssh root@51.81.202.161 'cd /var/www/.../mo.legenex.com && pnpm payload migrate:create <name> && pnpm payload migrate'` then commit the new migration file |
+| Added a package (`pnpm add ...`) | `ssh root@51.81.202.161 'cd /var/www/vhosts/legenex.com/os.legenex.com && pnpm install && systemctl restart legalos-dev'` |
+| Edited `.env` | `.env` is gitignored — edit it on the server (`ssh root@51.81.202.161 nano /var/www/vhosts/legenex.com/os.legenex.com/.env`) then `systemctl restart legalos-dev` |
+| Created a Payload migration | `ssh root@51.81.202.161 'cd /var/www/vhosts/legenex.com/os.legenex.com && pnpm payload migrate'` |
 | Edited `next.config.mjs` | `ssh root@51.81.202.161 systemctl restart legalos-dev` |
 | Service stuck / weird state | `ssh root@51.81.202.161 systemctl restart legalos-dev` |
 
@@ -98,9 +73,11 @@ There is no test suite. "Correctness" checks are `pnpm typecheck` and `pnpm lint
 
 ## Deploy model
 
-A `git push` to `main` triggers Plesk's Git extension via webhook, which pulls and runs `scripts/deploy.sh` on the host. The deploy script rebuilds the Docker image, runs `pnpm payload migrate`, and health-checks `127.0.0.1:3000` for 30s before declaring success — a broken commit doesn't take the site down because the old container keeps serving until the new one passes. To roll back, `git revert` and push.
+A `git push` to `main` triggers Plesk's Git extension via webhook, which pulls into `/var/www/vhosts/legenex.com/os.legenex.com/` on the host. The `legalos-dev.service` systemd unit (running `pnpm dev` from that directory) detects the file change and hot-reloads — the new code is serving on `https://os.legenex.com` within seconds.
 
-`scripts/deploy.sh` runs in Plesk's chrooted git environment with no PATH and no coreutils — it manually sets `PATH` and uses only bash builtins (`${BASH_SOURCE[0]%/*}`, `printf %()T`) for its bootstrap. Don't add `dirname`/`date`/etc. calls before the PATH export.
+There is no container rebuild and no automatic migrate step. Rollback: `git revert && git push`.
+
+Migrations are NOT auto-applied. If your push includes a new file under `src/migrations/`, run `ssh root@51.81.202.161 'cd /var/www/vhosts/legenex.com/os.legenex.com && pnpm payload migrate'` after the push.
 
 ## Architecture: how a request flows
 
@@ -156,7 +133,7 @@ Connecting a custom domain to a Site goes through Plesk's REST API (`src/lib/ple
 
 ## Things to know when editing
 
-- Schema changes: dev auto-pushes (Payload default outside production). For production, generate a migration with `pnpm payload migrate:create <name>` — `scripts/deploy.sh` runs `pnpm payload migrate` before declaring the container healthy.
+- Schema changes: dev auto-pushes (Payload default outside production). For production, generate a migration with `pnpm payload migrate:create <name>`, commit and push it, then run `pnpm payload migrate` on the server (deploys don't auto-migrate).
 - After editing collection fields, run `pnpm generate:types` so `src/payload-types.ts` stays in sync (it's imported throughout).
 - `next.config.mjs` is minimal and `cors: '*'` plus `csrf: [NEXT_PUBLIC_SERVER_URL]` is set in `payload.config.ts` — don't add CORS handling at the route layer.
 - The `(payload)` route group exists because Payload's `withPayload` Next plugin convention expects it; the `(public)`, `(app)`, `(auth)` groups exist so each can have its own root `layout.tsx`.
