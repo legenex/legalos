@@ -2,6 +2,13 @@
 
 How we make changes to LegalOS: **local clone → feature branch → PR → merge → Plesk webhook deploys**. Both contributors follow this; the live server is downstream of `main` and is never edited directly.
 
+## Contributors
+
+- **Morné** — Windows (`C:\Users\morne\legalos`)
+- **Nick** — Mac (`~/Documents/Projects/LegalOS`)
+
+Both sign in to GitHub as the shared **`team@legenex.com`** account. Local `git config user.name` distinguishes who actually made each commit; `git config user.email` is the shared address on both machines.
+
 ---
 
 ## TL;DR (daily flow)
@@ -27,11 +34,11 @@ gh pr create --base main --title "<title>" --body "<what + why>"
 
 - **Node 20.x** (matched to the server)
 - **pnpm 9.15.0** (matched to the server)
-- **git** with your name and email configured
-- **gh** CLI authenticated against your `legenex/legalos`-collaborator account
-- An **SSH key registered on GitHub** (for the `git@github.com:legenex/legalos.git` remote)
+- **git** with `user.name` set to your own name and `user.email` set to `team@legenex.com`
+- **gh** CLI authenticated as the shared `team@legenex.com` GitHub account
+- Each machine's own **SSH key registered on the shared GitHub account** (for the `git@github.com:legenex/legalos.git` remote)
 
-### macOS
+### macOS (Nick)
 
 ```bash
 # Toolchain
@@ -42,22 +49,23 @@ node --version    # v20.x
 pnpm --version    # 9.15.0 — if not, run: npm install -g pnpm@9.15.0
 
 # SSH key (skip if you already have ~/.ssh/id_ed25519)
-ssh-keygen -t ed25519 -C "your-email@legenex.com"
+ssh-keygen -t ed25519 -C "team@legenex.com"
 cat ~/.ssh/id_ed25519.pub
-# → GitHub → Settings → SSH and GPG keys → New SSH key → paste
+# → Sign in to GitHub as the shared team@legenex.com account
+# → Settings → SSH and GPG keys → New SSH key → paste → name it "Nick — Mac"
 
 # Clone
 mkdir -p ~/Documents/Projects && cd ~/Documents/Projects
 git clone git@github.com:legenex/legalos.git LegalOS
 cd LegalOS
 
-# Identity + auth
-git config --global user.name "Your Name"
-git config --global user.email "your-email@legenex.com"
-gh auth login    # GitHub.com → SSH → existing key → browser
+# Identity + auth — user.name is your real name; user.email is the shared one
+git config --global user.name "Nick"
+git config --global user.email "team@legenex.com"
+gh auth login    # GitHub.com → SSH → existing key → sign in as team@legenex.com
 ```
 
-### Windows
+### Windows (Morné)
 
 ```powershell
 # Toolchain — install via winget or installers
@@ -65,21 +73,22 @@ winget install OpenJS.NodeJS.LTS    # Node 20.x
 npm install -g pnpm@9.15.0
 winget install GitHub.cli
 
-# SSH key (skip if you have ~/.ssh/id_ed25519)
-ssh-keygen -t ed25519 -C "your-email@legenex.com"
+# SSH key (skip if you have ~/.ssh/id_ed25519 — Morné's is already on GitHub)
+ssh-keygen -t ed25519 -C "team@legenex.com"
 type $env:USERPROFILE\.ssh\id_ed25519.pub
-# → GitHub → Settings → SSH and GPG keys → New SSH key → paste
+# → Sign in to GitHub as the shared team@legenex.com account
+# → Settings → SSH and GPG keys → New SSH key → paste → name it "Morné — Windows"
 
 # Clone
 cd $env:USERPROFILE
 git clone git@github.com:legenex/legalos.git
 cd legalos
 
-# Identity + auth
-git config --global user.name "Your Name"
-git config --global user.email "your-email@legenex.com"
+# Identity + auth — user.name is your real name; user.email is the shared one
+git config --global user.name "Morné"
+git config --global user.email "team@legenex.com"
 git config --global core.autocrlf input    # silence the CRLF warnings
-gh auth login
+gh auth login                              # sign in as team@legenex.com
 ```
 
 ### Local dev (optional — both OS)
