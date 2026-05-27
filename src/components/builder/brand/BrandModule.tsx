@@ -586,7 +586,7 @@ const BrandIdentitiesView = ({ brands, domains, onCreate, onUpdate, onDelete, on
                   </div>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{brand.displayName}</div>
-                    <div style={{ fontSize: 11, color: T.textMute, fontFamily: '"JetBrains Mono", monospace', marginTop: 2 }}>{brand.primaryDomain || brand.contact?.callNumber || ''}</div>
+                    <div style={{ fontSize: 11, color: T.textMute, fontFamily: '"JetBrains Mono", monospace', marginTop: 2 }}>{brand.contact?.callNumber || brand.primaryDomain || ''}</div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 5, marginBottom: 12 }}>
