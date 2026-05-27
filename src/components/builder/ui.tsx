@@ -282,29 +282,30 @@ export const ConfirmDialog = ({ open, title, message, confirmText = 'Confirm', c
   )
 }
 
-// Generic centered modal. The advertorial builder relies on a shared <Modal>
-// primitive (open/onClose/title/maxWidth/footer/children) with the same overlay
-// language as the other builder screens.
-export const Modal = ({ open, onClose, title, maxWidth = 640, footer, children }) => {
+// Generic Modal, ported verbatim from the artifact. Anchors to the top so it
+// does not jump when content height changes (used by the Advertorials builder's
+// Add Section / AI Edit / AI Create wizard dialogs).
+export const Modal = ({ open, onClose, title, maxWidth = 720, footer, children }) => {
   if (!open) return null
   return (
     <div
       onClick={onClose}
-      style={{ position: 'fixed', inset: 0, zIndex: 140, backgroundColor: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+      style={{ position: 'fixed', inset: 0, zIndex: 150, backgroundColor: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '60px 20px 20px', overflowY: 'auto' }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{ width: '100%', maxWidth, maxHeight: '88vh', display: 'flex', flexDirection: 'column', backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden', boxShadow: '0 40px 80px -20px rgba(0,0,0,0.8)' }}
+        style={{ width: '100%', maxWidth, backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 12, display: 'flex', flexDirection: 'column', boxShadow: '0 40px 80px -20px rgba(0,0,0,0.8)' }}
       >
-        {title && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '16px 20px', borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
-            <div style={{ fontSize: 15, color: T.text, fontWeight: 600, letterSpacing: '-0.01em' }}>{title}</div>
-            <IconBtn icon={X} onClick={onClose} />
-          </div>
-        )}
-        <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>{children}</div>
+        {/* Header */}
+        <div style={{ padding: '18px 22px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: T.text, letterSpacing: '-0.01em' }}>{title}</div>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.textMute, padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6 }}><X size={18} /></button>
+        </div>
+        {/* Body */}
+        <div style={{ padding: 22, overflowY: 'auto', maxHeight: 'calc(100vh - 220px)' }}>{children}</div>
+        {/* Footer */}
         {footer && (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '14px 20px', borderTop: `1px solid ${T.border}`, flexShrink: 0 }}>
+          <div style={{ padding: '14px 22px', borderTop: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
             {footer}
           </div>
         )}
