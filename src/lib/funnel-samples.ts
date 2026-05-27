@@ -3,7 +3,7 @@
 /**
  * One-time auto-seed of the sample funnel content (landing pages, quizzes, and
  * their deployments) so the builders open populated with REAL, editable records
- * the first time they are visited — matching the artifact's out-of-the-box state
+ * the first time they are visited, matching the artifact's out-of-the-box state
  * without a manual `pnpm seed` step.
  *
  * Guarded by the `funnel_samples_seeded` flag on the integration-config global:
@@ -20,6 +20,7 @@ import {
   buildSeedSections,
 } from '@/components/builder/lp/section-copy'
 import { buildSeedQuiz } from '@/components/builder/quiz/seed-data'
+import { advBuildSeedAdvertorials } from '@/components/builder/advertorial/seed-data'
 
 const primaryDomainId = async (payload: Payload, siteId: number): Promise<number | null> => {
   const dom = await payload.find({
@@ -33,14 +34,8 @@ const primaryDomainId = async (payload: Payload, siteId: number): Promise<number
 
 let inFlight: Promise<void> | null = null
 
-const seedOnce = async (payload: Payload): Promise<void> => {
-  const cfg = await payload.findGlobal({ slug: 'integration-config', overrideAccess: true })
-  if (cfg?.funnel_samples_seeded) return
-
-  // Brands == Sites. Deployments need a real Site; quizzes/LPs are brandless.
-  const sitesRes = await payload.find({ collection: 'sites', limit: 500, sort: 'name', overrideAccess: true })
-  const sites = sitesRes.docs.map((s) => Number(s.id))
-
+// Sample landing pages + quizzes (the "base" group, guarded by funnel_samples_seeded).
+const seedBase = async (payload: Payload, sites: number[]): Promise<void> => {
   // 1) Sample landing pages (brandless), matched by slug so re-entry is safe.
   const lpIdBySlug: Record<string, number | null> = {}
   for (const spec of SAMPLE_LANDING_PAGES) {
@@ -113,6 +108,7 @@ const seedOnce = async (payload: Payload): Promise<void> => {
 
   // 4) Sample quiz deployment bound to the first site.
   const qSiteId = sites[0] ?? null
+  let quizDeploymentId: string | null = null
   if (quizId != null && qSiteId != null) {
     const existingDep = await payload.find({
       collection: 'funnel-quiz-deployments',
@@ -120,8 +116,10 @@ const seedOnce = async (payload: Payload): Promise<void> => {
       limit: 1,
       overrideAccess: true,
     })
-    if (!existingDep.docs[0]) {
-      await payload.create({
+    if (existingDep.docs[0]) {
+      quizDeploymentId = String(existingDep.docs[0].id)
+    } else {
+      const dep = await payload.create({
         collection: 'funnel-quiz-deployments',
         data: {
           name: 'MVA Tiered Quiz',
@@ -141,20 +139,89 @@ const seedOnce = async (payload: Payload): Promise<void> => {
         },
         overrideAccess: true,
       })
+      quizDeploymentId = String(dep.id)
     }
   }
 
-  // Flip the one-time marker last, so a partial failure retries next load.
-  await payload.updateGlobal({
-    slug: 'integration-config',
-    data: { funnel_samples_seeded: true },
-    overrideAccess: true,
-  })
+}
+
+// Sample advertorials (the "advertorial" group, guarded separately).
+const seedAdvertorials = async (payload: Payload, sites: number[]): Promise<void> => {
+  const brandSiteId = sites[0] ?? null
+  const defaultBrandId = brandSiteId != null ? `site_${brandSiteId}` : ''
+  let firstAdId: number | null = null
+  let firstAdSlug = ''
+  for (const a of advBuildSeedAdvertorials()) {
+    const existing = await payload.find({ collection: 'funnel-advertorials', where: { slug: { equals: a.slug } }, limit: 1, overrideAccess: true })
+    let adId: number
+    if (existing.docs[0]) {
+      adId = Number(existing.docs[0].id)
+    } else {
+      const created = await payload.create({
+        collection: 'funnel-advertorials',
+        data: { title: a.title, slug: a.slug, template_id: a.templateId, default_brand_id: defaultBrandId, status: a.status, sections: a.sections },
+        overrideAccess: true,
+      })
+      adId = Number(created.id)
+    }
+    if (firstAdId == null) { firstAdId = adId; firstAdSlug = a.slug }
+  }
+
+  if (firstAdId != null && brandSiteId != null) {
+    // Link the sample deployment to the MVA quiz deployment if one exists.
+    const qd = await payload.find({ collection: 'funnel-quiz-deployments', where: { path: { equals: '/s/mva' } }, limit: 1, overrideAccess: true })
+    const quizDeploymentId = qd.docs[0] ? String(qd.docs[0].id) : ''
+    const path = `/a/${firstAdSlug}`
+    const existingAdDep = await payload.find({
+      collection: 'funnel-advertorial-deployments',
+      where: { and: [{ advertorial: { equals: firstAdId } }, { path: { equals: path } }] },
+      limit: 1,
+      overrideAccess: true,
+    })
+    if (!existingAdDep.docs[0]) {
+      await payload.create({
+        collection: 'funnel-advertorial-deployments',
+        data: {
+          name: 'Personal Story · sample',
+          advertorial: firstAdId,
+          site: brandSiteId,
+          domain: await primaryDomainId(payload, brandSiteId),
+          path,
+          quiz_deployment_id: quizDeploymentId,
+          cta_mode: 'button',
+          status: 'live',
+          utm: { source: 'facebook', medium: 'cpc', campaign: 'mva_advertorial' },
+          pixels: { metaPixelId: '', tiktokPixelId: '', ga4MeasurementId: '' },
+        },
+        overrideAccess: true,
+      })
+    }
+  }
+}
+
+const seedOnce = async (payload: Payload): Promise<void> => {
+  const cfg = await payload.findGlobal({ slug: 'integration-config', overrideAccess: true })
+  const needBase = !cfg?.funnel_samples_seeded
+  const needAdv = !cfg?.funnel_advertorial_samples_seeded
+  if (!needBase && !needAdv) return
+
+  // Brands == Sites. Deployments need a real Site; quizzes/LPs/ads are brandless.
+  const sitesRes = await payload.find({ collection: 'sites', limit: 500, sort: 'name', overrideAccess: true })
+  const sites = sitesRes.docs.map((s) => Number(s.id))
+
+  if (needBase) await seedBase(payload, sites)
+  if (needAdv) await seedAdvertorials(payload, sites)
+
+  // Flip the one-time markers last, so a partial failure retries next load.
+  const data: Record<string, unknown> = {}
+  if (needBase) data.funnel_samples_seeded = true
+  if (needAdv) data.funnel_advertorial_samples_seeded = true
+  await payload.updateGlobal({ slug: 'integration-config', data, overrideAccess: true })
 }
 
 /**
  * Ensure the sample funnel content exists (runs at most once, ever).
- * Never throws — on error it logs and returns so the calling page still renders.
+ * Never throws: on error it logs and returns so the calling page still renders.
  * Concurrent callers on a cold first load share a single in-flight run.
  */
 export const ensureFunnelSamples = async (payload: Payload): Promise<void> => {

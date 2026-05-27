@@ -8,7 +8,7 @@
 // identical to the artifact so the screens are pixel-for-pixel the same.
 
 import { useEffect } from 'react'
-import { AlertCircle, ChevronLeft, Eye, Power, PowerOff } from 'lucide-react'
+import { AlertCircle, ChevronLeft, Eye, Power, PowerOff, X } from 'lucide-react'
 
 // ============================================================================
 // THEME
@@ -277,6 +277,37 @@ export const ConfirmDialog = ({ open, title, message, confirmText = 'Confirm', c
           {tertiaryText && <Btn variant="secondary" size="md" onClick={onTertiary}>{tertiaryText}</Btn>}
           <Btn variant="primary" size="md" onClick={onConfirm}>{confirmText}</Btn>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// Generic centered modal. The advertorial builder relies on a shared <Modal>
+// primitive (open/onClose/title/maxWidth/footer/children) with the same overlay
+// language as the other builder screens.
+export const Modal = ({ open, onClose, title, maxWidth = 640, footer, children }) => {
+  if (!open) return null
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, zIndex: 140, backgroundColor: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: '100%', maxWidth, maxHeight: '88vh', display: 'flex', flexDirection: 'column', backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden', boxShadow: '0 40px 80px -20px rgba(0,0,0,0.8)' }}
+      >
+        {title && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '16px 20px', borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+            <div style={{ fontSize: 15, color: T.text, fontWeight: 600, letterSpacing: '-0.01em' }}>{title}</div>
+            <IconBtn icon={X} onClick={onClose} />
+          </div>
+        )}
+        <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>{children}</div>
+        {footer && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '14px 20px', borderTop: `1px solid ${T.border}`, flexShrink: 0 }}>
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   )

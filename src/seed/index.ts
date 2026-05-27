@@ -14,6 +14,7 @@ import { SEED_SITES, DEFAULT_LEGAL_PAGES } from './sites'
 import { HOME_BLOCKS_BY_SLUG } from './home-blocks'
 import { SAMPLE_LANDING_PAGES, SAMPLE_LP_DEPLOYMENTS, buildSeedSections } from '../components/builder/lp/section-copy'
 import { buildSeedQuiz } from '../components/builder/quiz/seed-data'
+import { advBuildSeedAdvertorials } from '../components/builder/advertorial/seed-data'
 
 const log = (msg: string): void => {
   process.stdout.write(`[seed] ${msg}\n`)
@@ -401,6 +402,7 @@ const run = async () => {
   log('seeding sample funnel quiz...')
   const quizId = await upsertFunnelQuiz(payload)
   const qsite = siteIds[0]
+  let primaryDomainId: number | null = null
   if (qsite) {
     const qdom = await payload.find({
       collection: 'domains',
@@ -408,7 +410,56 @@ const run = async () => {
       limit: 1,
       overrideAccess: true,
     })
-    await upsertFunnelQuizDeployment(payload, quizId, qsite.id, qdom.docs[0] ? Number(qdom.docs[0].id) : null)
+    primaryDomainId = qdom.docs[0] ? Number(qdom.docs[0].id) : null
+    await upsertFunnelQuizDeployment(payload, quizId, qsite.id, primaryDomainId)
+  }
+
+  log('seeding sample funnel advertorials...')
+  const brandSiteId = qsite ? qsite.id : null
+  const defaultBrandId = brandSiteId != null ? `site_${brandSiteId}` : ''
+  let firstAdId: number | null = null
+  let firstAdSlug = ''
+  for (const a of advBuildSeedAdvertorials()) {
+    const existing = await payload.find({ collection: 'funnel-advertorials', where: { slug: { equals: a.slug } }, limit: 1, overrideAccess: true })
+    let adId: number
+    if (existing.docs[0]) {
+      adId = Number(existing.docs[0].id)
+      log(`funnel advertorial exists: ${a.slug}`)
+    } else {
+      const created = await payload.create({
+        collection: 'funnel-advertorials',
+        data: { title: a.title, slug: a.slug, template_id: a.templateId, default_brand_id: defaultBrandId, status: a.status, sections: a.sections },
+        overrideAccess: true,
+      })
+      adId = Number(created.id)
+      log(`created funnel advertorial: ${a.slug}`)
+    }
+    if (firstAdId == null) { firstAdId = adId; firstAdSlug = a.slug }
+  }
+
+  if (firstAdId != null && brandSiteId != null) {
+    let quizDeploymentId = ''
+    if (quizId != null) {
+      const qd = await payload.find({ collection: 'funnel-quiz-deployments', where: { and: [{ quiz: { equals: quizId } }, { path: { equals: '/s/mva' } }] }, limit: 1, overrideAccess: true })
+      quizDeploymentId = qd.docs[0] ? String(qd.docs[0].id) : ''
+    }
+    const path = `/a/${firstAdSlug}`
+    const existingAdDep = await payload.find({ collection: 'funnel-advertorial-deployments', where: { and: [{ advertorial: { equals: firstAdId } }, { path: { equals: path } }] }, limit: 1, overrideAccess: true })
+    if (existingAdDep.docs[0]) {
+      log('funnel advertorial deployment exists')
+    } else {
+      await payload.create({
+        collection: 'funnel-advertorial-deployments',
+        data: {
+          name: 'Personal Story · sample', advertorial: firstAdId, site: brandSiteId, domain: primaryDomainId, path,
+          quiz_deployment_id: quizDeploymentId, cta_mode: 'button', status: 'live',
+          utm: { source: 'facebook', medium: 'cpc', campaign: 'mva_advertorial' },
+          pixels: { metaPixelId: '', tiktokPixelId: '', ga4MeasurementId: '' },
+        },
+        overrideAccess: true,
+      })
+      log('created funnel advertorial deployment')
+    }
   }
 
   log('done.')

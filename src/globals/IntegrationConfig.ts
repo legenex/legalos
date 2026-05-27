@@ -22,6 +22,14 @@ export const IntegrationConfig: GlobalConfig = {
       admin: { hidden: true },
     },
     {
+      // Separate one-time marker for the sample advertorials, so installs that
+      // already seeded landing pages / quizzes still get advertorials once.
+      name: 'funnel_advertorial_samples_seeded',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: { hidden: true },
+    },
+    {
       name: 'smtp',
       type: 'group',
       fields: [
