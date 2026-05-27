@@ -33,6 +33,9 @@ const primaryDomainId = async (payload: Payload, siteId: number): Promise<number
 }
 
 let inFlight: Promise<void> | null = null
+// Process-level latch: once both sample groups are confirmed seeded, skip the
+// integration-config lookup on every subsequent funnel-page navigation.
+let samplesEnsured = false
 
 // Sample landing pages + quizzes (the "base" group, guarded by funnel_samples_seeded).
 const seedBase = async (payload: Payload, sites: number[]): Promise<void> => {
@@ -203,7 +206,7 @@ const seedOnce = async (payload: Payload): Promise<void> => {
   const cfg = await payload.findGlobal({ slug: 'integration-config', overrideAccess: true })
   const needBase = !cfg?.funnel_samples_seeded
   const needAdv = !cfg?.funnel_advertorial_samples_seeded
-  if (!needBase && !needAdv) return
+  if (!needBase && !needAdv) { samplesEnsured = true; return }
 
   // Brands == Sites. Deployments need a real Site; quizzes/LPs/ads are brandless.
   const sitesRes = await payload.find({ collection: 'sites', limit: 500, sort: 'name', overrideAccess: true })
@@ -217,6 +220,7 @@ const seedOnce = async (payload: Payload): Promise<void> => {
   if (needBase) data.funnel_samples_seeded = true
   if (needAdv) data.funnel_advertorial_samples_seeded = true
   await payload.updateGlobal({ slug: 'integration-config', data, overrideAccess: true })
+  samplesEnsured = true
 }
 
 /**
@@ -225,6 +229,7 @@ const seedOnce = async (payload: Payload): Promise<void> => {
  * Concurrent callers on a cold first load share a single in-flight run.
  */
 export const ensureFunnelSamples = async (payload: Payload): Promise<void> => {
+  if (samplesEnsured) return // already confirmed this process; no DB hit
   if (inFlight) return inFlight
   inFlight = (async () => {
     try {
