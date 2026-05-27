@@ -8,7 +8,7 @@
 // identical to the artifact so the screens are pixel-for-pixel the same.
 
 import { useEffect } from 'react'
-import { AlertCircle } from 'lucide-react'
+import { AlertCircle, ChevronLeft, Eye, Power, PowerOff } from 'lucide-react'
 
 // ============================================================================
 // THEME
@@ -338,5 +338,70 @@ export const EmptyState = ({ icon: Icon, title, subtitle, action }) => (
     <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{title}</div>
     {subtitle && <div style={{ fontSize: 12, color: T.textMute, marginTop: 6, maxWidth: 360, margin: '6px auto 0' }}>{subtitle}</div>}
     {action && <div style={{ marginTop: 16 }}>{action}</div>}
+  </div>
+)
+
+export const TabBar = ({ active, onChange, tabs }) => (
+  <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${T.border}` }}>
+    {tabs.map((t) => (
+      <button
+        key={t.id}
+        onClick={() => onChange(t.id)}
+        style={{
+          padding: '10px 16px',
+          backgroundColor: 'transparent',
+          border: 'none',
+          borderBottom: active === t.id ? `2px solid ${T.primary}` : '2px solid transparent',
+          color: active === t.id ? T.text : T.textMute,
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          fontFamily: '"Inter", system-ui, sans-serif',
+          marginBottom: -1,
+        }}
+      >
+        {t.label}
+        {t.count !== undefined && <Pill color={active === t.id ? T.primary : T.textLow}>{t.count}</Pill>}
+      </button>
+    ))}
+  </div>
+)
+
+export const TopBar = ({ crumbs, title, isPublished, onBack, onPreview, onPublish, actions }) => (
+  <div
+    style={{
+      position: 'sticky',
+      top: 0,
+      zIndex: 30,
+      height: 56,
+      backgroundColor: 'rgba(37,46,57,0.92)',
+      backdropFilter: 'blur(12px)',
+      borderBottom: `1px solid ${T.border}`,
+      padding: '0 20px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    }}
+  >
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+      {onBack && <IconBtn icon={ChevronLeft} onClick={onBack} />}
+      <div style={{ minWidth: 0 }}>
+        {crumbs && <div style={{ fontSize: 10, color: T.textMute, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em' }}>{crumbs}</div>}
+        {title && (
+          <div style={{ fontSize: 14, color: T.text, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+            {title}
+            {isPublished !== undefined && <Pill color={isPublished ? T.success : T.warning}>{isPublished ? 'LIVE' : 'DRAFT'}</Pill>}
+          </div>
+        )}
+      </div>
+    </div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {actions}
+      {onPreview && <Btn variant="ghost" size="sm" icon={Eye} onClick={onPreview}>Preview</Btn>}
+      {onPublish && <Btn variant={isPublished ? 'secondary' : 'primary'} size="sm" icon={isPublished ? PowerOff : Power} onClick={onPublish}>{isPublished ? 'Unpublish' : 'Publish'}</Btn>}
+    </div>
   </div>
 )

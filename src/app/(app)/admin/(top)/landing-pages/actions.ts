@@ -1,0 +1,225 @@
+// @ts-nocheck -- new funnel-* collection slugs are not in the committed
+// payload-types yet; run `pnpm generate:types` on the server to restore typing.
+'use server'
+
+import { revalidatePath } from 'next/cache'
+import { z } from 'zod'
+import { getPayload } from 'payload'
+import config from '@payload-config'
+import { getCurrentUser } from '@/lib/auth'
+import { invokeLLM } from '@/lib/ai/invoke'
+
+const PATH = '/admin/landing-pages'
+
+type LP = Record<string, unknown>
+
+const numFromBrandId = (brandId: unknown): number | null => {
+  if (typeof brandId !== 'string') return null
+  const n = Number(brandId.replace('site_', ''))
+  return Number.isFinite(n) ? n : null
+}
+
+// ---------------------------------------------------------------------------
+// Landing pages (brandless)
+// ---------------------------------------------------------------------------
+export async function createLP(args: { lp: LP }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const user = await getCurrentUser()
+  if (!user) return { ok: false, error: 'unauthenticated' }
+  const lp = args.lp || {}
+  const payload = await getPayload({ config })
+  try {
+    const created = (await payload.create({
+      collection: 'funnel-landing-pages',
+      data: {
+        name: (lp.name as string) || 'Untitled LP',
+        slug: (lp.slug as string) || `lp-${Date.now().toString(36)}`,
+        template_id: (lp.templateId as string) || 'bold_modern',
+        angle: (lp.angle as string) || 'pain',
+        is_published: Boolean(lp.isPublished),
+        sections: lp.sections ?? [],
+      } as never,
+      user: user as never,
+      overrideAccess: false,
+    })) as { id: number | string }
+    revalidatePath(PATH)
+    return { ok: true, id: String(created.id) }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'create failed' }
+  }
+}
+
+export async function saveLP(args: { id: string; patch: Record<string, unknown> }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await getCurrentUser()
+  if (!user) return { ok: false, error: 'unauthenticated' }
+  const payload = await getPayload({ config })
+  try {
+    await payload.update({ collection: 'funnel-landing-pages', id: args.id, data: args.patch as never, user: user as never, overrideAccess: false })
+    revalidatePath(PATH)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'save failed' }
+  }
+}
+
+export async function cloneLP(args: { id: string }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const user = await getCurrentUser()
+  if (!user) return { ok: false, error: 'unauthenticated' }
+  const payload = await getPayload({ config })
+  try {
+    const src = (await payload.findByID({ collection: 'funnel-landing-pages', id: args.id, overrideAccess: true })) as Record<string, unknown>
+    if (!src) return { ok: false, error: 'not found' }
+    const created = (await payload.create({
+      collection: 'funnel-landing-pages',
+      data: {
+        name: `${src.name} (copy)`,
+        slug: `${src.slug}-copy-${Date.now().toString(36).slice(-4)}`,
+        template_id: src.template_id,
+        angle: src.angle,
+        is_published: false,
+        sections: src.sections ?? [],
+      } as never,
+      user: user as never,
+      overrideAccess: false,
+    })) as { id: number | string }
+    revalidatePath(PATH)
+    return { ok: true, id: String(created.id) }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'clone failed' }
+  }
+}
+
+export async function deleteLP(args: { id: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await getCurrentUser()
+  if (!user) return { ok: false, error: 'unauthenticated' }
+  const payload = await getPayload({ config })
+  try {
+    // Remove deployments that reference this page first.
+    const deps = await payload.find({ collection: 'funnel-lp-deployments', where: { landing_page: { equals: args.id } }, limit: 500, overrideAccess: true })
+    for (const d of deps.docs) {
+      await payload.delete({ collection: 'funnel-lp-deployments', id: d.id, user: user as never, overrideAccess: false })
+    }
+    await payload.delete({ collection: 'funnel-landing-pages', id: args.id, user: user as never, overrideAccess: false })
+    revalidatePath(PATH)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'delete failed' }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Deployments
+// ---------------------------------------------------------------------------
+export async function saveDeployment(args: { deployment: Record<string, unknown> }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const user = await getCurrentUser()
+  if (!user) return { ok: false, error: 'unauthenticated' }
+  const dep = args.deployment || {}
+  const payload = await getPayload({ config })
+
+  // Resolve the host string from the editor back to a domain record id.
+  let domainId: number | null = null
+  if (typeof dep.domain === 'string' && dep.domain) {
+    const dr = await payload.find({ collection: 'domains', where: { host: { equals: dep.domain } }, limit: 1, overrideAccess: true })
+    domainId = dr.docs[0] ? Number(dr.docs[0].id) : null
+  }
+
+  const data = {
+    name: (dep.name as string) || '',
+    landing_page: dep.landingPageId ? Number(dep.landingPageId) : null,
+    site: numFromBrandId(dep.brandId),
+    domain: domainId,
+    path: (dep.path as string) || '',
+    quiz_deployment_id: (dep.quizDeploymentId as string) || '',
+    status: (dep.status as string) || 'draft',
+  }
+
+  const isExisting = typeof dep.id === 'string' && /^\d+$/.test(dep.id)
+  try {
+    let id: string
+    if (isExisting) {
+      await payload.update({ collection: 'funnel-lp-deployments', id: dep.id as string, data: data as never, user: user as never, overrideAccess: false })
+      id = dep.id as string
+    } else {
+      const created = (await payload.create({ collection: 'funnel-lp-deployments', data: data as never, user: user as never, overrideAccess: false })) as { id: number | string }
+      id = String(created.id)
+    }
+    revalidatePath(PATH)
+    return { ok: true, id }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'save failed' }
+  }
+}
+
+export async function deleteDeployment(args: { id: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await getCurrentUser()
+  if (!user) return { ok: false, error: 'unauthenticated' }
+  const payload = await getPayload({ config })
+  try {
+    await payload.delete({ collection: 'funnel-lp-deployments', id: args.id, user: user as never, overrideAccess: false })
+    revalidatePath(PATH)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'delete failed' }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// AI: generate a full LP copy set + rewrite a single section. Routed through
+// invokeLLM so the banned-vocab / em-dash guards apply.
+// ---------------------------------------------------------------------------
+const LPCopySchema = z.object({
+  hero: z.object({
+    eyebrow: z.string(), headline: z.string(), accent_phrase: z.string(), subheadline: z.string(),
+    stat1_num: z.string(), stat1_label: z.string(), stat2_num: z.string(), stat2_label: z.string(),
+    stat3_num: z.string(), stat3_label: z.string(), trust_line: z.string(),
+  }),
+  story: z.object({ eyebrow: z.string(), headline: z.string(), paragraphs: z.array(z.string()) }),
+  eligibility: z.object({ eyebrow: z.string(), headline: z.string(), criteria: z.array(z.string()) }),
+  how_it_works: z.object({ eyebrow: z.string(), headline: z.string(), steps: z.array(z.object({ title: z.string(), desc: z.string() })) }),
+  guarantee: z.object({ headline: z.string(), subhead: z.string(), lines: z.array(z.string()) }),
+  faq: z.object({ eyebrow: z.string(), headline: z.string(), items: z.array(z.object({ q: z.string(), a: z.string() })) }),
+  final_cta: z.object({ headline: z.string(), cta_label: z.string(), secondary_line: z.string() }),
+})
+
+export async function generateLPCopy(args: { angle: string; templateId: string; notes?: string }): Promise<
+  { ok: true; copy: z.infer<typeof LPCopySchema> } | { ok: false; error: string }
+> {
+  const user = await getCurrentUser()
+  if (!user) return { ok: false, error: 'unauthenticated' }
+  try {
+    const copy = await invokeLLM({
+      system:
+        'You are an expert direct-response copywriter for Motor Vehicle Accident (MVA) legal lead-gen landing pages in the United States. Write attorney-advertising-compliant copy with no guaranteed-result claims. Never use em dashes. Use {{brand.callNumber}} placeholders where a phone would appear. US English.',
+      user: `Angle: ${args.angle}\nTemplate: ${args.templateId}\nOperator notes: ${args.notes || 'none'}\n\nGenerate the landing page copy.`,
+      schema: LPCopySchema,
+      schemaName: 'lp_copy',
+      model: 'claude-sonnet-4-6',
+      maxTokens: 4096,
+      enforceNoBannedVocab: true,
+    })
+    return { ok: true, copy }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'generation failed' }
+  }
+}
+
+export async function aiRewriteSection(args: { sectionType: string; currentCopy: Record<string, unknown>; instruction: string }): Promise<
+  { ok: true; copy: Record<string, unknown> } | { ok: false; error: string }
+> {
+  const user = await getCurrentUser()
+  if (!user) return { ok: false, error: 'unauthenticated' }
+  try {
+    const copy = await invokeLLM({
+      system:
+        'You are an expert direct-response copywriter editing one section of a US Motor Vehicle Accident legal landing page. Return ONLY a JSON object with the same keys as the current copy. Never use em dashes. Attorney-advertising compliant, no guaranteed results. Keep {{brand.*}} placeholders intact.',
+      user: `Section type: ${args.sectionType}\nOperator instruction: ${args.instruction}\n\nCurrent copy (JSON):\n${JSON.stringify(args.currentCopy, null, 2)}\n\nReturn the revised copy with the same shape and keys.`,
+      schema: z.record(z.any()),
+      schemaName: 'section_copy',
+      model: 'claude-sonnet-4-6',
+      maxTokens: 2000,
+      enforceNoBannedVocab: true,
+    })
+    return { ok: true, copy: copy as Record<string, unknown> }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'rewrite failed' }
+  }
+}
