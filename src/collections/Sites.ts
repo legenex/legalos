@@ -144,6 +144,14 @@ export const Sites: CollectionConfig = {
       ],
     },
     {
+      name: 'brand_identity',
+      type: 'json',
+      admin: {
+        description:
+          'Full brand-identity object consumed by the funnel builder (ported artifact shape). Source of truth for the Brand Identities editor.',
+      },
+    },
+    {
       name: 'default_tone',
       type: 'select',
       defaultValue: 'empathetic',
