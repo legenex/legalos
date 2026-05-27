@@ -10,8 +10,9 @@ const str = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : 
 // Site.brand_identity (JSON) is the source of truth when present; otherwise we
 // synthesize a sensible default from the Site's existing brand/legal/typography
 // fields so pre-existing sites still render in the editor.
-function siteToBrand(s: Record<string, unknown>, primaryDomain: string, domainCount: number) {
+function siteToBrand(s: Record<string, unknown>, domainList: Array<{ host: string; primary: boolean; status: string }>) {
   const id = Number(s.id)
+  const primaryDomain = domainList.find((d) => d.primary)?.host ?? domainList[0]?.host ?? ''
   const brand = (s.brand ?? {}) as Record<string, unknown>
   const legal = (s.legal ?? {}) as Record<string, unknown>
   const typo = (s.typography ?? {}) as Record<string, unknown>
@@ -68,8 +69,9 @@ function siteToBrand(s: Record<string, unknown>, primaryDomain: string, domainCo
     id: `site_${id}`,
     siteId: id,
     siteSlug: str(s.slug),
-    primaryDomain: (merged as Record<string, unknown>).primaryDomain || primaryDomain,
-    __domainCount: domainCount,
+    primaryDomain: primaryDomain || str((merged as Record<string, unknown>).primaryDomain),
+    __domainCount: domainList.length,
+    __domains: domainList,
   }
 }
 
@@ -80,19 +82,18 @@ export default async function BrandIdentitiesPage() {
     payload.find({ collection: 'domains', limit: 1000, sort: ['-primary'], overrideAccess: true }),
   ])
 
-  const countBySite = new Map<number, number>()
-  const primaryBySite = new Map<number, string>()
+  const domainsBySite = new Map<number, Array<{ host: string; primary: boolean; status: string }>>()
   for (const d of domainsRes.docs) {
     if (d.site == null) continue
     const sid = typeof d.site === 'object' ? Number(d.site.id) : Number(d.site)
-    countBySite.set(sid, (countBySite.get(sid) ?? 0) + 1)
-    if (d.primary && !primaryBySite.has(sid)) primaryBySite.set(sid, d.host)
+    const arr = domainsBySite.get(sid) ?? []
+    arr.push({ host: d.host, primary: Boolean(d.primary), status: typeof d.status === 'string' ? d.status : 'pending' })
+    domainsBySite.set(sid, arr)
   }
 
-  const brands = sitesRes.docs.map((s) => {
-    const id = Number(s.id)
-    return siteToBrand(s as unknown as Record<string, unknown>, primaryBySite.get(id) ?? '', countBySite.get(id) ?? 0)
-  })
+  const brands = sitesRes.docs.map((s) =>
+    siteToBrand(s as unknown as Record<string, unknown>, domainsBySite.get(Number(s.id)) ?? []),
+  )
 
   return <BrandIdentitiesApp initialBrands={brands} />
 }

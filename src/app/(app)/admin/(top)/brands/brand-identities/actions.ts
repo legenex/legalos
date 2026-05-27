@@ -20,10 +20,29 @@ const slugify = (input: string): string =>
     .replace(/^-+|-+$/g, '')
     .slice(0, 60)
 
-// Strip transient client-only linkage fields before persisting the JSON.
+// Strip transient client-only linkage fields (siteId/siteSlug and any __ keys
+// like __domains/__domainCount) before persisting the JSON.
 const cleanBrand = (brand: Record<string, unknown>): Record<string, unknown> => {
-  const { siteId, siteSlug, __domainCount, ...rest } = brand as Record<string, unknown>
-  return rest
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(brand ?? {})) {
+    if (k === 'siteId' || k === 'siteSlug' || k.startsWith('__')) continue
+    out[k] = v
+  }
+  return out
+}
+
+// Mirror the brand's call number onto the Site's phone fields so it actually
+// drives the public site (resolvePhoneForPath falls back to Site.default_phone).
+const phoneFields = (brand: Record<string, unknown>): Record<string, string> => {
+  const contact = (brand.contact ?? {}) as Record<string, unknown>
+  const raw = typeof contact.callNumber === 'string' ? contact.callNumber.trim() : ''
+  if (!raw) return {}
+  const digits = raw.replace(/[^\d]/g, '')
+  let tel = ''
+  if (digits.length === 10) tel = `+1${digits}`
+  else if (digits.length === 11 && digits.startsWith('1')) tel = `+${digits}`
+  else if (digits.length > 0) tel = `+${digits}`
+  return tel ? { default_phone: raw, default_phone_tel: tel } : { default_phone: raw }
 }
 
 async function freeSlug(payload: Awaited<ReturnType<typeof getPayload>>, base: string): Promise<string> {
@@ -55,7 +74,7 @@ export async function saveBrandIdentity(args: {
       id: args.siteId,
       // Mirror the brand name onto Site.name so the Sites list stays in sync;
       // everything else lives in the brand_identity JSON.
-      data: { brand_identity: brand, ...(name ? { name } : {}) } as never,
+      data: { brand_identity: brand, ...(name ? { name } : {}), ...phoneFields(brand) } as never,
       user: user as never,
       overrideAccess: false,
     })
@@ -90,7 +109,7 @@ export async function createBrandSite(args: {
     await payload.update({
       collection: 'sites',
       id: created.site.id,
-      data: { brand_identity: brand } as never,
+      data: { brand_identity: brand, ...phoneFields(brand) } as never,
       user: user as never,
       overrideAccess: false,
     })

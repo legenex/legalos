@@ -471,9 +471,34 @@ const BrandEditor = ({ brand, isDraft, onSave, onBack }) => {
           )}
 
           {tab === 'domains' && (
-            <div>
-              <Label>Domains where this brand applies</Label>
-              <Textarea value={(draft.domains || []).join('\n')} onChange={(e) => update({ domains: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean) })} placeholder="checkmyclaim.co" style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 12, minHeight: 100 }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ fontSize: 12.5, color: T.textMute }}>
+                Domains are attached, verified, and provisioned on the Domains page. This list reflects what is currently attached to this brand.
+              </div>
+              {draft.siteId == null ? (
+                <div style={{ padding: 14, backgroundColor: T.bgElev, border: `1px dashed ${T.border}`, borderRadius: 8, fontSize: 12.5, color: T.textDim }}>
+                  Save this brand first. Once it exists you can attach and verify domains for it on the Domains page.
+                </div>
+              ) : draft.__domains && draft.__domains.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {draft.__domains.map((d, i) => {
+                    const tone = d.status === 'active' || d.status === 'verified' ? T.success : d.status === 'error' ? T.danger : T.warning
+                    return (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 8 }}>
+                        <Globe size={14} color={T.textMute} />
+                        <span style={{ flex: 1, fontFamily: '"JetBrains Mono", monospace', fontSize: 13, color: T.text }}>{d.host}</span>
+                        {d.primary && <Pill color={T.success}>PRIMARY</Pill>}
+                        <Pill color={tone}>{(d.status || 'pending').toUpperCase()}</Pill>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div style={{ padding: 14, backgroundColor: T.bgElev, border: `1px dashed ${T.border}`, borderRadius: 8, fontSize: 12.5, color: T.textDim }}>
+                  No domains attached to this brand yet.
+                </div>
+              )}
+              <a href="/admin/brands/domains" style={{ color: T.info, fontSize: 12.5, textDecoration: 'none' }}>Manage domains →</a>
             </div>
           )}
 
