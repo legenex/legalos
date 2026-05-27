@@ -106,6 +106,41 @@ export const Sites: CollectionConfig = {
         { name: 'danger', type: 'text', defaultValue: '#C03A2B' },
         { name: 'font_heading', type: 'text', defaultValue: 'Inter' },
         { name: 'font_body', type: 'text', defaultValue: 'Inter' },
+        { name: 'display_name', type: 'text', admin: { description: 'Brand display name shown across funnels. Defaults to Site name when blank.' } },
+        { name: 'short_name', type: 'text', admin: { description: '2-3 letter shortcode like CMC or CAC. Used for initials/logo marks.' } },
+        { name: 'logo_url_dark', type: 'text', admin: { description: 'Logo variant for dark backgrounds. Optional.' } },
+        { name: 'tagline_brand', type: 'text', admin: { description: 'Brand-level tagline used in funnels. Separate from the top-level Site tagline.' } },
+      ],
+    },
+    {
+      name: 'legal',
+      type: 'group',
+      admin: { description: 'Legal copy surfaced across funnels and footers.' },
+      fields: [
+        { name: 'copyright', type: 'text', admin: { description: 'e.g. "(c) {year} {brand}". Tokens resolved at render time.' } },
+        { name: 'tcpa_text', type: 'textarea' },
+        { name: 'privacy_url', type: 'text' },
+        { name: 'terms_url', type: 'text' },
+        { name: 'default_disclaimer', type: 'textarea' },
+      ],
+    },
+    {
+      name: 'typography',
+      type: 'group',
+      admin: { description: 'Funnel typography used by the public render and builders.' },
+      fields: [
+        { name: 'headline_font', type: 'text', defaultValue: 'Inter' },
+        { name: 'body_font', type: 'text', defaultValue: 'Inter' },
+        {
+          name: 'base_size',
+          type: 'select',
+          defaultValue: 'md',
+          options: [
+            { label: 'Small', value: 'sm' },
+            { label: 'Medium', value: 'md' },
+            { label: 'Large', value: 'lg' },
+          ],
+        },
       ],
     },
     {

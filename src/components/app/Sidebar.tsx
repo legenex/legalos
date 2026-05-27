@@ -13,7 +13,6 @@ import {
   HelpCircle,
   Rocket,
   Megaphone,
-  FlaskConical,
   Inbox,
   BarChart3,
   Users,
@@ -48,7 +47,6 @@ const FUNNELS_NAV: NavItem[] = [
   { href: '/admin/quizzes', label: 'Quizzes', icon: HelpCircle },
   { href: '/admin/landing-pages', label: 'Landing Pages', icon: Rocket },
   { href: '/admin/advertorials', label: 'Advertorials', icon: Megaphone },
-  { href: '/admin/experiments', label: 'Experiments', icon: FlaskConical },
 ]
 
 const SETTINGS_NAV: NavItem[] = [
