@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { QuizBuilderApp } from '@/components/builder/quiz/QuizBuilderApp'
 import { buildBrandsFromSites } from '@/lib/brand-map'
+import { ensureFunnelSamples } from '@/lib/funnel-samples'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,6 +12,7 @@ const relId = (v) => (v == null ? '' : typeof v === 'object' ? String(v.id) : St
 
 export default async function QuizzesPage() {
   const payload = await getPayload({ config })
+  await ensureFunnelSamples(payload)
   const [qRes, depRes, sitesRes, domainsRes] = await Promise.all([
     payload.find({ collection: 'funnel-quizzes', limit: 500, sort: '-updatedAt', overrideAccess: true }),
     payload.find({ collection: 'funnel-quiz-deployments', limit: 1000, depth: 0, overrideAccess: true }),

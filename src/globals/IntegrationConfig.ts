@@ -13,6 +13,15 @@ export const IntegrationConfig: GlobalConfig = {
   },
   fields: [
     {
+      // Internal one-time marker: set true after the sample funnel content
+      // (landing pages / quizzes / deployments) is auto-created on first load,
+      // so deleting a sample never causes it to be re-created. Not user-facing.
+      name: 'funnel_samples_seeded',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: { hidden: true },
+    },
+    {
       name: 'smtp',
       type: 'group',
       fields: [
