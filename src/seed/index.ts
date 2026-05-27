@@ -1,3 +1,5 @@
+// @ts-nocheck -- funnel-* collection slugs are not in committed payload-types yet;
+// run `pnpm generate:types` on the server to restore typing for this script.
 /**
  * Seed script. Run with: pnpm seed
  *
@@ -10,6 +12,7 @@ import config from '../payload.config'
 import { TEMPLATE_BODIES } from './templates'
 import { SEED_SITES, DEFAULT_LEGAL_PAGES } from './sites'
 import { HOME_BLOCKS_BY_SLUG } from './home-blocks'
+import { SAMPLE_LANDING_PAGES, SAMPLE_LP_DEPLOYMENTS, buildSeedSections } from '../components/builder/lp/section-copy'
 
 const log = (msg: string): void => {
   process.stdout.write(`[seed] ${msg}\n`)
@@ -231,6 +234,64 @@ const upsertTrackingConfig = async (
   log(`created tracking-config for site ${siteId}`)
 }
 
+// Sample brandless funnel landing pages (artifact buildSeedLandingPages).
+const upsertFunnelLP = async (
+  payload: Awaited<ReturnType<typeof getPayload>>,
+  spec: (typeof SAMPLE_LANDING_PAGES)[number],
+): Promise<number | null> => {
+  const existing = await payload.find({
+    collection: 'funnel-landing-pages',
+    where: { slug: { equals: spec.slug } },
+    limit: 1,
+    overrideAccess: true,
+  })
+  if (existing.docs[0]) {
+    log(`funnel LP exists: ${spec.slug}`)
+    return Number(existing.docs[0].id)
+  }
+  const created = await payload.create({
+    collection: 'funnel-landing-pages',
+    data: {
+      name: spec.name,
+      slug: spec.slug,
+      template_id: spec.template_id,
+      angle: spec.angle,
+      is_published: spec.is_published,
+      sections: buildSeedSections(),
+    },
+    overrideAccess: true,
+  })
+  log(`created funnel LP: ${spec.slug}`)
+  return Number(created.id)
+}
+
+// Sample LP deployments (artifact buildSeedLPDeployments), bound to real sites.
+const upsertFunnelDeployment = async (
+  payload: Awaited<ReturnType<typeof getPayload>>,
+  dep: (typeof SAMPLE_LP_DEPLOYMENTS)[number],
+  lpId: number | null,
+  siteId: number | null,
+  domainId: number | null,
+): Promise<void> => {
+  if (!lpId || !siteId) return
+  const existing = await payload.find({
+    collection: 'funnel-lp-deployments',
+    where: { and: [{ landing_page: { equals: lpId } }, { path: { equals: dep.path } }] },
+    limit: 1,
+    overrideAccess: true,
+  })
+  if (existing.docs[0]) {
+    log(`funnel deployment exists: ${dep.name}`)
+    return
+  }
+  await payload.create({
+    collection: 'funnel-lp-deployments',
+    data: { name: dep.name, landing_page: lpId, site: siteId, domain: domainId, path: dep.path, status: dep.status, quiz_deployment_id: '' },
+    overrideAccess: true,
+  })
+  log(`created funnel deployment: ${dep.name}`)
+}
+
 const run = async () => {
   const payload = await getPayload({ config: await config })
 
@@ -271,6 +332,27 @@ const run = async () => {
       },
       overrideAccess: true,
     })
+  }
+
+  log('seeding sample funnel landing pages...')
+  const lpIdBySlug: Record<string, number | null> = {}
+  for (const spec of SAMPLE_LANDING_PAGES) {
+    lpIdBySlug[spec.slug] = await upsertFunnelLP(payload, spec)
+  }
+
+  log('seeding sample LP deployments...')
+  for (const dep of SAMPLE_LP_DEPLOYMENTS) {
+    const lpId = lpIdBySlug[dep.lpSlug] ?? null
+    const site = siteIds[Math.min(dep.siteIndex, siteIds.length - 1)]
+    if (!site) continue
+    const dom = await payload.find({
+      collection: 'domains',
+      where: { and: [{ site: { equals: site.id } }, { primary: { equals: true } }] },
+      limit: 1,
+      overrideAccess: true,
+    })
+    const domainId = dom.docs[0] ? Number(dom.docs[0].id) : null
+    await upsertFunnelDeployment(payload, dep, lpId, site.id, domainId)
   }
 
   log('done.')
