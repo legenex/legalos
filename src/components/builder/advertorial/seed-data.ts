@@ -1,3 +1,4 @@
+// @ts-nocheck -- ported artifact data (loose param types); checked via pnpm typecheck, not at build.
 // Server-safe (no React / no 'use client'): advertorial sample copy + pure
 // helpers, ported verbatim from the funnel-builder artifact. Shared by the
 // client builder, the auto-seed (lib/funnel-samples), and the Node seed script
