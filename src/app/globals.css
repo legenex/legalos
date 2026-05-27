@@ -179,6 +179,26 @@ html, body {
 }
 .route-fade { animation: routeEnter 0.4s ease-out both; }
 
+/* Skeleton placeholder blocks for loading.tsx. A light sweep travels across each
+   block so the page reads as "content arriving" instead of "frozen". */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-surface-2);
+  border-radius: 8px;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+  animation: skeletonSweep 1.4s ease-in-out infinite;
+}
+@keyframes skeletonSweep {
+  100% { transform: translateX(100%); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .brand-gradient-text,
   .float-slow,
@@ -187,7 +207,8 @@ html, body {
   .route-enter,
   .route-fade,
   .fade-up { animation: none; }
-  /* Keep the loader legible but static for reduced-motion users. */
+  /* Keep loaders legible but static for reduced-motion users. */
   .route-bar::before { animation: none; left: 0; width: 100%; opacity: 0.7; }
   .route-spinner { animation: none; }
+  .skeleton::after { animation: none; }
 }

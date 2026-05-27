@@ -1,8 +1,8 @@
 'use client'
 
-import Link from 'next/link'
+import Link, { useLinkStatus } from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { SignOutButton } from './SignOutButton'
 import {
   LayoutGrid,
@@ -21,6 +21,7 @@ import {
   Activity,
   ChevronDown,
   ChevronRight,
+  Loader2,
 } from 'lucide-react'
 
 type NavItem = {
@@ -61,6 +62,17 @@ export function Sidebar({ userEmail }: { userEmail: string }) {
   const [funnelsOpen, setFunnelsOpen] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(true)
 
+  // Navigation lock: set when a nav link is clicked, cleared once the route
+  // commits (pathname changes). While locked the nav is made inert so a second
+  // click can't fire a competing navigation. The per-link spinner
+  // (useLinkStatus) gives the actual "this one is loading" feedback.
+  const [navigating, setNavigating] = useState(false)
+  useEffect(() => {
+    setNavigating(false)
+  }, [pathname])
+
+  const shared: SharedNav = { pathname, navigating, onNavStart: () => setNavigating(true) }
+
   return (
     <aside className="w-[250px] shrink-0 border-r border-[var(--color-border)] bg-[var(--color-surface-1)] flex flex-col">
       <Link href="/admin/overview" className="px-6 py-6 border-b border-[var(--color-border)] block hover:opacity-80 transition-opacity">
@@ -71,8 +83,14 @@ export function Sidebar({ userEmail }: { userEmail: string }) {
         <p className="text-[12px] text-[var(--color-ink-dim)] mt-1">The smart legal brand website builder.</p>
       </Link>
 
-      <nav className="flex-1 py-3 overflow-y-auto">
-        <NavSection items={TOP_NAV} pathname={pathname} />
+      {/* While navigating, the nav is made inert (pointer-events none) so a
+          second click can't fire a competing navigation. */}
+      <nav
+        className="flex-1 py-3 overflow-y-auto transition-opacity duration-150"
+        style={navigating ? { pointerEvents: 'none', opacity: 0.75 } : undefined}
+        aria-busy={navigating}
+      >
+        <NavSection items={TOP_NAV} {...shared} />
 
         <DisclosureSection
           label="Brands"
@@ -80,7 +98,7 @@ export function Sidebar({ userEmail }: { userEmail: string }) {
           open={brandsOpen}
           onToggle={() => setBrandsOpen((v) => !v)}
           items={BRANDS_NAV}
-          pathname={pathname}
+          {...shared}
         />
 
         <DisclosureSection
@@ -89,7 +107,7 @@ export function Sidebar({ userEmail }: { userEmail: string }) {
           open={funnelsOpen}
           onToggle={() => setFunnelsOpen((v) => !v)}
           items={FUNNELS_NAV}
-          pathname={pathname}
+          {...shared}
         />
 
         <DisclosureSection
@@ -98,7 +116,7 @@ export function Sidebar({ userEmail }: { userEmail: string }) {
           open={settingsOpen}
           onToggle={() => setSettingsOpen((v) => !v)}
           items={SETTINGS_NAV}
-          pathname={pathname}
+          {...shared}
         />
       </nav>
 
@@ -113,11 +131,13 @@ export function Sidebar({ userEmail }: { userEmail: string }) {
   )
 }
 
-function NavSection({ items, pathname }: { items: NavItem[]; pathname: string }) {
+type SharedNav = { pathname: string; navigating: boolean; onNavStart: () => void }
+
+function NavSection({ items, pathname, navigating, onNavStart }: { items: NavItem[] } & SharedNav) {
   return (
     <div className="px-3 space-y-0.5">
       {items.map((item) => (
-        <NavLink key={item.href} item={item} active={isActive(pathname, item.href)} />
+        <NavLink key={item.href} item={item} active={isActive(pathname, item.href)} navigating={navigating} onNavStart={onNavStart} />
       ))}
     </div>
   )
@@ -130,14 +150,15 @@ function DisclosureSection({
   onToggle,
   items,
   pathname,
+  navigating,
+  onNavStart,
 }: {
   label: string
   icon: typeof LayoutGrid
   open: boolean
   onToggle: () => void
   items: NavItem[]
-  pathname: string
-}) {
+} & SharedNav) {
   return (
     <div className="px-3 mt-1">
       <button
@@ -151,7 +172,7 @@ function DisclosureSection({
       {open ? (
         <div className="mt-0.5 ml-3 pl-3 border-l border-[var(--color-border)] space-y-0.5">
           {items.map((item) => (
-            <NavLink key={item.href} item={item} active={isActive(pathname, item.href)} />
+            <NavLink key={item.href} item={item} active={isActive(pathname, item.href)} navigating={navigating} onNavStart={onNavStart} />
           ))}
         </div>
       ) : null}
@@ -159,7 +180,18 @@ function DisclosureSection({
   )
 }
 
-function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+// Swaps the item's icon for a spinner the moment its navigation is in flight.
+// useLinkStatus must run inside the <Link>, so this renders as its child.
+function NavIcon({ icon: Icon }: { icon: typeof LayoutGrid }) {
+  const { pending } = useLinkStatus()
+  return pending ? (
+    <Loader2 className="w-[18px] h-[18px] animate-spin text-[var(--color-brand-from)]" />
+  ) : (
+    <Icon className="w-[18px] h-[18px]" />
+  )
+}
+
+function NavLink({ item, active, navigating, onNavStart }: { item: NavItem; active: boolean; navigating: boolean; onNavStart: () => void }) {
   const Icon = item.icon
   if (item.disabled) {
     return (
@@ -173,13 +205,18 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   return (
     <Link
       href={item.href}
+      onClick={() => {
+        // Only lock for a real navigation; clicking the current route is a no-op.
+        if (!active) onNavStart()
+      }}
+      aria-disabled={navigating || undefined}
       className={`flex items-center gap-3 px-3 py-2 rounded-md text-[14px] transition-colors ${
         active
           ? 'text-[var(--color-brand-from)] bg-[rgba(255,92,117,0.08)] border border-[rgba(255,92,117,0.30)]'
           : 'text-[var(--color-ink-muted)] border border-transparent hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-2)]'
       }`}
     >
-      <Icon className="w-[18px] h-[18px]" />
+      <NavIcon icon={Icon} />
       <span className="flex-1">{item.label}</span>
       {item.badge ? <Badge>{item.badge}</Badge> : null}
     </Link>
