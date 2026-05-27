@@ -126,6 +126,18 @@ Connecting a custom domain to a Site goes through Plesk's REST API (`src/lib/ple
 
 `src/lib/ai/invoke.ts` wraps the Anthropic SDK with: Zod schema → JSON schema for `tool_use`, forced tool invocation, automatic banned-vocab post-check, and up to 2 retries with the validation error fed back into the prompt. Default model is `claude-sonnet-4-6`. Prefer this over calling `Anthropic` directly so the retry + vocab guarantees stay intact.
 
+## Lead capture pipeline
+
+Public lead submissions (`POST /api/legalos/leads` and the test harness `POST /api/legalos/test-capture`) funnel into one orchestrator: `runLeadPipeline()` in `src/lib/lead-pipeline/run.ts`. It runs **synchronously inside the request** — there is no background worker. Despite `bullmq` being a declared dependency, no queue/worker is wired up; the only runtime use of Redis is a health-check ping in `src/lib/system-health/checks.ts`. Don't assume lead work is async.
+
+The orchestrator's steps (each returns a `PipelineStep` for the result trace): derive attribution / `fbc` (`attribution.ts`) → mint the shared `event_id` (`event-id.ts`) → claim the TrustedForm cert and verify the Jornaya lead (`src/lib/integrations/`) → enrich the phone via HLR → persist the `Leads` row → fire Meta CAPI + TrueCall → dispatch outbound webhooks (`dispatch-webhooks.ts`) → Slack notify (`slack.ts`). All integration calls and credentials are server-side only.
+
+## Globals and cross-cutting hooks
+
+- **`IntegrationConfig` global** (`src/globals/IntegrationConfig.ts`, slug `integration-config`) holds LegalOS-wide integration settings (SMTP, Slack, GitHub, Search Console) and is **super-admin only**. Per-Site integration values live on `TrackingConfig` instead — don't conflate the two.
+- **Audit log**: the `auditAfterChange` / after-delete hooks (`src/hooks/audit.ts`) write a diff of every authenticated mutation to the `AuditLog` collection. They're attached across nearly all collections.
+- **Slug redirects**: `captureSlugRedirect` (`src/hooks/slug-redirects.ts`) appends the old slug to `slug_redirects[]` when a *published* doc's slug changes, so the public router can 301 old → new.
+
 ## Path aliases
 
 - `@/*` → `./src/*`
@@ -137,3 +149,5 @@ Connecting a custom domain to a Site goes through Plesk's REST API (`src/lib/ple
 - After editing collection fields, run `pnpm generate:types` so `src/payload-types.ts` stays in sync (it's imported throughout).
 - `next.config.mjs` is minimal and `cors: '*'` plus `csrf: [NEXT_PUBLIC_SERVER_URL]` is set in `payload.config.ts` — don't add CORS handling at the route layer.
 - The `(payload)` route group exists because Payload's `withPayload` Next plugin convention expects it; the `(public)`, `(app)`, `(auth)` groups exist so each can have its own root `layout.tsx`.
+- Before a production build, regenerate the Payload admin import map with `pnpm generate:importmap` (it's a committed artifact, not built on the fly).
+- `README.md` still documents the old `scripts/deploy.sh` rebuild flow — it is **outdated**. The deploy model in this file (git push → Plesk webhook pull → HMR) is authoritative; `scripts/deploy.sh` is retained only as historical reference.
