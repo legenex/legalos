@@ -13,6 +13,7 @@ import { TEMPLATE_BODIES } from './templates'
 import { SEED_SITES, DEFAULT_LEGAL_PAGES } from './sites'
 import { HOME_BLOCKS_BY_SLUG } from './home-blocks'
 import { SAMPLE_LANDING_PAGES, SAMPLE_LP_DEPLOYMENTS, buildSeedSections } from '../components/builder/lp/section-copy'
+import { buildSeedQuiz } from '../components/builder/quiz/seed-data'
 
 const log = (msg: string): void => {
   process.stdout.write(`[seed] ${msg}\n`)
@@ -292,6 +293,48 @@ const upsertFunnelDeployment = async (
   log(`created funnel deployment: ${dep.name}`)
 }
 
+// Sample MVA Tiered Quiz (artifact buildSeedQuiz) + a live deployment.
+const upsertFunnelQuiz = async (payload: Awaited<ReturnType<typeof getPayload>>): Promise<number | null> => {
+  const existing = await payload.find({ collection: 'funnel-quizzes', where: { slug: { equals: 'mva' } }, limit: 1, overrideAccess: true })
+  if (existing.docs[0]) { log('funnel quiz exists: mva'); return Number(existing.docs[0].id) }
+  const q = buildSeedQuiz()
+  const created = await payload.create({
+    collection: 'funnel-quizzes',
+    data: { name: q.name, slug: q.slug, is_published: q.isPublished, tiers: q.tiers, steps: q.steps, nodes: q.nodes, custom_fields: q.customFields },
+    overrideAccess: true,
+  })
+  log('created funnel quiz: mva')
+  return Number(created.id)
+}
+
+const upsertFunnelQuizDeployment = async (
+  payload: Awaited<ReturnType<typeof getPayload>>,
+  quizId: number | null,
+  siteId: number | null,
+  domainId: number | null,
+): Promise<void> => {
+  if (!quizId || !siteId) return
+  const existing = await payload.find({
+    collection: 'funnel-quiz-deployments',
+    where: { and: [{ quiz: { equals: quizId } }, { path: { equals: '/s/mva' } }] },
+    limit: 1,
+    overrideAccess: true,
+  })
+  if (existing.docs[0]) { log('funnel quiz deployment exists'); return }
+  await payload.create({
+    collection: 'funnel-quiz-deployments',
+    data: {
+      name: 'MVA Tiered Quiz', quiz: quizId, site: siteId, domain: domainId, path: '/s/mva',
+      render_mode: 'standalone', template_id: 'default', status: 'live',
+      header_config: { logoEnabled: true, ctaButton: { enabled: true, text: 'CLICK HERE TO CALL', url: 'tel:', fontSize: 11 } },
+      footer_config: { logoEnabled: true, logoSize: 32, showCopyright: true, fontSize: 12 },
+      body_section_overrides: null, embed_preview_bg: '#0a1a3a', utm: {}, pixels: {},
+    },
+    overrideAccess: true,
+  })
+  log('created funnel quiz deployment')
+}
+
 const run = async () => {
   const payload = await getPayload({ config: await config })
 
@@ -353,6 +396,19 @@ const run = async () => {
     })
     const domainId = dom.docs[0] ? Number(dom.docs[0].id) : null
     await upsertFunnelDeployment(payload, dep, lpId, site.id, domainId)
+  }
+
+  log('seeding sample funnel quiz...')
+  const quizId = await upsertFunnelQuiz(payload)
+  const qsite = siteIds[0]
+  if (qsite) {
+    const qdom = await payload.find({
+      collection: 'domains',
+      where: { and: [{ site: { equals: qsite.id } }, { primary: { equals: true } }] },
+      limit: 1,
+      overrideAccess: true,
+    })
+    await upsertFunnelQuizDeployment(payload, quizId, qsite.id, qdom.docs[0] ? Number(qdom.docs[0].id) : null)
   }
 
   log('done.')
