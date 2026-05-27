@@ -15,11 +15,13 @@ const relId = (v: unknown): string => {
 
 export default async function LandingPagesPage() {
   const payload = await getPayload({ config })
-  const [lpRes, depRes, sitesRes, domainsRes] = await Promise.all([
+  const [lpRes, depRes, sitesRes, domainsRes, quizRes, quizDepRes] = await Promise.all([
     payload.find({ collection: 'funnel-landing-pages', limit: 500, sort: '-updatedAt', overrideAccess: true }),
     payload.find({ collection: 'funnel-lp-deployments', limit: 1000, depth: 0, overrideAccess: true }),
     payload.find({ collection: 'sites', limit: 500, sort: 'name', overrideAccess: true }),
     payload.find({ collection: 'domains', limit: 1000, sort: ['-primary'], overrideAccess: true }),
+    payload.find({ collection: 'funnel-quizzes', limit: 500, overrideAccess: true }),
+    payload.find({ collection: 'funnel-quiz-deployments', limit: 1000, depth: 0, overrideAccess: true }),
   ])
 
   const landingPages = lpRes.docs.map((r) => ({
@@ -64,12 +66,28 @@ export default async function LandingPagesPage() {
     }
   })
 
+  // Real quizzes + quiz deployments so the LP deployment editor's quiz picker populates.
+  const quizzes = quizRes.docs.map((r) => ({ id: String(r.id), name: r.name }))
+  const quizDeployments = quizDepRes.docs.map((r) => {
+    const siteId = relId(r.site)
+    const domId = relId(r.domain)
+    return {
+      id: String(r.id),
+      quizId: relId(r.quiz),
+      brandId: siteId ? `site_${siteId}` : '',
+      domain: domId ? domainHostById.get(domId) ?? '' : '',
+      path: r.path ?? '',
+    }
+  })
+
   return (
     <LandingPagesApp
       initialLandingPages={landingPages}
       initialDeployments={deployments}
       brands={brands}
       domains={editorDomains}
+      quizzes={quizzes}
+      quizDeployments={quizDeployments}
     />
   )
 }
