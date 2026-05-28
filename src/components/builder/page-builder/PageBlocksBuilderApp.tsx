@@ -981,6 +981,172 @@ const ConvertCustomHtmlPanel = ({ block, onConvert, onToast }) => {
 }
 
 // ============================================================================
+// ADVANCED PANEL — collapsible per-block style overrides (background colour,
+// text colour, accent / CTA colour, alignment, vertical padding). Stored in
+// the existing block_meta JSON field so no schema change / migration needed.
+// The public BlockRenderer wraps each block in a div whose inline style
+// overrides --site-primary / --site-ink / etc., and the bespoke CSS picks
+// the overrides up via the brand cascade — so changing the accent here
+// recolours buttons / pills / gradients inside that one section without
+// touching anything else.
+// ============================================================================
+const ALIGN_CHOICES = [
+  { id: '', label: 'Default' },
+  { id: 'left', label: 'Left' },
+  { id: 'center', label: 'Center' },
+  { id: 'right', label: 'Right' },
+]
+const PAD_CHOICES = [
+  { id: '', label: 'Default' },
+  { id: 'none', label: 'None' },
+  { id: 'sm', label: 'Small' },
+  { id: 'md', label: 'Medium' },
+  { id: 'lg', label: 'Large' },
+  { id: 'xl', label: 'X-Large' },
+]
+
+const ColorRow = ({ label, value, onChange }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+    <input
+      type="color"
+      value={value && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#ffffff'}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ width: 28, height: 26, padding: 0, border: `1px solid ${T.border}`, borderRadius: 4, background: T.bg, cursor: 'pointer' }}
+      aria-label={`${label} color`}
+    />
+    <Input
+      mono
+      value={value || ''}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder="#______ or inherit"
+      style={{ flex: 1 }}
+    />
+    {value ? (
+      <button
+        type="button"
+        onClick={() => onChange('')}
+        title="Reset to brand cascade"
+        style={{ padding: '2px 6px', fontSize: 10, color: T.textMute, background: 'transparent', border: `1px solid ${T.border}`, borderRadius: 4, cursor: 'pointer' }}
+      >
+        Reset
+      </button>
+    ) : null}
+  </div>
+)
+
+const AdvancedBlockPanel = ({ blockId, meta, onPatch }) => {
+  const [open, setOpen] = useState(false)
+  const m = meta || {}
+  const hasAny = Boolean(
+    m.bg_color || m.text_color || m.accent_color || m.align || m.padding_top || m.padding_bottom,
+  )
+  return (
+    <div
+      style={{
+        marginBottom: 12,
+        background: T.bgElev,
+        border: `1px solid ${T.border}`,
+        borderRadius: 7,
+        overflow: 'hidden',
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '8px 10px',
+          background: 'transparent',
+          border: 'none',
+          color: T.text,
+          cursor: 'pointer',
+        }}
+      >
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 11, color: T.textMute, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+            Advanced
+          </span>
+          {hasAny ? <Pill color={T.primary}>customised</Pill> : null}
+        </span>
+        <span style={{ fontSize: 10, color: T.textMute }}>{open ? '▾ Hide' : '▸ Show'}</span>
+      </button>
+      {open ? (
+        <div style={{ padding: 10, borderTop: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <Label>Background color</Label>
+            <ColorRow label="Background" value={m.bg_color} onChange={(v) => onPatch({ bg_color: v })} />
+          </div>
+          <div>
+            <Label>Text color</Label>
+            <ColorRow label="Text" value={m.text_color} onChange={(v) => onPatch({ text_color: v })} />
+          </div>
+          <div>
+            <Label>Accent / CTA color</Label>
+            <ColorRow label="Accent" value={m.accent_color} onChange={(v) => onPatch({ accent_color: v })} />
+            <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 4 }}>
+              Drives the gradient buttons, badges, and brand accents inside this section.
+            </div>
+          </div>
+          <div>
+            <Label>Text alignment</Label>
+            <Select value={m.align || ''} onChange={(e) => onPatch({ align: e.target.value })}>
+              {ALIGN_CHOICES.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div>
+              <Label>Padding top</Label>
+              <Select value={m.padding_top || ''} onChange={(e) => onPatch({ padding_top: e.target.value })}>
+                {PAD_CHOICES.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label>Padding bottom</Label>
+              <Select value={m.padding_bottom || ''} onChange={(e) => onPatch({ padding_bottom: e.target.value })}>
+                {PAD_CHOICES.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+          {hasAny ? (
+            <Btn
+              variant="ghost"
+              size="xs"
+              onClick={() =>
+                onPatch({
+                  bg_color: '',
+                  text_color: '',
+                  accent_color: '',
+                  align: '',
+                  padding_top: '',
+                  padding_bottom: '',
+                })
+              }
+            >
+              Reset all to brand defaults
+            </Btn>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+// ============================================================================
 // VISIBILITY ROW — per-section responsive visibility checkboxes shown in the
 // section editor right under the AI rewrite panel. Sets hide_mobile /
 // hide_desktop flags on the page's block_meta[blockId] map; the public
@@ -2294,6 +2460,11 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, si
                   onToast={(t) => setToast(t)}
                 />
               ) : null}
+              <AdvancedBlockPanel
+                blockId={selected.id}
+                meta={blockMeta[selected.id] || {}}
+                onPatch={(patch) => setBlockMetaFor(selected.id, patch)}
+              />
               <VisibilityRow
                 blockId={selected.id}
                 meta={blockMeta[selected.id] || {}}

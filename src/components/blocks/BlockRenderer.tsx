@@ -4,7 +4,7 @@
  *
  * All block data is assumed to be already site-var-substituted upstream (in the catch-all route).
  */
-import { Fragment, type ReactNode } from 'react'
+import { Fragment, type CSSProperties, type ReactNode } from 'react'
 import Link from 'next/link'
 import { LeadForm } from './LeadForm'
 import { BESPOKE_CSS } from './bespoke-css'
@@ -40,16 +40,66 @@ export type RenderContext = {
   isPreview?: boolean
 }
 
-// Per-block metadata for responsive visibility. Server renders every block
-// (so SEO + crawlers see everything); CSS hides the wrappers at the
-// configured breakpoint via .legalos-hide-mobile and .legalos-hide-desktop
-// (defined in RESPONSIVE_CSS).
-type BlockMeta = Record<string, { hide_mobile?: boolean; hide_desktop?: boolean } | undefined>
+// Per-block metadata. Visibility was the first use; the editor's Advanced
+// panel adds per-block style overrides (bg / text / accent colours,
+// alignment, vertical padding). The renderer applies the style overrides
+// as inline CSS variables on a wrapper div — the bespoke CSS picks them up
+// via the brand cascade so a per-section accent change recolours buttons /
+// pills / gradients inside just that section without touching anything else.
+type BlockMetaEntry = {
+  hide_mobile?: boolean
+  hide_desktop?: boolean
+  bg_color?: string
+  text_color?: string
+  accent_color?: string
+  align?: '' | 'left' | 'center' | 'right'
+  padding_top?: '' | 'none' | 'sm' | 'md' | 'lg' | 'xl'
+  padding_bottom?: '' | 'none' | 'sm' | 'md' | 'lg' | 'xl'
+}
+type BlockMeta = Record<string, BlockMetaEntry | undefined>
+
+const PAD_PX: Record<string, number | undefined> = {
+  none: 0,
+  sm: 24,
+  md: 56,
+  lg: 96,
+  xl: 144,
+}
 
 const RESPONSIVE_CSS = `
 @media (max-width: 640px) { .legalos-hide-mobile { display: none !important; } }
 @media (min-width: 1024px) { .legalos-hide-desktop { display: none !important; } }
 `
+
+// Compose the inline style overrides for one block. Only includes properties
+// the author actually set so we don't shadow brand cascade values with
+// blanks. Returns null when no overrides are present (so the renderer can
+// skip the wrapper div entirely).
+function styleOverridesFor(meta: BlockMetaEntry | undefined): Record<string, string | number> | null {
+  if (!meta) return null
+  const style: Record<string, string | number> = {}
+  if (meta.bg_color) style.background = meta.bg_color
+  if (meta.text_color) {
+    style.color = meta.text_color
+    // Drive the bespoke CSS's ink cascade so headings + nav links pick the
+    // override up. Same pattern as --site-primary for accents.
+    ;(style as Record<string, string>)['--site-ink'] = meta.text_color
+  }
+  if (meta.accent_color) {
+    ;(style as Record<string, string>)['--site-primary'] = meta.accent_color
+    ;(style as Record<string, string>)['--site-accent'] = meta.accent_color
+  }
+  if (meta.align && meta.align !== '') style.textAlign = meta.align
+  if (meta.padding_top && meta.padding_top !== '') {
+    const px = PAD_PX[meta.padding_top]
+    if (px !== undefined) style.paddingTop = px
+  }
+  if (meta.padding_bottom && meta.padding_bottom !== '') {
+    const px = PAD_PX[meta.padding_bottom]
+    if (px !== undefined) style.paddingBottom = px
+  }
+  return Object.keys(style).length > 0 ? style : null
+}
 
 export function BlockRenderer({
   blocks,
@@ -73,11 +123,18 @@ export function BlockRenderer({
         const classes: string[] = []
         if (meta?.hide_mobile) classes.push('legalos-hide-mobile')
         if (meta?.hide_desktop) classes.push('legalos-hide-desktop')
+        const overrideStyle = styleOverridesFor(meta)
         const key = block.id ?? `${block.blockType}-${idx}`
         const child = <BlockDispatch block={block} ctx={ctx} />
-        if (classes.length === 0) return <Fragment key={key}>{child}</Fragment>
+        if (classes.length === 0 && !overrideStyle) {
+          return <Fragment key={key}>{child}</Fragment>
+        }
         return (
-          <div key={key} className={classes.join(' ')}>
+          <div
+            key={key}
+            className={classes.join(' ') || undefined}
+            style={overrideStyle as CSSProperties | undefined}
+          >
             {child}
           </div>
         )
