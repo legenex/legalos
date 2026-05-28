@@ -9,7 +9,7 @@
 // AI helper (artifact capability -> invokeLLM via server action) are adapted.
 
 import React, { useState, useEffect, useMemo, useRef } from 'react'
-import { AlertCircle, AlertTriangle, Archive, ArrowRight, BookOpen, Calendar, Check, ChevronLeft, ChevronRight, Copy, Edit3, Eye, FileEdit, FileSearch, FileText, FileWarning, GripVertical, Hash, Heading1, Heading2, ImageIcon, List, ListChecks, ListOrdered, Loader2, MousePointer, Newspaper, Phone, Plus, Quote, Rocket, Save, ScrollText, Search, Settings, ShieldAlert, Sparkles, Tag, Trash2, User, Wand2, X } from 'lucide-react'
+import { AlertCircle, AlertTriangle, Archive, ArrowRight, BookOpen, Calendar, Check, ChevronLeft, ChevronRight, Copy, Edit3, Eye, FileEdit, FileSearch, FileText, FileWarning, GripVertical, Hash, Heading1, Heading2, ImageIcon, List, ListChecks, ListOrdered, Loader2, MousePointer, Newspaper, Phone, Plus, Power, PowerOff, Quote, Rocket, Save, ScrollText, Search, Settings, ShieldAlert, Sparkles, Tag, Trash2, User, Wand2, X } from 'lucide-react'
 import { T, genId, brandShortName, Btn, Input, Textarea, Select, Label, Pill, IconBtn, ConfirmDialog, Toast, Modal, PageHeader } from '../ui'
 import { resolveTokens } from '../lp/render'
 import { advDefaultBottomSection, advSlugify } from './seed-data'
