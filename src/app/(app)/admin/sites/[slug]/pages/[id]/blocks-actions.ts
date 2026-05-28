@@ -5,35 +5,31 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getCurrentUser } from '@/lib/auth'
 
-// Persists an LP-shape landing-page state onto a Page row. The LP builder
-// (LandingPageBuilder) drives a `{ name, slug, templateId, angle, isPublished,
-// sections }` object; we mirror name -> title, isPublished -> status, and
-// stash the full LP state inside the existing shared_template_overrides JSON
-// column under `lp_state` (no migration needed). slug is normalized to a
-// leading slash to match the public router's expectations.
-type LPState = {
-  name: string
-  slug: string
-  templateId: string
-  angle: string
-  isPublished: boolean
-  sections: Array<Record<string, unknown>>
-}
+type Block = Record<string, unknown> & { id?: string; blockType?: string }
+type Result = { ok: true } | { ok: false; error: string }
 
-type SaveResult = { ok: true } | { ok: false; error: string }
-
-export async function savePageLPState(args: {
+// Persists body_blocks + page metadata in one shot. The builder debounces on
+// the client and calls this on every edit burst, so this just trusts the
+// payload's structure and writes it as-is. body_blocks IS what the public
+// BlockRenderer reads, so any save here is immediately visible on the public
+// URL (on next page render).
+export async function savePageBodyBlocks(args: {
   pageId: number | string
   siteSlug: string
-  lp: LPState
-}): Promise<SaveResult> {
+  title: string
+  slug: string
+  status: string
+  meta_title?: string | null
+  meta_description?: string | null
+  og_image_url?: string | null
+  body_blocks: Block[]
+}): Promise<Result> {
   const user = await getCurrentUser()
   if (!user) return { ok: false, error: 'unauthenticated' }
 
-  const lp = args.lp || ({} as LPState)
-  const title = (lp.name || '').trim()
-  let slug = (lp.slug || '').trim()
-  if (!title) return { ok: false, error: 'Name is required' }
+  const title = (args.title || '').trim()
+  let slug = (args.slug || '').trim()
+  if (!title) return { ok: false, error: 'Title is required' }
   if (!slug) return { ok: false, error: 'Slug is required' }
   if (slug !== '/' && !slug.startsWith('/')) slug = '/' + slug
 
@@ -65,31 +61,22 @@ export async function savePageLPState(args: {
       return { ok: false, error: `Another page on this site already uses slug "${slug}".` }
     }
 
-    const existingOverrides =
-      (src.shared_template_overrides as Record<string, unknown> | null) || {}
-    const mergedOverrides = {
-      ...existingOverrides,
-      lp_state: {
-        templateId: lp.templateId || 'bold_modern',
-        angle: lp.angle || 'pain',
-        sections: Array.isArray(lp.sections) ? lp.sections : [],
-      },
-    }
-
     await payload.update({
       collection: 'pages',
       id: args.pageId,
       data: {
         title,
         slug,
-        status: lp.isPublished ? 'published' : 'draft',
-        template_key: 'custom',
-        uses_shared_template: false,
-        shared_template_overrides: mergedOverrides,
+        status: args.status || 'draft',
+        meta_title: args.meta_title?.trim() || null,
+        meta_description: args.meta_description?.trim() || null,
+        og_image_url: args.og_image_url?.trim() || null,
+        body_blocks: Array.isArray(args.body_blocks) ? args.body_blocks : [],
       } as never,
       user: user as never,
       overrideAccess: false,
     })
+
     revalidatePath(`/admin/sites/${args.siteSlug}/pages`)
     revalidatePath(`/admin/sites/${args.siteSlug}/pages/${args.pageId}`)
     return { ok: true }

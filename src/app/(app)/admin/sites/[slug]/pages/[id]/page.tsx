@@ -1,21 +1,16 @@
-// @ts-nocheck -- LP builder + brand-map shapes are loosely typed; payload-types
-// regen on the server restores strictness for the rest of this file.
+// @ts-nocheck
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { ChevronLeft } from 'lucide-react'
 import { EditPageForm } from './EditPageForm'
-import { PageLPBuilderApp } from '@/components/builder/page-builder/PageLPBuilderApp'
+import { PageBlocksBuilderApp } from '@/components/builder/page-builder/PageBlocksBuilderApp'
 import { TEMPLATE_KEYS } from '@/collections/SharedLegalTemplates'
-import { buildBrandsFromSites } from '@/lib/brand-map'
-import { bodyBlocksToLPSections } from '@/lib/builder/body-blocks-to-lp'
 
 export const dynamic = 'force-dynamic'
 
 type Props = { params: Promise<{ slug: string; id: string }> }
-
-const relId = (v) => (v == null ? '' : typeof v === 'object' ? String(v.id) : String(v))
 
 export default async function EditPageRoute({ params }: Props) {
   const { slug, id } = await params
@@ -48,81 +43,29 @@ export default async function EditPageRoute({ params }: Props) {
   })
   const primaryHost = (dom.docs[0]?.host as string | undefined) || `${slug}.preview.legenex.com`
 
-  // Any page that is NOT rendering a shared legal template gets the LP-style
-  // builder. template_key acts as a starter-template slot (custom/home/privacy
-  // /etc.) but the editing UX is unified across them, per direct user request:
-  // "the landing pages and site pages backend builder must be the same".
+  // Any page that is NOT rendering a shared legal template gets the body_blocks
+  // builder. The user edits body_blocks directly; the public BlockRenderer
+  // renders the exact same JSX from the exact same row, so backend and frontend
+  // share one source of truth.
   const usesBuilder = !page.uses_shared_template
 
   if (usesBuilder) {
-    // Custom pages use the SAME backend builder as Landing Pages. The LP-shape
-    // state lives inside shared_template_overrides.lp_state (no migration); the
-    // server action mirrors name/slug/status back onto the row so the public
-    // router keeps working.
-    const overrides = (page.shared_template_overrides as Record<string, unknown> | null) || {}
-    const lpState = (overrides.lp_state as Record<string, unknown> | null) || {}
-
-    // Builder needs the full Brand catalog + Quizzes/QuizDeployments for the
-    // "Preview as" picker, mirroring how /admin/landing-pages loads them.
-    const [allSitesRes, allDomainsRes, quizzesRes, quizDepsRes] = await Promise.all([
-      payload.find({ collection: 'sites', limit: 500, sort: 'name', overrideAccess: true }),
-      payload.find({ collection: 'domains', limit: 1000, sort: ['-primary'], overrideAccess: true }),
-      payload.find({ collection: 'funnel-quizzes', limit: 500, overrideAccess: true }).catch(() => ({ docs: [] })),
-      payload.find({ collection: 'funnel-quiz-deployments', limit: 1000, depth: 0, overrideAccess: true }).catch(() => ({ docs: [] })),
-    ])
-
-    const brands = buildBrandsFromSites(
-      allSitesRes.docs as unknown as Array<Record<string, unknown>>,
-      allDomainsRes.docs as unknown as Array<Record<string, unknown>>,
-    )
-
-    const domainHostById = new Map<string, string>()
-    for (const d of allDomainsRes.docs) domainHostById.set(String(d.id), String((d as { host?: string }).host ?? ''))
-
-    const quizzes = quizzesRes.docs.map((r) => ({ id: String(r.id), name: (r as { name?: string }).name || 'Quiz' }))
-    const quizDeployments = quizDepsRes.docs.map((r) => {
-      const siteId = relId((r as { site?: unknown }).site)
-      const domId = relId((r as { domain?: unknown }).domain)
-      return {
-        id: String(r.id),
-        quizId: relId((r as { quiz?: unknown }).quiz),
-        brandId: siteId ? `site_${siteId}` : '',
-        domain: domId ? domainHostById.get(domId) ?? '' : '',
-        path: (r as { path?: string }).path ?? '',
-      }
-    })
-
-    // If lp_state already has sections, that's the source of truth. Otherwise
-    // import from the legacy body_blocks so the editor isn't empty on first
-    // open. Unknown blockTypes are silently dropped (the user can re-add them
-    // from the builder's Add panel); body_blocks is NOT mutated.
-    const existingSections = Array.isArray(lpState.sections)
-      ? (lpState.sections as Array<Record<string, unknown>>)
-      : []
-    const importedSections =
-      existingSections.length > 0
-        ? existingSections
-        : bodyBlocksToLPSections(page.body_blocks as Array<Record<string, unknown>>).sections
-
-    const initial = {
-      id: String(page.id),
-      name: (page.title as string) || 'Untitled',
-      slug: (page.slug as string) || '/',
-      templateId: (lpState.templateId as string) || 'bold_modern',
-      angle: (lpState.angle as string) || 'pain',
-      isPublished: (page.status as string) === 'published',
-      sections: importedSections,
-    }
-
     return (
-      <PageLPBuilderApp
+      <PageBlocksBuilderApp
         pageId={page.id as number}
         siteSlug={slug}
         primaryHost={primaryHost}
-        brands={brands}
-        quizzes={quizzes}
-        quizDeployments={quizDeployments}
-        initial={initial}
+        initial={{
+          title: (page.title as string) || '',
+          slug: (page.slug as string) || '/',
+          status: (page.status as string) || 'draft',
+          meta_title: (page.meta_title as string | null) || '',
+          meta_description: (page.meta_description as string | null) || '',
+          og_image_url: (page.og_image_url as string | null) || '',
+          body_blocks: Array.isArray(page.body_blocks)
+            ? (page.body_blocks as Array<Record<string, unknown>>)
+            : [],
+        }}
       />
     )
   }
