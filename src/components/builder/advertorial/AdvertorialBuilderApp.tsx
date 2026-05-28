@@ -71,7 +71,7 @@ const ADV_SECTION_TYPES = [
   { id: 'sub_headline', name: 'Sub-Headline', desc: 'H2 section break', icon: Heading2, color: T.purple },
   { id: 'byline', name: 'Byline', desc: 'Author + date + read time', icon: User, color: T.textMute },
   { id: 'dateline', name: 'Dateline', desc: 'LOCATION - Date prefix', icon: Calendar, color: T.textMute },
-  { id: 'lede', name: 'Lede', desc: 'Opening italic paragraph', icon: ScrollText, color: T.info },
+  { id: 'lede', name: 'Lead', desc: 'Opening italic paragraph', icon: ScrollText, color: T.info },
   { id: 'paragraph', name: 'Paragraph', desc: 'Standard body text', icon: FileText, color: T.text },
   { id: 'pull_quote', name: 'Pull Quote', desc: 'Large blockquote callout', icon: Quote, color: T.pink },
   { id: 'callout_box', name: 'Callout Box', desc: 'Highlighted info box', icon: AlertTriangle, color: T.warning },
