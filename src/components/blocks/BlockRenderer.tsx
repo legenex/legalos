@@ -126,6 +126,14 @@ function BlockDispatch({ block, ctx }: { block: Block; ctx: RenderContext }) {
       return <Disclosure block={block} />
     case 'site_footer':
       return <SiteFooter block={block} ctx={ctx} />
+    case 'video':
+      return <Video block={block} />
+    case 'gallery':
+      return <Gallery block={block} />
+    case 'logo_cloud':
+      return <LogoCloud block={block} />
+    case 'spacer':
+      return <Spacer block={block} />
     case 'lead_form':
       return <LeadForm block={block as never} site={{ slug: String((ctx.site as { slug?: string }).slug ?? ''), name: ctx.site.name ?? null }} />
     default:
@@ -849,6 +857,227 @@ function SectionHeader({
         <h2 style={{ fontSize: 36, fontWeight: 800, color: 'var(--site-ink)', margin: 0, lineHeight: 1.15 }}>{heading}</h2>
       ) : null}
       {sub ? <p style={{ marginTop: 12, fontSize: 17, color: 'var(--site-muted)', lineHeight: 1.55 }}>{sub}</p> : null}
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                    Video                                   */
+/* -------------------------------------------------------------------------- */
+
+// Parse a YouTube id from any of the common URL shapes (watch?v=, youtu.be,
+// embed/, shorts/). Falls back to whatever the user typed if it's already an
+// 11-char id.
+function parseYouTubeId(input: string): string {
+  if (!input) return ''
+  const direct = input.trim()
+  if (/^[\w-]{11}$/.test(direct)) return direct
+  const m =
+    direct.match(/[?&]v=([\w-]{11})/) ||
+    direct.match(/youtu\.be\/([\w-]{11})/) ||
+    direct.match(/youtube\.com\/embed\/([\w-]{11})/) ||
+    direct.match(/youtube\.com\/shorts\/([\w-]{11})/)
+  return m ? m[1] : direct
+}
+
+// Vimeo ids are all-numeric, typically 7–10 digits. Accept a bare id OR a
+// vimeo.com URL.
+function parseVimeoId(input: string): string {
+  if (!input) return ''
+  const direct = input.trim()
+  if (/^\d{6,12}$/.test(direct)) return direct
+  const m = direct.match(/vimeo\.com\/(\d+)/)
+  return m ? m[1] : direct
+}
+
+function Video({ block }: { block: Block }) {
+  const heading = get<string>(block, 'heading')
+  const provider = (get<string>(block, 'provider') ?? 'youtube') as 'youtube' | 'vimeo' | 'url'
+  const raw = get<string>(block, 'video_id') ?? ''
+  const aspect = (get<string>(block, 'aspect_ratio') ?? '16:9') as '16:9' | '4:3' | '1:1'
+  const caption = get<string>(block, 'caption')
+
+  let src = ''
+  if (provider === 'youtube') src = `https://www.youtube.com/embed/${parseYouTubeId(raw)}`
+  else if (provider === 'vimeo') src = `https://player.vimeo.com/video/${parseVimeoId(raw)}`
+  else src = raw
+
+  if (!src) return null
+
+  const aspectStyle = { aspectRatio: aspect.replace(':', ' / ') as string }
+  const isFile = provider === 'url' && /\.(mp4|webm|ogv|mov)$/i.test(src)
+
+  return (
+    <Section>
+      <Container>
+        {heading ? <SectionHeader heading={heading} /> : null}
+        <div
+          style={{
+            marginTop: heading ? 24 : 0,
+            borderRadius: 12,
+            overflow: 'hidden',
+            boxShadow: '0 12px 40px rgba(0,0,0,0.12)',
+            background: '#000',
+            ...aspectStyle,
+            position: 'relative',
+          }}
+        >
+          {isFile ? (
+            <video
+              src={src}
+              controls
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+            />
+          ) : (
+            <iframe
+              src={src}
+              title={heading ?? 'Video'}
+              loading="lazy"
+              allowFullScreen
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
+            />
+          )}
+        </div>
+        {caption ? (
+          <p style={{ marginTop: 12, fontSize: 13, color: 'var(--site-muted)', textAlign: 'center' }}>{caption}</p>
+        ) : null}
+      </Container>
+    </Section>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                   Gallery                                  */
+/* -------------------------------------------------------------------------- */
+
+function Gallery({ block }: { block: Block }) {
+  const heading = get<string>(block, 'heading')
+  const columnsStr = (get<string>(block, 'columns') ?? '3') as '2' | '3' | '4'
+  const columns = Number(columnsStr) || 3
+  const images =
+    (get<Array<{ image_url?: string; alt?: string; caption?: string }>>(block, 'images') ?? []) as Array<{
+      image_url?: string
+      alt?: string
+      caption?: string
+    }>
+  if (images.length === 0) return null
+  return (
+    <Section>
+      <Container>
+        {heading ? <SectionHeader heading={heading} /> : null}
+        <div
+          style={{
+            marginTop: heading ? 32 : 0,
+            display: 'grid',
+            gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+            gap: 16,
+          }}
+        >
+          {images.map((it, i) => (
+            <figure key={i} style={{ margin: 0, borderRadius: 10, overflow: 'hidden', background: '#0001' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                loading="lazy"
+                decoding="async"
+                src={it.image_url}
+                alt={it.alt ?? ''}
+                style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', aspectRatio: '4 / 3' }}
+              />
+              {it.caption ? (
+                <figcaption style={{ padding: '8px 12px', fontSize: 12, color: 'var(--site-muted)' }}>{it.caption}</figcaption>
+              ) : null}
+            </figure>
+          ))}
+        </div>
+      </Container>
+    </Section>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                 Logo Cloud                                 */
+/* -------------------------------------------------------------------------- */
+
+function LogoCloud({ block }: { block: Block }) {
+  const heading = get<string>(block, 'heading')
+  const grayscale = get<boolean>(block, 'grayscale') ?? true
+  const logos =
+    (get<Array<{ image_url?: string; alt?: string; href?: string }>>(block, 'logos') ?? []) as Array<{
+      image_url?: string
+      alt?: string
+      href?: string
+    }>
+  if (logos.length === 0) return null
+  const filter = grayscale ? 'grayscale(1)' : 'none'
+  const opacity = grayscale ? 0.7 : 1
+  return (
+    <Section>
+      <Container>
+        {heading ? (
+          <p
+            style={{
+              textAlign: 'center',
+              fontSize: 11,
+              fontWeight: 700,
+              color: 'var(--site-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: 1.5,
+              marginBottom: 32,
+            }}
+          >
+            {heading}
+          </p>
+        ) : null}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+            gap: 40,
+            alignItems: 'center',
+            justifyItems: 'center',
+          }}
+        >
+          {logos.map((l, i) => {
+            const img = (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                loading="lazy"
+                decoding="async"
+                src={l.image_url}
+                alt={l.alt ?? ''}
+                style={{ maxHeight: 48, maxWidth: '100%', filter, opacity, objectFit: 'contain' }}
+              />
+            )
+            return l.href ? (
+              <Link key={i} href={l.href}>
+                {img}
+              </Link>
+            ) : (
+              <div key={i}>{img}</div>
+            )
+          })}
+        </div>
+      </Container>
+    </Section>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                   Spacer                                   */
+/* -------------------------------------------------------------------------- */
+
+function Spacer({ block }: { block: Block }) {
+  const size = (get<string>(block, 'size') ?? 'md') as 'sm' | 'md' | 'lg' | 'xl'
+  const showDivider = get<boolean>(block, 'show_divider') ?? false
+  const px = { sm: 32, md: 64, lg: 96, xl: 128 }[size] ?? 64
+  return (
+    <div style={{ height: px, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {showDivider ? (
+        <Container>
+          <hr style={{ border: 0, borderTop: '1px solid var(--site-border, rgba(0,0,0,0.08))', margin: 0 }} />
+        </Container>
+      ) : null}
     </div>
   )
 }

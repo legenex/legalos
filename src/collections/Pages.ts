@@ -239,6 +239,110 @@ const bodyBlocks: Field = {
       ],
     },
     {
+      slug: 'video',
+      fields: [
+        { name: 'heading', type: 'text' },
+        {
+          name: 'provider',
+          type: 'select',
+          defaultValue: 'youtube',
+          options: [
+            { label: 'YouTube', value: 'youtube' },
+            { label: 'Vimeo', value: 'vimeo' },
+            { label: 'Direct URL (mp4 / iframe)', value: 'url' },
+          ],
+        },
+        {
+          name: 'video_id',
+          type: 'text',
+          required: true,
+          admin: {
+            description:
+              'YouTube/Vimeo id OR a full URL — the renderer parses both. e.g. dQw4w9WgXcQ, https://www.youtube.com/watch?v=dQw4w9WgXcQ, or https://example.com/file.mp4',
+          },
+        },
+        {
+          name: 'aspect_ratio',
+          type: 'select',
+          defaultValue: '16:9',
+          options: [
+            { label: '16:9 (widescreen)', value: '16:9' },
+            { label: '4:3 (classic)', value: '4:3' },
+            { label: '1:1 (square)', value: '1:1' },
+          ],
+        },
+        { name: 'caption', type: 'text' },
+      ],
+    },
+    {
+      slug: 'gallery',
+      fields: [
+        { name: 'heading', type: 'text' },
+        {
+          name: 'columns',
+          type: 'select',
+          defaultValue: '3',
+          options: [
+            { label: '2 columns', value: '2' },
+            { label: '3 columns', value: '3' },
+            { label: '4 columns', value: '4' },
+          ],
+        },
+        {
+          name: 'images',
+          type: 'array',
+          fields: [
+            { name: 'image_url', type: 'text', required: true },
+            { name: 'alt', type: 'text' },
+            { name: 'caption', type: 'text' },
+          ],
+        },
+      ],
+    },
+    {
+      slug: 'logo_cloud',
+      fields: [
+        { name: 'heading', type: 'text' },
+        {
+          name: 'grayscale',
+          type: 'checkbox',
+          defaultValue: true,
+          admin: { description: 'Render logos at reduced opacity and grayscale, the standard "as seen on" look.' },
+        },
+        {
+          name: 'logos',
+          type: 'array',
+          fields: [
+            { name: 'image_url', type: 'text', required: true },
+            { name: 'alt', type: 'text' },
+            { name: 'href', type: 'text' },
+          ],
+        },
+      ],
+    },
+    {
+      slug: 'spacer',
+      fields: [
+        {
+          name: 'size',
+          type: 'select',
+          defaultValue: 'md',
+          options: [
+            { label: 'Small (32px)', value: 'sm' },
+            { label: 'Medium (64px)', value: 'md' },
+            { label: 'Large (96px)', value: 'lg' },
+            { label: 'Extra large (128px)', value: 'xl' },
+          ],
+        },
+        {
+          name: 'show_divider',
+          type: 'checkbox',
+          defaultValue: false,
+          admin: { description: 'Show a thin horizontal rule inside the gap.' },
+        },
+      ],
+    },
+    {
       slug: 'lead_form',
       fields: [
         { name: 'eyebrow', type: 'text' },

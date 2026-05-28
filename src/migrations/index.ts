@@ -7,6 +7,7 @@ import * as migration_20260528_200000_lead_form_form_fields from './20260528_200
 import * as migration_20260528_220000_pages_hidden_blocks from './20260528_220000_pages_hidden_blocks';
 import * as migration_20260529_000000_pages_block_meta from './20260529_000000_pages_block_meta';
 import * as migration_20260529_020000_pages_scheduled_publish from './20260529_020000_pages_scheduled_publish';
+import * as migration_20260529_040000_new_block_types from './20260529_040000_new_block_types';
 
 export const migrations = [
   {
@@ -53,5 +54,10 @@ export const migrations = [
     up: migration_20260529_020000_pages_scheduled_publish.up,
     down: migration_20260529_020000_pages_scheduled_publish.down,
     name: '20260529_020000_pages_scheduled_publish',
+  },
+  {
+    up: migration_20260529_040000_new_block_types.up,
+    down: migration_20260529_040000_new_block_types.down,
+    name: '20260529_040000_new_block_types',
   },
 ];

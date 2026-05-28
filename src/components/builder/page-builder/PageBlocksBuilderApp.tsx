@@ -19,7 +19,7 @@ import {
   Layers, Rocket, Image as ImageIcon, Megaphone, List, FileText, Code2, Quote,
   HelpCircle, Star, Award, Trophy, ListChecks, ListOrdered, Grid3x3, Shield,
   MousePointerClick, RotateCw, Sparkles, Check, Loader2, Copy, GripVertical,
-  Smartphone, Tablet, Monitor,
+  Smartphone, Tablet, Monitor, Video as VideoIcon, Images, Building2, Minus,
 } from 'lucide-react'
 import {
   T, Btn, Input, Textarea, Select, Label, Pill, IconBtn, ConfirmDialog, Toast,
@@ -70,6 +70,10 @@ const BLOCK_TYPES = [
   { id: 'custom_html',   name: 'Custom HTML',       icon: Code2,              desc: 'Raw HTML embed' },
   { id: 'embed',         name: 'Embed',             icon: Code2,              desc: 'Iframe / script embed' },
   { id: 'site_footer',   name: 'Site Footer',       icon: Layers,             desc: 'Footer with link columns' },
+  { id: 'video',         name: 'Video',             icon: VideoIcon,          desc: 'YouTube / Vimeo / file embed' },
+  { id: 'gallery',       name: 'Gallery',           icon: Images,             desc: 'Image grid (2 / 3 / 4 cols)' },
+  { id: 'logo_cloud',    name: 'Logo Cloud',        icon: Building2,          desc: '"As seen on" client/partner logos' },
+  { id: 'spacer',        name: 'Spacer / Divider',  icon: Minus,              desc: 'Vertical gap with optional hr' },
 ]
 const BLOCK_META = Object.fromEntries(BLOCK_TYPES.map((b) => [b.id, b]))
 
@@ -202,6 +206,39 @@ const SEED_FOR: Record<string, () => Record<string, unknown>> = {
     blockType: 'site_footer',
     columns: [{ heading: 'Company', links: [{ label: 'About', href: '/about' }] }],
     legal_md: '',
+  }),
+  video: () => ({
+    blockType: 'video',
+    heading: '',
+    provider: 'youtube',
+    video_id: '',
+    aspect_ratio: '16:9',
+    caption: '',
+  }),
+  gallery: () => ({
+    blockType: 'gallery',
+    heading: '',
+    columns: '3',
+    images: [
+      { image_url: '', alt: '', caption: '' },
+      { image_url: '', alt: '', caption: '' },
+      { image_url: '', alt: '', caption: '' },
+    ],
+  }),
+  logo_cloud: () => ({
+    blockType: 'logo_cloud',
+    heading: 'As seen on',
+    grayscale: true,
+    logos: [
+      { image_url: '', alt: '', href: '' },
+      { image_url: '', alt: '', href: '' },
+      { image_url: '', alt: '', href: '' },
+    ],
+  }),
+  spacer: () => ({
+    blockType: 'spacer',
+    size: 'md',
+    show_divider: false,
   }),
 }
 
@@ -1142,6 +1179,136 @@ const Ed = {
       />
       <Label style={{ marginTop: 10 }}>Legal markdown</Label>
       <Textarea rows={5} value={b.legal_md || ''} onChange={(e) => set({ legal_md: e.target.value })} />
+    </>
+  ),
+  video: (b, set) => (
+    <>
+      <Label>Heading (optional)</Label>
+      <Input value={b.heading || ''} onChange={(e) => set({ heading: e.target.value })} />
+      <Label>Provider</Label>
+      <Select value={b.provider || 'youtube'} onChange={(e) => set({ provider: e.target.value })}>
+        <option value="youtube">YouTube</option>
+        <option value="vimeo">Vimeo</option>
+        <option value="url">Direct URL (mp4 / iframe)</option>
+      </Select>
+      <Label>
+        {b.provider === 'vimeo' ? 'Vimeo id or URL' : b.provider === 'url' ? 'Embed URL' : 'YouTube id or URL'}
+      </Label>
+      <Input
+        mono
+        value={b.video_id || ''}
+        onChange={(e) => set({ video_id: e.target.value })}
+        placeholder={
+          b.provider === 'vimeo'
+            ? '76979871 or https://vimeo.com/76979871'
+            : b.provider === 'url'
+              ? 'https://example.com/video.mp4'
+              : 'dQw4w9WgXcQ or https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+        }
+      />
+      <Label>Aspect ratio</Label>
+      <Select value={b.aspect_ratio || '16:9'} onChange={(e) => set({ aspect_ratio: e.target.value })}>
+        <option value="16:9">16:9 (widescreen)</option>
+        <option value="4:3">4:3 (classic)</option>
+        <option value="1:1">1:1 (square)</option>
+      </Select>
+      <Label>Caption (optional)</Label>
+      <Input value={b.caption || ''} onChange={(e) => set({ caption: e.target.value })} />
+    </>
+  ),
+  gallery: (b, set, ctx) => (
+    <>
+      <Label>Heading (optional)</Label>
+      <Input value={b.heading || ''} onChange={(e) => set({ heading: e.target.value })} />
+      <Label>Columns</Label>
+      <Select value={b.columns || '3'} onChange={(e) => set({ columns: e.target.value })}>
+        <option value="2">2 columns</option>
+        <option value="3">3 columns</option>
+        <option value="4">4 columns</option>
+      </Select>
+      <Label style={{ marginTop: 10 }}>Images</Label>
+      <ArrayEditor
+        items={b.images || []}
+        blank={{ image_url: '', alt: '', caption: '' }}
+        onChange={(images) => set({ images })}
+        render={(it, u) => (
+          <>
+            <ImagePickerField
+              label="Image"
+              value={it.image_url || ''}
+              onChange={(url) => u({ image_url: url })}
+              siteSlug={ctx.siteSlug}
+              siteId={ctx.siteId}
+            />
+            <Label>Alt</Label>
+            <Input value={it.alt || ''} onChange={(e) => u({ alt: e.target.value })} />
+            <Label>Caption</Label>
+            <Input value={it.caption || ''} onChange={(e) => u({ caption: e.target.value })} />
+          </>
+        )}
+        addLabel="Add image"
+      />
+    </>
+  ),
+  logo_cloud: (b, set, ctx) => (
+    <>
+      <Label>Heading (optional)</Label>
+      <Input value={b.heading || ''} onChange={(e) => set({ heading: e.target.value })} placeholder='e.g. "As seen on"' />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+        <input
+          id="lcgs"
+          type="checkbox"
+          checked={b.grayscale !== false}
+          onChange={(e) => set({ grayscale: e.target.checked })}
+        />
+        <label htmlFor="lcgs" style={{ fontSize: 12.5, color: T.text }}>
+          Grayscale + reduced opacity ("as seen on" look)
+        </label>
+      </div>
+      <Label style={{ marginTop: 12 }}>Logos</Label>
+      <ArrayEditor
+        items={b.logos || []}
+        blank={{ image_url: '', alt: '', href: '' }}
+        onChange={(logos) => set({ logos })}
+        render={(it, u) => (
+          <>
+            <ImagePickerField
+              label="Logo image"
+              value={it.image_url || ''}
+              onChange={(url) => u({ image_url: url })}
+              siteSlug={ctx.siteSlug}
+              siteId={ctx.siteId}
+            />
+            <Label>Alt (brand name)</Label>
+            <Input value={it.alt || ''} onChange={(e) => u({ alt: e.target.value })} />
+            <Label>Link (optional)</Label>
+            <LinkPickerField label="Link" value={it.href || ''} onChange={(v) => u({ href: v })} sitePages={ctx.sitePages} />
+          </>
+        )}
+        addLabel="Add logo"
+      />
+    </>
+  ),
+  spacer: (b, set) => (
+    <>
+      <Label>Size</Label>
+      <Select value={b.size || 'md'} onChange={(e) => set({ size: e.target.value })}>
+        <option value="sm">Small (32px)</option>
+        <option value="md">Medium (64px)</option>
+        <option value="lg">Large (96px)</option>
+        <option value="xl">Extra large (128px)</option>
+      </Select>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+        <input
+          id="spdv"
+          type="checkbox"
+          checked={!!b.show_divider}
+          onChange={(e) => set({ show_divider: e.target.checked })}
+        />
+        <label htmlFor="spdv" style={{ fontSize: 12.5, color: T.text }}>
+          Show thin horizontal rule inside the gap
+        </label>
+      </div>
     </>
   ),
 }
