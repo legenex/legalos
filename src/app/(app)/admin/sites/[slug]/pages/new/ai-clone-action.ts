@@ -6,151 +6,18 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getCurrentUser } from '@/lib/auth'
 import { invokeLLM } from '@/lib/ai/invoke'
+import { BlockSchema } from '@/lib/builder/block-schemas'
 
 // Clone a public URL into a new Page. We fetch the source HTML, hand it to
 // the model with the full Pages body_blocks schema, and the model returns
 // a structured list of blocks that closely mirrors the source layout. The
 // new page is created in draft so the user can review before publishing.
 
-const HERO_SCHEMA = z.object({
-  blockType: z.literal('hero'),
-  eyebrow: z.string().optional(),
-  heading: z.string(),
-  sub: z.string().optional(),
-  primary_cta_label: z.string().optional(),
-  primary_cta_href: z.string().optional(),
-  secondary_cta_label: z.string().optional(),
-  secondary_cta_href: z.string().optional(),
-  image_url: z.string().optional(),
-})
-
-const NAV_HEADER_SCHEMA = z.object({
-  blockType: z.literal('nav_header'),
-  links: z.array(z.object({ label: z.string(), href: z.string() })).optional(),
-  cta_label: z.string().optional(),
-  cta_href: z.string().optional(),
-  show_phone: z.boolean().optional(),
-})
-
-const TRUST_STRIP_SCHEMA = z.object({
-  blockType: z.literal('trust_strip'),
-  items: z.array(z.object({ value: z.string(), label: z.string().optional() })),
-})
-
-const PROSE_SCHEMA = z.object({
-  blockType: z.literal('prose'),
-  markdown: z.string(),
-})
-
-const CTA_SCHEMA = z.object({
-  blockType: z.literal('cta'),
-  heading: z.string(),
-  sub: z.string().optional(),
-  label: z.string(),
-  href: z.string(),
-})
-
-const BULLET_LIST_SCHEMA = z.object({
-  blockType: z.literal('bullet_list'),
-  heading: z.string().optional(),
-  items: z.array(z.object({ item: z.string() })),
-})
-
-const CARDS_SCHEMA = z.object({
-  blockType: z.literal('cards'),
-  heading: z.string().optional(),
-  items: z.array(z.object({ title: z.string(), body: z.string().optional(), icon: z.string().optional() })),
-})
-
-const STATS_SCHEMA = z.object({
-  blockType: z.literal('stats'),
-  heading: z.string().optional(),
-  items: z.array(z.object({ value: z.string(), label: z.string() })),
-})
-
-const TESTIMONIALS_SCHEMA = z.object({
-  blockType: z.literal('testimonials'),
-  heading: z.string().optional(),
-  items: z.array(z.object({ quote: z.string(), attribution: z.string().optional(), avatar_url: z.string().optional() })),
-})
-
-const FAQ_SCHEMA = z.object({
-  blockType: z.literal('faq'),
-  heading: z.string().optional(),
-  items: z.array(z.object({ question: z.string(), answer: z.string() })),
-})
-
-const SERVICES_GRID_SCHEMA = z.object({
-  blockType: z.literal('services_grid'),
-  eyebrow: z.string().optional(),
-  heading: z.string(),
-  sub: z.string().optional(),
-  items: z.array(z.object({ title: z.string(), description: z.string().optional(), icon: z.string().optional() })),
-})
-
-const HOW_IT_WORKS_SCHEMA = z.object({
-  blockType: z.literal('how_it_works'),
-  eyebrow: z.string().optional(),
-  heading: z.string(),
-  sub: z.string().optional(),
-  steps: z.array(z.object({ title: z.string(), description: z.string().optional() })),
-})
-
-const RECENT_WINS_SCHEMA = z.object({
-  blockType: z.literal('recent_wins'),
-  eyebrow: z.string().optional(),
-  heading: z.string(),
-  sub: z.string().optional(),
-  items: z.array(z.object({ amount: z.string(), case_type: z.string(), description: z.string().optional() })),
-  disclaimer: z.string().optional(),
-})
-
-const FINAL_CTA_SCHEMA = z.object({
-  blockType: z.literal('final_cta'),
-  eyebrow: z.string().optional(),
-  heading: z.string(),
-  sub: z.string().optional(),
-  primary_cta_label: z.string().optional(),
-  primary_cta_href: z.string().optional(),
-  show_phone: z.boolean().optional(),
-})
-
-const SITE_FOOTER_SCHEMA = z.object({
-  blockType: z.literal('site_footer'),
-  columns: z
-    .array(
-      z.object({
-        heading: z.string(),
-        links: z.array(z.object({ label: z.string(), href: z.string() })).optional(),
-      }),
-    )
-    .optional(),
-  legal_md: z.string().optional(),
-})
-
-const BLOCK_SCHEMA = z.discriminatedUnion('blockType', [
-  HERO_SCHEMA,
-  NAV_HEADER_SCHEMA,
-  TRUST_STRIP_SCHEMA,
-  PROSE_SCHEMA,
-  CTA_SCHEMA,
-  BULLET_LIST_SCHEMA,
-  CARDS_SCHEMA,
-  STATS_SCHEMA,
-  TESTIMONIALS_SCHEMA,
-  FAQ_SCHEMA,
-  SERVICES_GRID_SCHEMA,
-  HOW_IT_WORKS_SCHEMA,
-  RECENT_WINS_SCHEMA,
-  FINAL_CTA_SCHEMA,
-  SITE_FOOTER_SCHEMA,
-])
-
 const CLONE_SCHEMA = z.object({
   title: z.string().describe('Short page title suitable for a browser tab (e.g. "Home", "Services", "About").'),
   meta_title: z.string().optional(),
   meta_description: z.string().optional(),
-  body_blocks: z.array(BLOCK_SCHEMA).describe('Page sections, top to bottom, mapped to the closest matching block type.'),
+  body_blocks: z.array(BlockSchema).describe('Page sections, top to bottom, mapped to the closest matching block type.'),
 })
 
 // Strip everything that isn't visible page copy / structure so the model gets

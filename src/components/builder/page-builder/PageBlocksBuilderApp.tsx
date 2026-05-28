@@ -18,7 +18,7 @@ import {
   Plus, MoveUp, MoveDown, Trash2, ChevronLeft, ChevronRight, Eye, Save, X,
   Layers, Rocket, Image as ImageIcon, Megaphone, List, FileText, Code2, Quote,
   HelpCircle, Star, Award, Trophy, ListChecks, ListOrdered, Grid3x3, Shield,
-  MousePointerClick, RotateCw,
+  MousePointerClick, RotateCw, Sparkles, Check, Loader2,
 } from 'lucide-react'
 import {
   T, Btn, Input, Textarea, Select, Label, Pill, IconBtn, ConfirmDialog, Toast,
@@ -27,6 +27,7 @@ import {
 import { BlockRenderer } from '@/components/blocks/BlockRenderer'
 import { ImagePickerField } from './ImagePicker'
 import { savePageBodyBlocks } from '@/app/(app)/admin/sites/[slug]/pages/[id]/blocks-actions'
+import { rewriteSection } from '@/app/(app)/admin/sites/[slug]/pages/[id]/ai-rewrite-action'
 
 const genId = () => `b_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 
@@ -224,6 +225,193 @@ const ArrayEditor = ({ items, blank, render, onChange, addLabel = 'Add item' }) 
       <Btn variant="secondary" size="sm" icon={Plus} onClick={() => onChange([...items, { ...blank }])}>
         {addLabel}
       </Btn>
+    </div>
+  )
+}
+
+// ============================================================================
+// AI REWRITE PANEL — inline "Ask AI" affordance at the top of every section
+// editor. The user types an instruction ("make this more urgent / shorten by
+// 30% / add a stat about $50M+ recovered"), Claude rewrites the block within
+// its blockType's field schema, and the user accepts or rejects the result.
+// On accept, the parent block state replaces the current block with the
+// rewritten one (id is preserved by the caller).
+// ============================================================================
+const QUICK_PROMPTS = [
+  'Make it more urgent and direct.',
+  'Shorten by ~30% without losing meaning.',
+  'Add an empathetic, human tone.',
+  'Make the CTA copy more action-oriented.',
+]
+
+const AIRewritePanel = ({ block, onAccept }) => {
+  const [open, setOpen] = useState(false)
+  const [instruction, setInstruction] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const [result, setResult] = useState(null)
+
+  useEffect(() => {
+    // When the user clicks to another section, clear panel state so a
+    // pending preview doesn't get applied to the wrong block.
+    setOpen(false)
+    setInstruction('')
+    setBusy(false)
+    setError(null)
+    setResult(null)
+  }, [block?.id])
+
+  const run = async (override) => {
+    const text = (override ?? instruction).trim()
+    if (!text) return
+    setBusy(true)
+    setError(null)
+    setResult(null)
+    try {
+      const res = await rewriteSection({ block, instruction: text })
+      if (!res.ok) {
+        setError(res.error)
+      } else {
+        setResult(res.block)
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <Btn variant="secondary" size="sm" icon={Sparkles} onClick={() => setOpen(true)}>
+          Ask AI to rewrite this section
+        </Btn>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      style={{
+        marginBottom: 14,
+        padding: 12,
+        background: T.bgElev,
+        border: `1px solid ${T.primary}40`,
+        borderRadius: 8,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <Sparkles size={14} color={T.primary} />
+        <span style={{ fontSize: 12, fontWeight: 600, color: T.text }}>AI rewrite</span>
+        <div style={{ flex: 1 }} />
+        <IconBtn icon={X} onClick={() => setOpen(false)} />
+      </div>
+
+      {!result ? (
+        <>
+          <Textarea
+            rows={2}
+            value={instruction}
+            onChange={(e) => setInstruction(e.target.value)}
+            placeholder="What should change? e.g. shorten by 30%, make more urgent, add a stat"
+            disabled={busy}
+          />
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+            {QUICK_PROMPTS.map((p) => (
+              <button
+                key={p}
+                disabled={busy}
+                onClick={() => {
+                  setInstruction(p)
+                  run(p)
+                }}
+                style={{
+                  padding: '5px 9px',
+                  borderRadius: 999,
+                  background: T.bg,
+                  border: `1px solid ${T.border}`,
+                  color: T.textMute,
+                  fontSize: 11,
+                  cursor: 'pointer',
+                  opacity: busy ? 0.5 : 1,
+                }}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <Btn
+              variant="primary"
+              size="sm"
+              icon={busy ? Loader2 : Sparkles}
+              onClick={() => run()}
+              disabled={busy || !instruction.trim()}
+            >
+              {busy ? 'Rewriting…' : 'Rewrite'}
+            </Btn>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{ fontSize: 11, color: T.textMute, marginBottom: 8 }}>
+            Preview below — accept to replace the section, or reject to keep editing manually.
+          </div>
+          <div
+            style={{
+              padding: 10,
+              background: T.bg,
+              border: `1px solid ${T.border}`,
+              borderRadius: 6,
+              fontFamily: '"JetBrains Mono", monospace',
+              fontSize: 11,
+              maxHeight: 220,
+              overflow: 'auto',
+              color: T.text,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}
+          >
+            {JSON.stringify(result, null, 2)}
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+            <Btn
+              variant="primary"
+              size="sm"
+              icon={Check}
+              onClick={() => {
+                onAccept(result)
+                setResult(null)
+                setOpen(false)
+                setInstruction('')
+              }}
+            >
+              Accept
+            </Btn>
+            <Btn variant="ghost" size="sm" onClick={() => setResult(null)}>
+              Try again
+            </Btn>
+            <Btn variant="ghost" size="sm" onClick={() => { setResult(null); setOpen(false) }}>
+              Reject
+            </Btn>
+          </div>
+        </>
+      )}
+
+      {error ? (
+        <div
+          style={{
+            marginTop: 10,
+            padding: 8,
+            background: `${T.danger}15`,
+            border: `1px solid ${T.danger}40`,
+            borderRadius: 6,
+            color: T.danger,
+            fontSize: 12,
+          }}
+        >
+          {error}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -1057,6 +1245,10 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
                 <div style={{ flex: 1 }} />
                 <Btn variant="ghost" size="xs" onClick={() => setSelectedId(null)}>Page settings ›</Btn>
               </div>
+              <AIRewritePanel
+                block={selected}
+                onAccept={(next) => updateBlock(selected.id, { ...next, id: selected.id })}
+              />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <BlockEditor block={selected} onChange={(next) => updateBlock(selected.id, next)} ctx={{ siteSlug, siteId }} />
               </div>
