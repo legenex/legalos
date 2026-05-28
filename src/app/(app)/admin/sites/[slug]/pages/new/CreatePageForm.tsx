@@ -1,13 +1,23 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Sparkles, FileText } from 'lucide-react'
+import { Loader2, Sparkles, FileText, FileCode2, Upload } from 'lucide-react'
 import { createPage } from '../actions'
 import { createPageFromUrl } from './ai-clone-action'
+import { createPageFromHtml } from './html-import-action'
 
 type Option = { label: string; value: string }
-type Mode = 'manual' | 'ai'
+type Mode = 'manual' | 'ai' | 'import'
+type ImportMode = 'parse' | 'raw'
+
+const fileToDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('Could not read file.'))
+    reader.readAsDataURL(file)
+  })
 
 const slugify = (s: string): string =>
   s
@@ -45,6 +55,12 @@ export function CreatePageForm({
   const [status, setStatus] = useState('draft')
   const [templateKey, setTemplateKey] = useState('custom')
   const [sourceUrl, setSourceUrl] = useState('')
+  // Import-from-files mode state.
+  const [importMode, setImportMode] = useState<ImportMode>('parse')
+  const [htmlFile, setHtmlFile] = useState<File | null>(null)
+  const [cssFile, setCssFile] = useState<File | null>(null)
+  const htmlRef = useRef<HTMLInputElement>(null)
+  const cssRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
 
@@ -76,11 +92,39 @@ export function CreatePageForm({
           setError(res.error)
           return
         }
-        // Drop straight into the new page's editor so the user sees the
-        // AI-generated body_blocks rendering.
         router.push(`/admin/sites/${siteSlug}/pages/${res.id}`)
         router.refresh()
         return
+      }
+      if (mode === 'import') {
+        if (!htmlFile) {
+          setError('Upload the .html file you want to import.')
+          return
+        }
+        try {
+          const htmlDataUrl = await fileToDataUrl(htmlFile)
+          const cssDataUrl = cssFile ? await fileToDataUrl(cssFile) : undefined
+          const res = await createPageFromHtml({
+            siteId,
+            siteSlug,
+            slug: previewSlug,
+            status,
+            mode: importMode,
+            htmlDataUrl,
+            cssDataUrl,
+            htmlFilename: htmlFile.name,
+          })
+          if (!res.ok) {
+            setError(res.error)
+            return
+          }
+          router.push(`/admin/sites/${siteSlug}/pages/${res.id}`)
+          router.refresh()
+          return
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Could not read uploaded files.')
+          return
+        }
       }
       const res = await createPage({
         siteId,
@@ -122,6 +166,79 @@ export function CreatePageForm({
                 (hero, services, testimonials, FAQ, footer, etc.). The page is created as a Draft so you can review before publishing.
               </Help>
             </Field>
+          ) : mode === 'import' ? (
+            <>
+              <Field label="HTML file (.html / .htm)">
+                <FileDrop
+                  accept=".html,.htm,text/html"
+                  file={htmlFile}
+                  inputRef={htmlRef}
+                  onPick={(f) => setHtmlFile(f)}
+                  hint="The HTML you want to import. Paste from disk or drag-drop."
+                  disabled={pending}
+                />
+              </Field>
+              <Field label="Stylesheet (.css, optional)">
+                <FileDrop
+                  accept=".css,text/css"
+                  file={cssFile}
+                  inputRef={cssRef}
+                  onPick={(f) => setCssFile(f)}
+                  hint="If the HTML's styles are external, upload them here so the imported page looks right."
+                  disabled={pending}
+                />
+              </Field>
+              <Field label="Import strategy">
+                <div className="flex flex-col gap-2">
+                  <label
+                    className={`flex gap-3 items-start p-3 rounded-md border cursor-pointer ${
+                      importMode === 'parse'
+                        ? 'border-[var(--color-border-strong)] bg-[var(--color-surface-2)]'
+                        : 'border-[var(--color-border)] bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-2)]/60'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="importMode"
+                      checked={importMode === 'parse'}
+                      onChange={() => setImportMode('parse')}
+                      disabled={pending}
+                      className="mt-0.5"
+                    />
+                    <span className="flex-1">
+                      <span className="block text-[13px] font-semibold text-white">Parse into editable sections (recommended)</span>
+                      <span className="block text-[12px] text-[var(--color-ink-dim)] mt-1 leading-snug">
+                        Claude reads the HTML and maps each section to the closest body_blocks type (hero, services, FAQ, etc.). Editable
+                        section-by-section after import. The CSS is preserved in a style block so the page still looks like the source.
+                      </span>
+                    </span>
+                  </label>
+                  <label
+                    className={`flex gap-3 items-start p-3 rounded-md border cursor-pointer ${
+                      importMode === 'raw'
+                        ? 'border-[var(--color-border-strong)] bg-[var(--color-surface-2)]'
+                        : 'border-[var(--color-border)] bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-2)]/60'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="importMode"
+                      checked={importMode === 'raw'}
+                      onChange={() => setImportMode('raw')}
+                      disabled={pending}
+                      className="mt-0.5"
+                    />
+                    <span className="flex-1">
+                      <span className="block text-[13px] font-semibold text-white">Keep as-is (pixel-perfect, single block)</span>
+                      <span className="block text-[12px] text-[var(--color-ink-dim)] mt-1 leading-snug">
+                        The entire HTML + CSS ships as one <code className="font-mono">custom_html</code> block. Exact visual fidelity,
+                        but only editable as raw HTML. Best for legacy pages you don't plan to restructure.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </Field>
+            </>
           ) : (
             <Field label="Title">
               <input
@@ -145,7 +262,7 @@ export function CreatePageForm({
                 setSlugTouched(true)
                 setSlug(e.target.value)
               }}
-              placeholder={mode === 'ai' ? '/cloned-from-url' : '/about-us'}
+              placeholder={mode === 'ai' ? '/cloned-from-url' : mode === 'import' ? '/imported-page' : '/about-us'}
               required
               disabled={pending}
               className={`${inputClass} font-mono`}
@@ -232,7 +349,11 @@ export function CreatePageForm({
             disabled={
               pending ||
               !slug.trim() ||
-              (mode === 'manual' ? !title.trim() : !sourceUrl.trim())
+              (mode === 'manual'
+                ? !title.trim()
+                : mode === 'ai'
+                  ? !sourceUrl.trim()
+                  : !htmlFile)
             }
             className="brand-gradient text-white font-semibold text-[14px] px-5 py-2.5 rounded-lg disabled:opacity-50 hover:opacity-90 inline-flex items-center gap-2 transition-opacity"
           >
@@ -240,10 +361,16 @@ export function CreatePageForm({
             {pending
               ? mode === 'ai'
                 ? 'Cloning with AI…'
-                : 'Creating…'
+                : mode === 'import'
+                  ? importMode === 'parse'
+                    ? 'Parsing with AI…'
+                    : 'Importing…'
+                  : 'Creating…'
               : mode === 'ai'
                 ? 'Clone with AI'
-                : 'Create Page'}
+                : mode === 'import'
+                  ? 'Import HTML'
+                  : 'Create Page'}
           </button>
         </footer>
       </div>
@@ -254,10 +381,11 @@ export function CreatePageForm({
 function ModeTabs({ mode, onChange, disabled }: { mode: Mode; onChange: (m: Mode) => void; disabled: boolean }) {
   const tabs: Array<{ id: Mode; label: string; icon: typeof FileText; desc: string }> = [
     { id: 'manual', label: 'Blank page', icon: FileText, desc: 'Start with a blank page and author sections yourself.' },
-    { id: 'ai', label: 'Clone with AI', icon: Sparkles, desc: 'Paste a URL and Claude rebuilds it as editable blocks.' },
+    { id: 'ai', label: 'Clone with AI', icon: Sparkles, desc: 'Paste a URL — Claude rebuilds it as editable blocks.' },
+    { id: 'import', label: 'Import HTML / CSS', icon: FileCode2, desc: 'Upload a .html (and optional .css) you already have.' },
   ]
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
       {tabs.map((t) => {
         const Icon = t.icon
         const active = mode === t.id
@@ -281,6 +409,76 @@ function ModeTabs({ mode, onChange, disabled }: { mode: Mode; onChange: (m: Mode
           </button>
         )
       })}
+    </div>
+  )
+}
+
+function FileDrop({
+  accept,
+  file,
+  inputRef,
+  onPick,
+  hint,
+  disabled,
+}: {
+  accept: string
+  file: File | null
+  inputRef: React.RefObject<HTMLInputElement | null>
+  onPick: (f: File | null) => void
+  hint: string
+  disabled: boolean
+}) {
+  const [dragOver, setDragOver] = useState(false)
+  return (
+    <div>
+      <div
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault()
+          if (!disabled) setDragOver(true)
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault()
+          setDragOver(false)
+          const f = e.dataTransfer.files?.[0]
+          if (f) onPick(f)
+        }}
+        className={`flex items-center gap-3 rounded-md border px-3 py-3 cursor-pointer transition-colors ${
+          dragOver
+            ? 'border-[var(--color-info)] bg-[var(--color-info)]/10'
+            : 'border-[var(--color-border)] bg-[var(--color-surface-2)]/40 hover:bg-[var(--color-surface-2)]/60'
+        } ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
+      >
+        <Upload className="w-4 h-4 text-[var(--color-ink-muted)]" />
+        <div className="flex-1 min-w-0">
+          {file ? (
+            <span className="text-[13px] font-mono text-white truncate block">{file.name}</span>
+          ) : (
+            <span className="text-[13px] text-[var(--color-ink-muted)]">Drop a file here, or click to browse</span>
+          )}
+        </div>
+        {file ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onPick(null)
+            }}
+            className="text-[11px] text-[var(--color-ink-dim)] hover:text-white"
+          >
+            Remove
+          </button>
+        ) : null}
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        className="hidden"
+        onChange={(e) => onPick(e.target.files?.[0] ?? null)}
+      />
+      <Help>{hint}</Help>
     </div>
   )
 }
@@ -338,6 +536,12 @@ function PreviewCard({
               <span className="text-[var(--color-ink-dim)]">—</span>
             )}
             <span className="text-[var(--color-ink-dim)]"> · AI will set the page title from the source</span>
+          </li>
+        ) : mode === 'import' ? (
+          <li>
+            <span className="text-[var(--color-ink-muted)]">Source:</span>{' '}
+            <span className="text-[var(--color-ink-dim)]">file upload</span>
+            <span className="text-[var(--color-ink-dim)]"> · title pulled from the HTML &lt;title&gt; tag</span>
           </li>
         ) : (
           <li>
