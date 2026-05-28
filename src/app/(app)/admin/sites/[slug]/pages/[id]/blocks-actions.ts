@@ -68,6 +68,12 @@ export async function savePageBodyBlocks(args: {
         title,
         slug,
         status: args.status || 'draft',
+        // The user explicitly opened the builder; force the row off the
+        // shared-template render path so body_blocks drives both backend
+        // preview and public render. Pages that previously rendered via
+        // SharedLegalTemplates are still readable in the builder because
+        // we seeded their first-open body_blocks from the template markdown.
+        uses_shared_template: false,
         meta_title: args.meta_title?.trim() || null,
         meta_description: args.meta_description?.trim() || null,
         og_image_url: args.og_image_url?.trim() || null,
