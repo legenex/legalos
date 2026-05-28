@@ -9,11 +9,11 @@ import Link from 'next/link'
 import { LeadForm } from './LeadForm'
 import { BESPOKE_CSS } from './bespoke-css'
 
-// Hero background — kept on the renderer so the editor preview matches the
-// public page even before the user uploads their own image_url. Per-block
-// hero.image_url overrides this when present.
-const DEFAULT_HERO_BG =
-  'https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/699c27e1ee245bcd8cd77386/c7a33cdfe_1.png'
+// Empty-hero fallback. Previously hardcoded a Check My Claim family photo
+// which leaked onto every Site whose hero hadn't set image_url. Now an
+// empty string so the renderer skips the <img> entirely and you get a
+// brand-coloured solid background instead of someone else's stock photo.
+const DEFAULT_HERO_BG = ''
 
 export type Block = {
   blockType: string
@@ -229,21 +229,27 @@ function NavHeader({ block, ctx }: { block: Block; ctx: RenderContext }) {
 /* -------------------------------------------------------------------------- */
 
 function Hero({ block, ctx: _ctx }: { block: Block; ctx: RenderContext }) {
-  const eyebrow = get<string>(block, 'eyebrow') ?? '100% Free • No Win, No Fee • Fast Results'
+  // Every field is read with NO fallback content — previously these defaulted
+  // to Check My Claim copy ('100% Free • No Win, No Fee • Fast Results' /
+  // 'Takes less than 2 minutes' / 'Vetted Attorneys Only' pills / the CMC
+  // family-photo background), which leaked onto every Site whose hero hadn't
+  // been authored yet. Now empty = empty.
+  const eyebrow = get<string>(block, 'eyebrow')
   const heading = get<string>(block, 'heading') ?? ''
   const headingGradient = get<string>(block, 'heading_gradient')
   const sub = get<string>(block, 'sub')
   const primaryLabel = get<string>(block, 'primary_cta_label')
   const primaryHref = get<string>(block, 'primary_cta_href') ?? '#'
-  const ctaSub = get<string>(block, 'cta_sub') ?? 'Takes less than 2 minutes'
-  const bgImage = get<string>(block, 'image_url') ?? DEFAULT_HERO_BG
+  const ctaSub = get<string>(block, 'cta_sub')
+  const bgImage = get<string>(block, 'image_url') || DEFAULT_HERO_BG
   const pills =
-    (get<Array<{ text: string }>>(block, 'pills') as Array<{ text: string }> | undefined) ??
-    [{ text: 'Vetted Attorneys Only' }, { text: 'No Upfront Fees' }, { text: 'Results in Minutes' }]
+    (get<Array<{ text: string }>>(block, 'pills') as Array<{ text: string }> | undefined) ?? []
   return (
     <section className="hero" id="home">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={bgImage} alt="" className="hero__bg-img" />
+      {bgImage ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={bgImage} alt="" className="hero__bg-img" />
+      ) : null}
       <div className="hero__overlay" />
       <div className="hero__pattern" />
       <div className="hero__content">
@@ -269,7 +275,7 @@ function Hero({ block, ctx: _ctx }: { block: Block; ctx: RenderContext }) {
           {primaryLabel ? (
             <div className="hero__cta-row">
               <a href={primaryHref} className="btn-hero">{primaryLabel}</a>
-              <span className="hero__cta-sub">{ctaSub}</span>
+              {ctaSub ? <span className="hero__cta-sub">{ctaSub}</span> : null}
             </div>
           ) : null}
           {pills.length > 0 ? (

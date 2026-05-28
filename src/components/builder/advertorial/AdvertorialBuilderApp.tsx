@@ -1756,7 +1756,7 @@ const AdvPreviewView = ({ advertorial, brands, deployments, quizDeployments, qui
           .adv-public-root h2 { font-size: clamp(22px, 6vw, 28px) !important; }
         }
       `}</style>
-      {/* Brand-themed header. No nav. Just logo (left) + phone link + Check Your Claim CTA (right). */}
+      {/* Brand-themed header. No nav. Just logo (left) + phone link + brand CTA (right). */}
       <div className="adv-header" style={{
         backgroundColor: '#fff', borderBottom: '1px solid #e5e7eb',
         padding: '14px 28px', display: 'flex', alignItems: 'center', gap: 14,
@@ -1780,7 +1780,7 @@ const AdvPreviewView = ({ advertorial, brands, deployments, quizDeployments, qui
           color: '#fff', borderRadius: 999, fontSize: 13, fontWeight: 700, textDecoration: 'none',
           display: 'inline-flex', alignItems: 'center', gap: 6, letterSpacing: '-0.005em',
           boxShadow: `0 6px 16px -6px ${primary}77`, whiteSpace: 'nowrap'
-        }}>Check Your Claim <ArrowRight size={14} /></a>
+        }}>{effectiveBrand?.cta?.label || 'See if you qualify'} <ArrowRight size={14} /></a>
       </div>
 
       {/* Article body - always Inter on white, brand-agnostic typography */}

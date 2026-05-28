@@ -97,11 +97,15 @@ const SEED_FOR: Record<string, () => Record<string, unknown>> = {
   }),
   hero: () => ({
     blockType: 'hero',
-    eyebrow: '100% Free • No Win, No Fee • Fast Results',
-    heading: 'Check Your Claim',
-    sub: 'Unsure if you have a case after an accident? Our AI tool instantly checks if you may qualify for compensation and matches you with the best-suited attorney, at no upfront cost.',
-    primary_cta_label: 'Start Your Free Claim Check',
-    primary_cta_href: '#hero',
+    // Neutral placeholders. Previously these seeded every new hero with
+    // Check My Claim copy ('Start Your Free Claim Check' etc.) which then
+    // leaked onto unrelated Sites whose authors didn't realise the defaults
+    // weren't generic.
+    eyebrow: 'Free case review',
+    heading: 'New hero headline',
+    sub: 'Sub copy explaining what this page offers.',
+    primary_cta_label: 'Get started',
+    primary_cta_href: '#',
     secondary_cta_label: '',
     secondary_cta_href: '',
     image_url: '',
