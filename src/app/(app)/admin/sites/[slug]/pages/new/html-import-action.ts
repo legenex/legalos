@@ -41,14 +41,21 @@ const extractStyles = (html: string): { styles: string; body: string } => {
   return { styles: styles.join('\n\n'), body }
 }
 
-const stripForLLM = (html: string, maxChars = 60_000): string => {
+// 30 KB is plenty of structure for the model to map sections from — and
+// keeps round-trip well under Plesk's 60 s proxy timeout on Haiku. Larger
+// pages get trimmed at end-of-content rather than mid-tag for slightly
+// cleaner truncation.
+const stripForLLM = (html: string, maxChars = 30_000): string => {
   let s = html
   s = s.replace(/<script[\s\S]*?<\/script>/gi, '')
   s = s.replace(/<noscript[\s\S]*?<\/noscript>/gi, '')
   s = s.replace(/<!--[\s\S]*?-->/g, '')
   s = s.replace(/<svg[\s\S]*?<\/svg>/gi, '')
   s = s.replace(/\s+/g, ' ').trim()
-  if (s.length > maxChars) s = s.slice(0, maxChars) + ' …[truncated]'
+  if (s.length > maxChars) {
+    const cut = s.lastIndexOf('>', maxChars)
+    s = s.slice(0, cut > 0 ? cut + 1 : maxChars) + ' …[truncated]'
+  }
   return s
 }
 
@@ -137,33 +144,28 @@ export async function createPageFromHtml(args: {
     // mode === 'parse'
     const cleaned = stripForLLM(htmlWithoutStyles)
     try {
+      // Haiku is 5-10x faster than Sonnet for structured-extraction work
+      // like this and keeps us well under Plesk's 60s proxy timeout. The
+      // schema constraint does all the heavy lifting — the model only
+      // picks block types and copies text, no creative writing.
       const cloned = await invokeLLM({
         schema: IMPORT_SCHEMA,
         schemaName: 'imported_page',
+        model: 'claude-haiku-4-5-20251001',
         system: [
-          `You convert an uploaded HTML page into a structured list of body_blocks for a LegalOS Page.`,
-          `Read the body content (the <style> tags have already been stripped — they ship separately), identify each visible section top-to-bottom, and emit ONE block per section using the closest matching blockType.`,
+          `Convert an uploaded HTML page into a list of body_blocks for a LegalOS Page.`,
+          `Identify each visible section top-to-bottom, emit ONE block per section using the closest matching blockType.`,
           ``,
-          `Mapping rules:`,
-          `- Top navigation/header bar -> nav_header (links array, cta_label, cta_href).`,
-          `- Main above-the-fold hero -> hero.`,
-          `- Trust badge strip -> trust_strip.`,
-          `- 3-4 up services / specialties -> services_grid.`,
-          `- Numbered or stepped process explainer -> how_it_works.`,
-          `- Customer testimonials -> testimonials.`,
-          `- Past results / settlement amounts -> recent_wins.`,
-          `- FAQ accordions -> faq.`,
-          `- Final closing CTA section -> final_cta.`,
-          `- Generic 2-up / 3-up content cards -> cards.`,
-          `- Long-form copy -> prose with markdown.`,
-          `- Bulleted lists -> bullet_list.`,
-          `- Site footer with link columns -> site_footer.`,
+          `Mapping cheat-sheet:`,
+          `nav bar -> nav_header. hero / above-the-fold -> hero. trust badges row -> trust_strip.`,
+          `3-4 up services -> services_grid. numbered steps -> how_it_works. testimonials -> testimonials.`,
+          `settlement amounts -> recent_wins. FAQ -> faq. closing CTA -> final_cta. generic cards -> cards.`,
+          `long-form copy -> prose. bulleted lists -> bullet_list. footer -> site_footer.`,
           ``,
-          `Preserve the source copy verbatim where possible. Do NOT invent statistics, settlement amounts, or testimonials. Strip em-dashes and marketing fluff.`,
-          `Prefer fewer high-quality blocks over filler; do not emit apology blocks.`,
+          `Preserve source copy verbatim. Do not invent stats / amounts / testimonials. No em-dashes, no apology blocks, no marketing fluff.`,
         ].join('\n'),
         user: `Uploaded HTML (stripped):\n${cleaned}`,
-        maxTokens: 8192,
+        maxTokens: 4096,
         enforceNoBannedVocab: true,
       })
       title = cloned.title || title

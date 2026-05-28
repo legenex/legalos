@@ -168,17 +168,17 @@ export function CreatePageForm({
             </Field>
           ) : mode === 'import' ? (
             <>
-              <Field label="HTML file (.html / .htm)">
+              <FieldDiv label="HTML file (.html / .htm)">
                 <FileDrop
                   accept=".html,.htm,text/html"
                   file={htmlFile}
                   inputRef={htmlRef}
                   onPick={(f) => setHtmlFile(f)}
-                  hint="The HTML you want to import. Paste from disk or drag-drop."
+                  hint="The HTML you want to import. Drop the file here or click to browse."
                   disabled={pending}
                 />
-              </Field>
-              <Field label="Stylesheet (.css, optional)">
+              </FieldDiv>
+              <FieldDiv label="Stylesheet (.css, optional)">
                 <FileDrop
                   accept=".css,text/css"
                   file={cssFile}
@@ -187,7 +187,7 @@ export function CreatePageForm({
                   hint="If the HTML's styles are external, upload them here so the imported page looks right."
                   disabled={pending}
                 />
-              </Field>
+              </FieldDiv>
               <Field label="Import strategy">
                 <div className="flex flex-col gap-2">
                   <label
@@ -429,10 +429,12 @@ function FileDrop({
   disabled: boolean
 }) {
   const [dragOver, setDragOver] = useState(false)
+  // Native label wrapping the hidden input — clicking anywhere inside the
+  // label opens the file picker exactly once, no programmatic .click() and
+  // no event-bubbling pitfalls.
   return (
     <div>
-      <div
-        onClick={() => inputRef.current?.click()}
+      <label
         onDragOver={(e) => {
           e.preventDefault()
           if (!disabled) setDragOver(true)
@@ -450,6 +452,20 @@ function FileDrop({
             : 'border-[var(--color-border)] bg-[var(--color-surface-2)]/40 hover:bg-[var(--color-surface-2)]/60'
         } ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
       >
+        <input
+          ref={inputRef}
+          type="file"
+          accept={accept}
+          className="sr-only"
+          onChange={(e) => {
+            const f = e.target.files?.[0] ?? null
+            onPick(f)
+            // Reset the input value so picking the same file again still
+            // fires onChange. Without this, re-picking a removed file is a
+            // silent no-op.
+            e.target.value = ''
+          }}
+        />
         <Upload className="w-4 h-4 text-[var(--color-ink-muted)]" />
         <div className="flex-1 min-w-0">
           {file ? (
@@ -462,6 +478,7 @@ function FileDrop({
           <button
             type="button"
             onClick={(e) => {
+              e.preventDefault()
               e.stopPropagation()
               onPick(null)
             }}
@@ -470,15 +487,21 @@ function FileDrop({
             Remove
           </button>
         ) : null}
-      </div>
-      <input
-        ref={inputRef}
-        type="file"
-        accept={accept}
-        className="hidden"
-        onChange={(e) => onPick(e.target.files?.[0] ?? null)}
-      />
+      </label>
       <Help>{hint}</Help>
+    </div>
+  )
+}
+
+// Non-label field wrapper. Identical to Field but uses a div so a child
+// <input type=file> isn't auto-clicked by the label's delegation when the
+// user clicks anywhere inside (which is what made the file picker open
+// twice in FileDrop).
+function FieldDiv({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="block">
+      <span className="block text-[12px] font-semibold text-[var(--color-ink-muted)] mb-1.5">{label}</span>
+      {children}
     </div>
   )
 }
