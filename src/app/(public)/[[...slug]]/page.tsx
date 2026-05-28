@@ -6,6 +6,7 @@ import config from '@payload-config'
 import { resolveSiteByHost, isFallbackHost } from '@/lib/site-resolver'
 import { renderTemplateVars, applyTemplateOverrides, deepRenderTemplateVars, type SiteForTemplate } from '@/lib/template-vars'
 import { resolvePhoneForPath } from '@/lib/resolve-phone'
+import { getCurrentUser } from '@/lib/auth'
 import LegalOSMarketing from '@/components/LegalOSMarketing'
 import { BlockRenderer, type Block, type SiteForRender } from '@/components/blocks/BlockRenderer'
 import { SiteScripts, type TrackingConfigShape } from '@/components/public/SiteScripts'
@@ -115,6 +116,7 @@ export default async function PublicCatchAll({ params }: Props) {
   const path = normalizePath(slug)
   const h = await headers()
   const previewSiteSlug = h.get('x-legalos-preview-site')
+  const previewMode = h.get('x-legalos-preview') === '1'
   const host = h.get('x-legalos-host') ?? h.get('host')
 
   if (!previewSiteSlug && (!host || isFallbackHost(host))) {
@@ -151,7 +153,16 @@ export default async function PublicCatchAll({ params }: Props) {
     status?: string
   }
 
-  const isAdminPreview = Boolean(previewSiteSlug)
+  // Admin preview is gated on (a) the middleware-set x-legalos-preview header
+  // AND (b) the request actually being authenticated as a user. Without (b)
+  // anyone could append ?preview=1 to a URL and read draft / scheduled pages.
+  const authedUser = previewMode ? await getCurrentUser() : null
+  const isAuthedAdminPreview = previewMode && Boolean(authedUser)
+  // The original ?site=<slug> path (no auth check) keeps working for
+  // intra-admin previews where the request already came from /admin/*; the
+  // new ?preview=1 path additionally bypasses the status filter when
+  // authenticated.
+  const isAdminPreview = Boolean(previewSiteSlug) || isAuthedAdminPreview
   if (site.status === 'archived') notFound()
   if (site.status === 'draft' && !isAdminPreview) notFound()
   if (site.status === 'paused' && !isAdminPreview) {
@@ -160,8 +171,11 @@ export default async function PublicCatchAll({ params }: Props) {
 
   // 0. Brand-specific custom renderers (handled before the Page lookup so
   // brands can ship fully custom UI without needing seed Page records).
+  // SKIPPED for authenticated admin previews so the builder's Preview
+  // button shows the Page row the user is editing, not the legacy
+  // hardcoded component.
   const siteSlug = (site as { slug?: string }).slug
-  if (siteSlug === 'check-my-claim') {
+  if (siteSlug === 'check-my-claim' && !isAuthedAdminPreview) {
     const CmcComponent = CMC_PAGES[path.toLowerCase()]
     if (CmcComponent) {
       const tc = await loadTrackingConfig(site.id)
@@ -176,19 +190,23 @@ export default async function PublicCatchAll({ params }: Props) {
 
   // Pages are visible publicly if status='published', OR if status='scheduled'
   // and publish_at has already passed. Captured once so the Pages + redirect
-  // queries below stay terse.
+  // queries below stay terse. In an authenticated admin preview we relax this
+  // to 'any non-archived status' so draft / scheduled / paused content also
+  // renders — that's the whole point of the Preview button in the builder.
   const nowIso = new Date().toISOString()
-  const publishedOrLive = {
-    or: [
-      { status: { equals: 'published' } },
-      {
-        and: [
-          { status: { equals: 'scheduled' } },
-          { publish_at: { less_than_equal: nowIso } },
+  const publishedOrLive = isAuthedAdminPreview
+    ? { status: { not_equals: 'archived' } }
+    : {
+        or: [
+          { status: { equals: 'published' } },
+          {
+            and: [
+              { status: { equals: 'scheduled' } },
+              { publish_at: { less_than_equal: nowIso } },
+            ],
+          },
         ],
-      },
-    ],
-  }
+      }
 
   // 1. Look for an explicit Page that matches this path.
   const slugVariants = [path, path.replace(/^\//, '')]

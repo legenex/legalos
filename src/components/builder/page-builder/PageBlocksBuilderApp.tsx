@@ -1892,8 +1892,21 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, si
 
   const handleBack = () => router.push(`/admin/sites/${siteSlug}/pages`)
   const handlePreview = () => {
+    // Open the page via the current admin origin instead of the Site's
+    // primary domain. That way:
+    //   - Sites without a real configured domain still get a working preview
+    //     (no DNS lookup against {slug}.preview.legenex.com that may not exist).
+    //   - We can carry admin auth cookies through (same origin) so the route
+    //     can detect 'this is an admin previewing draft content'.
+    //   - ?site=<slug>  picks the Site by slug (host header is the admin host).
+    //   - ?preview=1    asks the public route to bypass the status='published'
+    //                   filter so the admin sees draft / scheduled pages
+    //                   rendered as they would look when live.
+    //   - ?ts=<now>     cache-buster so we get the freshest auto-saved state.
     const path = slug.startsWith('/') ? slug : `/${slug}`
-    window.open(`https://${primaryHost}${path}`, '_blank', 'noopener,noreferrer')
+    const origin = typeof window !== 'undefined' ? window.location.origin : `https://${primaryHost}`
+    const url = `${origin}${path}?site=${encodeURIComponent(siteSlug)}&preview=1&ts=${Date.now()}`
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
   const handlePublishToggle = () => {
     const next = status === 'published' ? 'draft' : 'published'

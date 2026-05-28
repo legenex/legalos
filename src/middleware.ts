@@ -16,9 +16,21 @@ export function middleware(req: NextRequest) {
 
   // Preview override: ?site=<slug> bypasses host lookup.
   const previewSiteSlug = url.searchParams.get('site')
+  // ?preview=1 asks the public route to bypass the status='published' filter
+  // so an admin previewing draft / scheduled content sees the unpublished
+  // version. The route re-verifies the request is authenticated before
+  // actually honouring the bypass — middleware only forwards the intent.
+  const previewMode = url.searchParams.get('preview')
   if (previewSiteSlug) {
     const res = NextResponse.next()
     res.headers.set('x-legalos-preview-site', previewSiteSlug)
+    if (previewMode === '1') res.headers.set('x-legalos-preview', '1')
+    return res
+  }
+  if (previewMode === '1') {
+    const res = NextResponse.next()
+    res.headers.set('x-legalos-preview', '1')
+    res.headers.set('x-legalos-host', req.headers.get('host') ?? '')
     return res
   }
 
