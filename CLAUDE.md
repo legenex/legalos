@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## CRITICAL: Standard workflow — edit local, push, webhook deploys
 
-**The flow is:** edit files in this local repo → `git commit && git push` → GitHub webhook fires → Plesk pulls into `/var/www/vhosts/legenex.com/os.legenex.com/` on `root@51.81.202.161` → Next.js `legalos-dev` service hot-reloads → change is live at `https://os.legenex.com` in ~10 seconds.
+**The flow is:** edit files in this local repo → `git commit && git push` → GitHub webhook fires → Plesk pulls into `/var/www/vhosts/legenex.com/os.legenex.com/` on `root@51.81.202.161` → **you must run `pnpm build && systemctl restart legalos-dev` on the server** → change is live at `https://os.legenex.com` once the build finishes.
+
+The `legalos-dev` systemd unit runs the **production build** (`pnpm start` against prebuilt `.next/`), not `pnpm dev`. There is no HMR. A `git pull` alone will not change what users see — the prebuilt `.next/` output has to be regenerated and the service restarted.
 
 There is no Docker rebuild. There is no `scripts/deploy.sh` step (the file is retained as historical reference only).
 
@@ -14,8 +16,9 @@ There is no Docker rebuild. There is no `scripts/deploy.sh` step (the file is re
 
 - **ALWAYS edit files in this local clone.** Never SSH-edit server source files — they'll be overwritten on the next deploy.
 - **ALWAYS commit + push to deploy.** That's the only mechanism that ships changes to the server.
-- **SSH is read-only for source.** Use SSH for logs (`journalctl -u legalos-dev`), service state (`systemctl status legalos-dev`), restarts after a `.env` / `next.config.mjs` change, or one-off Plesk admin work. Never edit `src/` there.
-- **NEVER suggest `docker compose up app` or `bash scripts/deploy.sh`.** The Docker app container is stopped; deploys are pull + HMR, not rebuild.
+- **EVERY src/ change requires `pnpm build && systemctl restart legalos-dev` on the server after the push.** The webhook only pulls; it does not rebuild. Without the rebuild + restart, users keep seeing the old prebuilt output.
+- **SSH is used for the rebuild + restart, logs, and service state.** Use SSH for builds (`pnpm build`), restarts (`systemctl restart legalos-dev`), logs (`journalctl -u legalos-dev`), and one-off Plesk admin work. Never edit `src/` there.
+- **NEVER suggest `docker compose up app` or `bash scripts/deploy.sh`.** The Docker app container is stopped; the production flow is git pull → `pnpm build` → restart.
 
 ### Standard operations
 
@@ -23,30 +26,51 @@ There is no Docker rebuild. There is no `scripts/deploy.sh` step (the file is re
 # Make a change — edit locally, then:
 git add -A && git commit -m "what changed" && git push
 
-# Tail the server's compile output to confirm the change picked up
+# Tail the server's output to confirm the new build is up (after the user deploys)
 ssh root@51.81.202.161 'journalctl -u legalos-dev -n 30 --no-pager -f'
 
-# Read server-side state (logs / service / db) — read-only
+# Read server-side state (logs / service / db)
 ssh root@51.81.202.161 'systemctl status legalos-dev --no-pager'
-
-# Restart the service (only if it's crashed or after a .env / next.config.mjs change)
-ssh root@51.81.202.161 systemctl restart legalos-dev
 ```
 
-### After any push
+### 🚨 MANDATORY: every reply that pushes src/ MUST end with the deploy block
 
-- Tell the user the change is live at `https://os.legenex.com` in ~10 seconds (deploy + HMR).
-- Hard-refresh hint: Ctrl+Shift+R (Windows) / Cmd+Shift+R (Mac).
+After **any** `git push` you make that touches `src/`, `package.json`, `next.config.mjs`, `tailwind.config.*`, `payload.config.ts`, or anything compiled into `.next/`, the **final block of your reply** must be the exact SSH commands below so the user can copy-paste them. This applies *every* time, even for a one-line fix, even if the previous reply already showed them. The user has explicitly asked for this and will get stuck without it.
+
+```
+cd /var/www/vhosts/legenex.com/os.legenex.com
+git pull
+systemctl stop legalos-dev
+pnpm install
+pnpm generate:importmap
+pnpm build
+systemctl start legalos-dev
+systemctl status legalos-dev --no-pager
+```
+
+What each step does (most are fast no-ops if nothing changed):
+- `git pull` — fetch your new commits.
+- `pnpm install` — only runs if `package.json` changed; otherwise ~1s.
+- `pnpm generate:importmap` — regenerates the Payload admin import map (required before a prod build per CLAUDE.md).
+- `pnpm build` — production build (~60–90s, the slow step).
+- `systemctl start legalos-dev` — boots `next start` against the fresh `.next/`.
+- `systemctl status legalos-dev --no-pager` — confirms it came up; should end with **`active (running)`**.
+
+Then have the user hard-refresh: **Ctrl+Shift+R** (Windows) / **Cmd+Shift+R** (Mac).
+
+The change is **not** live until this block has run. Never tell the user "it's live in ~10 seconds" — give them this block.
 
 ### Things that require an extra step after the push
 
-| What changed | Run on the server |
+All `src/` changes require the rebuild + restart from "Standard operations" above. The table below covers cases that need *additional* steps on top of that.
+
+| What changed | Run on the server (in addition to the standard rebuild + restart) |
 |---|---|
-| Added a package (`pnpm add ...`) | `ssh root@51.81.202.161 'cd /var/www/vhosts/legenex.com/os.legenex.com && pnpm install && systemctl restart legalos-dev'` |
-| Edited `.env` | `.env` is gitignored — edit it on the server (`ssh root@51.81.202.161 nano /var/www/vhosts/legenex.com/os.legenex.com/.env`) then `systemctl restart legalos-dev` |
-| Created a Payload migration | `ssh root@51.81.202.161 'cd /var/www/vhosts/legenex.com/os.legenex.com && pnpm payload migrate'` |
-| Edited `next.config.mjs` | `ssh root@51.81.202.161 systemctl restart legalos-dev` |
-| Service stuck / weird state | `ssh root@51.81.202.161 systemctl restart legalos-dev` |
+| Added a package (`pnpm add ...`) | `pnpm install` before `pnpm build` |
+| Edited `.env` | `.env` is gitignored — edit it on the server (`ssh root@51.81.202.161 nano /var/www/vhosts/legenex.com/os.legenex.com/.env`) then rebuild + restart |
+| Created a Payload migration | `pnpm payload migrate` after `pnpm build`, before the restart |
+| Edited `next.config.mjs` | (covered by the standard rebuild + restart) |
+| Service stuck / weird state | `ssh root@51.81.202.161 systemctl restart legalos-dev` on its own |
 
 ---
 
@@ -73,11 +97,11 @@ There is no test suite. "Correctness" checks are `pnpm typecheck` and `pnpm lint
 
 ## Deploy model
 
-A `git push` to `main` triggers Plesk's Git extension via webhook, which pulls into `/var/www/vhosts/legenex.com/os.legenex.com/` on the host. The `legalos-dev.service` systemd unit (running `pnpm dev` from that directory) detects the file change and hot-reloads — the new code is serving on `https://os.legenex.com` within seconds.
+A `git push` to `main` triggers Plesk's Git extension via webhook, which pulls into `/var/www/vhosts/legenex.com/os.legenex.com/` on the host. The `legalos-dev.service` systemd unit serves the **production build** (`pnpm start` against `.next/`) from that directory — there is no HMR and no auto-rebuild. After the pull, you must SSH in and run `pnpm build && systemctl restart legalos-dev` for the change to take effect.
 
-There is no container rebuild and no automatic migrate step. Rollback: `git revert && git push`.
+There is no container rebuild and no automatic migrate step. Rollback: `git revert && git push` (then rebuild + restart again).
 
-Migrations are NOT auto-applied. If your push includes a new file under `src/migrations/`, run `ssh root@51.81.202.161 'cd /var/www/vhosts/legenex.com/os.legenex.com && pnpm payload migrate'` after the push.
+Migrations are NOT auto-applied. If your push includes a new file under `src/migrations/`, run `ssh root@51.81.202.161 'cd /var/www/vhosts/legenex.com/os.legenex.com && pnpm payload migrate'` after the push (and as part of the same rebuild + restart sequence).
 
 ## Architecture: how a request flows
 
@@ -150,4 +174,4 @@ The orchestrator's steps (each returns a `PipelineStep` for the result trace): d
 - `next.config.mjs` is minimal and `cors: '*'` plus `csrf: [NEXT_PUBLIC_SERVER_URL]` is set in `payload.config.ts` — don't add CORS handling at the route layer.
 - The `(payload)` route group exists because Payload's `withPayload` Next plugin convention expects it; the `(public)`, `(app)`, `(auth)` groups exist so each can have its own root `layout.tsx`.
 - Before a production build, regenerate the Payload admin import map with `pnpm generate:importmap` (it's a committed artifact, not built on the fly).
-- `README.md` still documents the old `scripts/deploy.sh` rebuild flow — it is **outdated**. The deploy model in this file (git push → Plesk webhook pull → HMR) is authoritative; `scripts/deploy.sh` is retained only as historical reference.
+- `README.md` still documents the old `scripts/deploy.sh` rebuild flow — it is **outdated**. The deploy model in this file (git push → Plesk webhook pull → `pnpm build` + `systemctl restart legalos-dev` on the server) is authoritative; `scripts/deploy.sh` is retained only as historical reference.
