@@ -25,6 +25,8 @@ export async function savePageBodyBlocks(args: {
   body_blocks: Block[]
   hidden_blocks?: string[]
   block_meta?: Record<string, { hide_mobile?: boolean; hide_desktop?: boolean }>
+  publish_at?: string | null
+  schema_json?: string | null
 }): Promise<Result> {
   const user = await getCurrentUser()
   if (!user) return { ok: false, error: 'unauthenticated' }
@@ -83,6 +85,21 @@ export async function savePageBodyBlocks(args: {
         hidden_blocks: Array.isArray(args.hidden_blocks) ? args.hidden_blocks : [],
         block_meta:
           args.block_meta && typeof args.block_meta === 'object' ? args.block_meta : {},
+        publish_at: args.publish_at ? new Date(args.publish_at).toISOString() : null,
+        // schema_json comes from a textarea — accept JSON OR an empty string.
+        // Parse failures are surfaced as a save error so the user sees the
+        // problem before the page is saved with corrupt JSON-LD.
+        schema_json: (() => {
+          const raw = (args.schema_json || '').trim()
+          if (!raw) return null
+          try {
+            return JSON.parse(raw)
+          } catch (err) {
+            throw new Error(
+              `JSON-LD is not valid JSON: ${err instanceof Error ? err.message : 'parse error'}`,
+            )
+          }
+        })(),
       } as never,
       user: user as never,
       overrideAccess: false,

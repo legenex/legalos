@@ -95,6 +95,12 @@ export default async function EditPageRoute({ params }: Props) {
           page.block_meta && typeof page.block_meta === 'object'
             ? (page.block_meta as Record<string, { hide_mobile?: boolean; hide_desktop?: boolean }>)
             : {},
+        publish_at: (page.publish_at as string | null) || '',
+        schema_json: page.schema_json
+          ? typeof page.schema_json === 'string'
+            ? (page.schema_json as string)
+            : JSON.stringify(page.schema_json, null, 2)
+          : '',
       }}
     />
   )

@@ -315,9 +315,19 @@ export const Pages: CollectionConfig = {
       defaultValue: 'draft',
       options: [
         { label: 'Draft', value: 'draft' },
+        { label: 'Scheduled', value: 'scheduled' },
         { label: 'Published', value: 'published' },
         { label: 'Archived', value: 'archived' },
       ],
+    },
+    {
+      name: 'publish_at',
+      type: 'date',
+      admin: {
+        description:
+          'When status is Scheduled, the page becomes public at this time. Ignored for Draft / Published / Archived.',
+        condition: (_, siblingData) => siblingData.status === 'scheduled',
+      },
     },
     {
       name: 'template_key',

@@ -27,10 +27,22 @@ import {
 } from '../ui'
 import { BlockRenderer } from '@/components/blocks/BlockRenderer'
 import { ImagePickerField } from './ImagePicker'
+import { GoogleSerpPreview, OgPreviewCards } from './PageSettingsPreviews'
 import { savePageBodyBlocks } from '@/app/(app)/admin/sites/[slug]/pages/[id]/blocks-actions'
 import { rewriteSection } from '@/app/(app)/admin/sites/[slug]/pages/[id]/ai-rewrite-action'
 
 const genId = () => `b_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+
+// <input type="datetime-local"> expects "YYYY-MM-DDTHH:MM" with no timezone
+// and renders/parses against the local timezone. We store publish_at as a
+// UTC ISO string on the row, so convert in both directions when binding.
+const toLocalInputValue = (iso) => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
 
 // ============================================================================
 // BLOCK TYPE REGISTRY — mirrors Pages.ts blocks config so the Add panel and
@@ -1109,6 +1121,8 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
   const [metaTitle, setMetaTitle] = useState(initial.meta_title || '')
   const [metaDescription, setMetaDescription] = useState(initial.meta_description || '')
   const [ogImageUrl, setOgImageUrl] = useState(initial.og_image_url || '')
+  const [publishAt, setPublishAt] = useState(initial.publish_at || '')
+  const [schemaJson, setSchemaJson] = useState(initial.schema_json || '')
   const [blocks, setBlocks] = useState(() =>
     (Array.isArray(initial.body_blocks) ? initial.body_blocks : []).map((b, i) => ({
       ...b,
@@ -1153,6 +1167,8 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
         body_blocks: next.blocks.map(({ id, ...rest }) => ({ id, ...rest })),
         hidden_blocks: next.hiddenBlocks,
         block_meta: next.blockMeta,
+        publish_at: next.publishAt || null,
+        schema_json: next.schemaJson || null,
       })
       setSaving(false)
       if (!res.ok) setToast({ message: res.error || 'Save failed', type: 'error' })
@@ -1163,6 +1179,7 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
     persist({
       title, slug, status, metaTitle, metaDescription, ogImageUrl,
       blocks, hiddenBlocks, blockMeta,
+      publishAt, schemaJson,
       ...patch,
     })
   }
@@ -1190,6 +1207,8 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
   const setMetaTitleX = (v) => { setMetaTitle(v); bump({ metaTitle: v }) }
   const setMetaDescX = (v) => { setMetaDescription(v); bump({ metaDescription: v }) }
   const setOgUrlX = (v) => { setOgImageUrl(v); bump({ ogImageUrl: v }) }
+  const setPublishAtX = (v) => { setPublishAt(v); bump({ publishAt: v }) }
+  const setSchemaJsonX = (v) => { setSchemaJson(v); bump({ schemaJson: v }) }
 
   const updateBlock = (id, patch) => {
     const next = blocks.map((b) => (b.id === id ? { ...b, ...patch } : b))
@@ -1542,10 +1561,24 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
                   <Label>Status</Label>
                   <Select value={status} onChange={(e) => setStatusX(e.target.value)}>
                     <option value="draft">Draft</option>
+                    <option value="scheduled">Scheduled</option>
                     <option value="published">Published</option>
                     <option value="archived">Archived</option>
                   </Select>
                 </div>
+                {status === 'scheduled' ? (
+                  <div>
+                    <Label>Publish at</Label>
+                    <Input
+                      type="datetime-local"
+                      value={publishAt ? toLocalInputValue(publishAt) : ''}
+                      onChange={(e) => setPublishAtX(e.target.value ? new Date(e.target.value).toISOString() : '')}
+                    />
+                    <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 4 }}>
+                      Page goes live automatically at this time. Until then, it's hidden from the public site.
+                    </div>
+                  </div>
+                ) : null}
               </div>
               <Label>SEO</Label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1559,6 +1592,40 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
                     siteSlug={siteSlug}
                     siteId={siteId}
                   />
+                </div>
+              </div>
+
+              <div style={{ marginTop: 16 }}>
+                <GoogleSerpPreview
+                  primaryHost={primaryHost}
+                  slug={slug}
+                  metaTitle={metaTitle}
+                  metaDescription={metaDescription}
+                  pageTitle={title}
+                />
+              </div>
+
+              <div style={{ marginTop: 16 }}>
+                <OgPreviewCards
+                  primaryHost={primaryHost}
+                  metaTitle={metaTitle}
+                  metaDescription={metaDescription}
+                  ogImageUrl={ogImageUrl}
+                  pageTitle={title}
+                />
+              </div>
+
+              <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${T.border}` }}>
+                <Label>JSON-LD (schema.org)</Label>
+                <Textarea
+                  mono
+                  rows={8}
+                  value={schemaJson}
+                  onChange={(e) => setSchemaJsonX(e.target.value)}
+                  placeholder={'{\n  "@context": "https://schema.org",\n  "@type": "LegalService",\n  "name": "..."\n}'}
+                />
+                <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 6 }}>
+                  Injected as a {`<script type="application/ld+json">`} tag in the page head. Must be valid JSON — invalid JSON blocks the save and surfaces an error.
                 </div>
               </div>
             </>

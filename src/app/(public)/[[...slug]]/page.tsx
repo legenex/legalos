@@ -174,6 +174,22 @@ export default async function PublicCatchAll({ params }: Props) {
     }
   }
 
+  // Pages are visible publicly if status='published', OR if status='scheduled'
+  // and publish_at has already passed. Captured once so the Pages + redirect
+  // queries below stay terse.
+  const nowIso = new Date().toISOString()
+  const publishedOrLive = {
+    or: [
+      { status: { equals: 'published' } },
+      {
+        and: [
+          { status: { equals: 'scheduled' } },
+          { publish_at: { less_than_equal: nowIso } },
+        ],
+      },
+    ],
+  }
+
   // 1. Look for an explicit Page that matches this path.
   const slugVariants = [path, path.replace(/^\//, '')]
   const explicit = await payload.find({
@@ -181,7 +197,7 @@ export default async function PublicCatchAll({ params }: Props) {
     where: {
       and: [
         { site: { equals: siteId } },
-        { status: { equals: 'published' } },
+        publishedOrLive,
         { slug: { in: slugVariants } },
       ],
     },
@@ -199,7 +215,7 @@ export default async function PublicCatchAll({ params }: Props) {
     where: {
       and: [
         { site: { equals: siteId } },
-        { status: { equals: 'published' } },
+        publishedOrLive,
         { 'slug_redirects.from': { in: slugVariants } },
       ],
     },
@@ -282,6 +298,7 @@ type RenderPageDoc = {
   body_blocks?: unknown[]
   hidden_blocks?: string[] | null
   block_meta?: Record<string, { hide_mobile?: boolean; hide_desktop?: boolean }> | null
+  schema_json?: Record<string, unknown> | null
 }
 
 async function RenderPage({
@@ -325,6 +342,12 @@ async function RenderPage({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <SiteScripts tc={tc} hasForm={hasLeadFormBlock(renderedBlocks)} />
+      {page.schema_json ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(page.schema_json) }}
+        />
+      ) : null}
       <BlockRenderer
         blocks={renderedBlocks}
         blockMeta={page.block_meta ?? undefined}
