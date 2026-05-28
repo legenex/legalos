@@ -984,7 +984,7 @@ const AdvertorialEditor = ({ advertorial, brands, deployments, onPatch, onAddSec
               </>;
             })()}
             <div style={{ flex: 1 }} />
-            <Btn variant="ai" size="sm" icon={Sparkles} onClick={() => setAiEditSection(selectedSection)}>Edit with AI</Btn>
+            <Btn variant="ai" size="sm" icon={Sparkles} onClick={() => setAiEditSection(selectedSection)} style={{ backgroundColor: '#f97316', borderColor: '#f97316' }}>Edit with AI</Btn>
             <Btn variant="secondary" size="sm" icon={Settings} onClick={() => setShowSettings(true)}>Article Settings</Btn>
           </div>
           <div style={{ padding: 22, maxWidth: 720 }}>
