@@ -10,6 +10,8 @@ import LegalOSMarketing from '@/components/LegalOSMarketing'
 import { BlockRenderer, type Block, type SiteForRender } from '@/components/blocks/BlockRenderer'
 import { SiteScripts, type TrackingConfigShape } from '@/components/public/SiteScripts'
 import CheckMyClaimHome from '@/components/public/check-my-claim/Home'
+import { LPPagePublicRenderer } from '@/components/public/LPPagePublicRenderer'
+import { buildBrandsFromSites } from '@/lib/brand-map'
 import CmcAdvertisingDisclosure from '@/components/public/check-my-claim/AdvertisingDisclosure'
 import CmcPrivacyPolicy from '@/components/public/check-my-claim/PrivacyPolicy'
 import CmcTermsOfService from '@/components/public/check-my-claim/TermsOfService'
@@ -153,23 +155,13 @@ export default async function PublicCatchAll({ params }: Props) {
     return <PausedSite name={site.name ?? 'This site'} />
   }
 
-  // 0. Brand-specific custom renderers (handled before the Page lookup so
-  // brands can ship fully custom UI without needing seed Page records).
-  const siteSlug = (site as { slug?: string }).slug
-  if (siteSlug === 'check-my-claim') {
-    const CmcComponent = CMC_PAGES[path.toLowerCase()]
-    if (CmcComponent) {
-      const tc = await loadTrackingConfig(site.id)
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-          <SiteScripts tc={tc} hasForm={false} />
-          <CmcComponent />
-        </div>
-      )
-    }
-  }
-
-  // 1. Look for an explicit Page that matches this path.
+  // 0. Look up the explicit Page first — needed both to decide whether
+  // hardcoded brand renderers (like CheckMyClaimHome) apply and to support
+  // the LP-builder-driven path. The page itself drives EVERYTHING:
+  //   - If the page has lp_state.sections, render via LP (editor in /admin
+  //     drives the frontend).
+  //   - Otherwise, fall through to brand-specific hardcoded components for
+  //     check-my-claim, then to body_blocks BlockRenderer.
   const slugVariants = [path, path.replace(/^\//, '')]
   const explicit = await payload.find({
     collection: 'pages',
@@ -184,8 +176,65 @@ export default async function PublicCatchAll({ params }: Props) {
     overrideAccess: true,
   })
 
-  if (explicit.docs[0]) {
-    return <RenderPage page={explicit.docs[0] as unknown as RenderPageDoc} site={site} path={path} />
+  const explicitPage = explicit.docs[0] as
+    | (RenderPageDoc & {
+        title?: string
+        slug?: string
+        shared_template_overrides?: Record<string, unknown> | null
+      })
+    | undefined
+
+  // If the editor has written lp_state for this Page, that wins over every
+  // other render path. This is what 'map the frontend to be edited on the
+  // backend' resolves to: a single source of truth (the row) driving public
+  // rendering, with the same LP renderer the admin preview uses.
+  if (explicitPage) {
+    const overrides = (explicitPage.shared_template_overrides || {}) as Record<string, unknown>
+    const lpState = (overrides.lp_state || null) as
+      | { templateId?: string; angle?: string; sections?: Array<Record<string, unknown>> }
+      | null
+    if (lpState && Array.isArray(lpState.sections) && lpState.sections.length > 0) {
+      const allDomainsRes = await payload.find({
+        collection: 'domains',
+        where: { site: { equals: siteId } },
+        limit: 100,
+        overrideAccess: true,
+      })
+      const [brand] = buildBrandsFromSites(
+        [site as unknown as Record<string, unknown>],
+        allDomainsRes.docs as unknown as Array<Record<string, unknown>>,
+      )
+      const tc = await loadTrackingConfig(site.id)
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+          <SiteScripts tc={tc} hasForm={hasLeadFormBlock(explicitPage.body_blocks as unknown[])} />
+          <LPPagePublicRenderer
+            page={{ title: explicitPage.title, slug: explicitPage.slug }}
+            lpState={lpState}
+            brand={brand as unknown as Record<string, unknown> & { id: string }}
+          />
+        </div>
+      )
+    }
+  }
+
+  // 1. Brand-specific custom renderers (only when no lp_state took over above).
+  const siteSlug = (site as { slug?: string }).slug
+  if (siteSlug === 'check-my-claim') {
+    const CmcComponent = CMC_PAGES[path.toLowerCase()]
+    if (CmcComponent) {
+      const tc = await loadTrackingConfig(site.id)
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+          <SiteScripts tc={tc} hasForm={false} />
+          <CmcComponent />
+        </div>
+      )
+    }
+  }
+
+  if (explicitPage) {
+    return <RenderPage page={explicitPage as unknown as RenderPageDoc} site={site} path={path} />
   }
 
   // 2. Check slug_redirects on Pages collection for this Site.
