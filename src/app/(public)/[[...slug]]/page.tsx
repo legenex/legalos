@@ -339,14 +339,15 @@ async function RenderPage({
   )
 
   // Global nav + footer: if the page's body_blocks doesn't include a
-  // nav_header / site_footer, fall back to the Site's site_nav / site_footer
-  // global. Authors set these once per Site (via 'Save as Site default' on
-  // any nav_header / site_footer block) and every page gets the consistent
-  // chrome without duplicating it.
+  // nav_header / site_footer, fall back to the Site's globals. Authors set
+  // these once per Site (via 'Save as Site default' on any nav_header /
+  // site_footer block); we stash them inside brand_identity to avoid a
+  // schema migration that was breaking prod.
   const hasNav = pageBlocks.some((b) => b.blockType === 'nav_header')
   const hasFooter = pageBlocks.some((b) => b.blockType === 'site_footer')
-  const globalNav = (site as { site_nav?: Block | null }).site_nav
-  const globalFooter = (site as { site_footer?: Block | null }).site_footer
+  const bi = ((site as { brand_identity?: Record<string, unknown> | null }).brand_identity || {}) as Record<string, unknown>
+  const globalNav = bi.site_nav as Block | undefined
+  const globalFooter = bi.site_footer as Block | undefined
   const blocksWithChrome: Block[] = [
     ...(!hasNav && globalNav && (globalNav as Block).blockType === 'nav_header'
       ? [{ ...(globalNav as Block), id: (globalNav as Block).id || 'site-nav' }]

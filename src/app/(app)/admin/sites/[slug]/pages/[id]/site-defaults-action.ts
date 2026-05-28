@@ -39,12 +39,26 @@ export async function saveAsSiteDefault(args: {
 
   const payload = await getPayload({ config })
   try {
+    // Stored inside the existing brand_identity JSON column to avoid a
+    // schema migration that broke prod. Read-modify-write so the rest of
+    // brand_identity (logo/colors/etc.) stays intact.
+    const src = (await payload.findByID({
+      collection: 'sites',
+      id: args.siteId,
+      overrideAccess: true,
+    })) as { brand_identity?: Record<string, unknown> | null }
+    const currentBI = (src.brand_identity && typeof src.brand_identity === 'object'
+      ? src.brand_identity
+      : {}) as Record<string, unknown>
+    const nextBI = {
+      ...currentBI,
+      ...(args.kind === 'nav' ? { site_nav: value } : { site_footer: value }),
+    }
+
     await payload.update({
       collection: 'sites',
       id: args.siteId,
-      data: (args.kind === 'nav'
-        ? { site_nav: value }
-        : { site_footer: value }) as never,
+      data: { brand_identity: nextBI } as never,
       user: user as never,
       overrideAccess: false,
     })
