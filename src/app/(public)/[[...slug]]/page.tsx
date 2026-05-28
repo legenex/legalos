@@ -9,7 +9,6 @@ import { resolvePhoneForPath } from '@/lib/resolve-phone'
 import LegalOSMarketing from '@/components/LegalOSMarketing'
 import { BlockRenderer, type Block, type SiteForRender } from '@/components/blocks/BlockRenderer'
 import { SiteScripts, type TrackingConfigShape } from '@/components/public/SiteScripts'
-import CheckMyClaimHome from '@/components/public/check-my-claim/Home'
 import CmcAdvertisingDisclosure from '@/components/public/check-my-claim/AdvertisingDisclosure'
 import CmcPrivacyPolicy from '@/components/public/check-my-claim/PrivacyPolicy'
 import CmcTermsOfService from '@/components/public/check-my-claim/TermsOfService'
@@ -21,8 +20,14 @@ import CmcSb37List from '@/components/public/check-my-claim/Sb37List'
 
 // Map of normalized path → custom component for the check-my-claim brand.
 // Path comparison is case-insensitive (live site accepts /PartnerList and /partnerlist).
+//
+// '/' is INTENTIONALLY omitted so the Home page falls through to the Pages
+// collection and its body_blocks render via BlockRenderer. This is what makes
+// the /admin Pages editor and the public Home page share a single source of
+// truth — what you save in /admin renders for visitors. The bespoke
+// CheckMyClaimHome component is kept in the codebase as the historical
+// reference for the design but no longer wired to a route.
 const CMC_PAGES: Record<string, () => ReactNode> = {
-  '/': CheckMyClaimHome,
   '/partnerlist': CmcPartnerList,
   '/partners': CmcPartnerList,
   '/submitted': CmcSubmitted,
