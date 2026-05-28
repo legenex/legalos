@@ -9,6 +9,7 @@ import { EditPageForm } from './EditPageForm'
 import { PageLPBuilderApp } from '@/components/builder/page-builder/PageLPBuilderApp'
 import { TEMPLATE_KEYS } from '@/collections/SharedLegalTemplates'
 import { buildBrandsFromSites } from '@/lib/brand-map'
+import { bodyBlocksToLPSections } from '@/lib/builder/body-blocks-to-lp'
 
 export const dynamic = 'force-dynamic'
 
@@ -91,6 +92,18 @@ export default async function EditPageRoute({ params }: Props) {
       }
     })
 
+    // If lp_state already has sections, that's the source of truth. Otherwise
+    // import from the legacy body_blocks so the editor isn't empty on first
+    // open. Unknown blockTypes are silently dropped (the user can re-add them
+    // from the builder's Add panel); body_blocks is NOT mutated.
+    const existingSections = Array.isArray(lpState.sections)
+      ? (lpState.sections as Array<Record<string, unknown>>)
+      : []
+    const importedSections =
+      existingSections.length > 0
+        ? existingSections
+        : bodyBlocksToLPSections(page.body_blocks as Array<Record<string, unknown>>).sections
+
     const initial = {
       id: String(page.id),
       name: (page.title as string) || 'Untitled',
@@ -98,7 +111,7 @@ export default async function EditPageRoute({ params }: Props) {
       templateId: (lpState.templateId as string) || 'bold_modern',
       angle: (lpState.angle as string) || 'pain',
       isPublished: (page.status as string) === 'published',
-      sections: Array.isArray(lpState.sections) ? (lpState.sections as Array<Record<string, unknown>>) : [],
+      sections: importedSections,
     }
 
     return (
