@@ -75,7 +75,7 @@ export function PageRowMenu({ pageId, pageSlug, pageTitle, siteSlug }: Props) {
           className="min-w-[200px] rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface-2)] shadow-2xl overflow-hidden"
         >
           <Link
-            href={`/cms/collections/pages/${pageId}`}
+            href={`/admin/sites/${siteSlug}/pages/${pageId}`}
             onClick={() => setOpen(false)}
             className="w-full px-4 py-2.5 text-left text-[13px] text-white hover:bg-[var(--color-surface-3)] inline-flex items-center gap-2"
           >

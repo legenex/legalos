@@ -111,6 +111,74 @@ export async function createPage(args: {
   }
 }
 
+// Update an existing page from the branded /admin/ Edit Page form (metadata
+// only — body_blocks editing still happens in /cms for now).
+export async function updatePage(args: {
+  pageId: number | string
+  siteSlug: string
+  title: string
+  slug: string
+  status: string
+  template_key: string
+  uses_shared_template: boolean
+  meta_title?: string
+  meta_description?: string
+  og_image_url?: string
+}): Promise<Result> {
+  const user = await getCurrentUser()
+  if (!user) return { ok: false, error: 'unauthenticated' }
+
+  const title = (args.title || '').trim()
+  let slug = (args.slug || '').trim()
+  if (!title) return { ok: false, error: 'Title is required' }
+  if (!slug) return { ok: false, error: 'Slug is required' }
+  if (slug !== '/' && !slug.startsWith('/')) slug = '/' + slug
+
+  const payload = await getPayload({ config })
+  try {
+    const src = await payload.findByID({ collection: 'pages', id: args.pageId, overrideAccess: true })
+    if (!src) return { ok: false, error: 'page not found' }
+    const siteId = typeof src.site === 'object' ? src.site.id : src.site
+
+    // Slug uniqueness inside the site (excluding the current page itself).
+    const dup = await payload.find({
+      collection: 'pages',
+      where: {
+        and: [
+          { site: { equals: siteId } },
+          { slug: { equals: slug } },
+          { id: { not_equals: args.pageId } },
+        ],
+      },
+      limit: 1,
+      overrideAccess: true,
+    })
+    if (dup.docs.length > 0) return { ok: false, error: `Another page on this site already uses slug "${slug}".` }
+
+    await payload.update({
+      collection: 'pages',
+      id: args.pageId,
+      data: {
+        title,
+        slug,
+        status: args.status || 'draft',
+        template_key: args.template_key || 'custom',
+        uses_shared_template: args.template_key === 'custom' ? false : Boolean(args.uses_shared_template),
+        meta_title: args.meta_title?.trim() || null,
+        meta_description: args.meta_description?.trim() || null,
+        og_image_url: args.og_image_url?.trim() || null,
+      } as never,
+      user: user as never,
+      overrideAccess: false,
+    })
+    revalidatePath(`/admin/sites/${args.siteSlug}/pages`)
+    revalidatePath(`/admin/sites/${args.siteSlug}/pages/${args.pageId}`)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'update failed' }
+  }
+}
+
 export async function deletePage(args: { pageId: number | string; siteSlug: string }): Promise<Result> {
   const user = await getCurrentUser()
   if (!user) return { ok: false, error: 'unauthenticated' }

@@ -108,7 +108,7 @@ export default async function SitePagesPage({ params, searchParams }: Props) {
                   key={p.id}
                   className="grid grid-cols-[1.5fr_1.4fr_1.2fr_0.8fr_0.9fr_60px] px-5 py-3.5 items-center border-b border-[var(--color-border)] last:border-b-0 hover:bg-[var(--color-surface-2)] transition-colors"
                 >
-                  <Link href={`/cms/collections/pages/${p.id}`} className="text-white font-medium text-[14px] hover:underline truncate">
+                  <Link href={`/admin/sites/${slug}/pages/${p.id}`} className="text-white font-medium text-[14px] hover:underline truncate">
                     {p.title}
                   </Link>
                   <code className="text-[13px] text-[var(--color-ink-muted)] font-mono">/{p.slug.replace(/^\//, '')}</code>
