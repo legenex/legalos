@@ -31,6 +31,7 @@ import { LinkPickerField } from './LinkPicker'
 import { GoogleSerpPreview, OgPreviewCards } from './PageSettingsPreviews'
 import { savePageBodyBlocks } from '@/app/(app)/admin/sites/[slug]/pages/[id]/blocks-actions'
 import { rewriteSection } from '@/app/(app)/admin/sites/[slug]/pages/[id]/ai-rewrite-action'
+import { saveAsSiteDefault } from '@/app/(app)/admin/sites/[slug]/pages/[id]/site-defaults-action'
 
 const genId = () => `b_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 
@@ -607,6 +608,62 @@ const ViewportToggle = ({ viewport, onChange }) => (
     })}
   </div>
 )
+
+// ============================================================================
+// SAVE AS SITE DEFAULT — small row shown above the field editor when the
+// selected block is a nav_header or site_footer. Clicking persists the
+// current block (without its id) onto Sites.site_nav or Sites.site_footer
+// via the saveAsSiteDefault server action, so every page on the Site that
+// doesn't have its own nav/footer will auto-render this one.
+// ============================================================================
+const SaveAsSiteDefaultRow = ({ block, siteSlug, siteId, onToast }) => {
+  const [busy, setBusy] = useState(false)
+  const kind = block.blockType === 'nav_header' ? 'nav' : 'footer'
+  const label =
+    kind === 'nav'
+      ? 'Save as Site default nav (applies to every page)'
+      : 'Save as Site default footer (applies to every page)'
+  const run = async () => {
+    setBusy(true)
+    const res = await saveAsSiteDefault({ siteSlug, siteId, kind, block })
+    setBusy(false)
+    if (res.ok) {
+      onToast({
+        message:
+          kind === 'nav'
+            ? 'Saved as Site default nav. Every page that doesn’t have its own nav_header will now show this one.'
+            : 'Saved as Site default footer. Every page that doesn’t have its own site_footer will now show this one.',
+        type: 'success',
+      })
+    } else {
+      onToast({ message: res.error || 'Save failed', type: 'error' })
+    }
+  }
+  return (
+    <div
+      style={{
+        marginBottom: 12,
+        padding: 10,
+        background: T.bgElev,
+        border: `1px solid ${T.primary}40`,
+        borderRadius: 7,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 11, color: T.textMute, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>
+          Site default
+        </div>
+        <div style={{ fontSize: 12, color: T.text }}>{label}</div>
+      </div>
+      <Btn variant="primary" size="sm" icon={busy ? Loader2 : Save} onClick={run} disabled={busy}>
+        {busy ? 'Saving…' : 'Save'}
+      </Btn>
+    </div>
+  )
+}
 
 // ============================================================================
 // VISIBILITY ROW — per-section responsive visibility checkboxes shown in the
@@ -1863,6 +1920,14 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, si
                 block={selected}
                 onAccept={(next) => updateBlock(selected.id, { ...next, id: selected.id })}
               />
+              {selected.blockType === 'nav_header' || selected.blockType === 'site_footer' ? (
+                <SaveAsSiteDefaultRow
+                  block={selected}
+                  siteSlug={siteSlug}
+                  siteId={siteId}
+                  onToast={(t) => setToast(t)}
+                />
+              ) : null}
               <VisibilityRow
                 blockId={selected.id}
                 meta={blockMeta[selected.id] || {}}

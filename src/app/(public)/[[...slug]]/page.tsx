@@ -334,10 +334,30 @@ async function RenderPage({
   // Custom blocks path: substitute {{site.*}} server-side then dispatch.
   // Filter out blocks the page author has marked as hidden in the builder.
   const hidden = new Set(Array.isArray(page.hidden_blocks) ? page.hidden_blocks : [])
-  const visibleBlocks = ((page.body_blocks ?? []) as Block[]).filter(
+  const pageBlocks = ((page.body_blocks ?? []) as Block[]).filter(
     (b) => !b.id || !hidden.has(b.id),
   )
-  const renderedBlocks = deepRenderTemplateVars(visibleBlocks, site)
+
+  // Global nav + footer: if the page's body_blocks doesn't include a
+  // nav_header / site_footer, fall back to the Site's site_nav / site_footer
+  // global. Authors set these once per Site (via 'Save as Site default' on
+  // any nav_header / site_footer block) and every page gets the consistent
+  // chrome without duplicating it.
+  const hasNav = pageBlocks.some((b) => b.blockType === 'nav_header')
+  const hasFooter = pageBlocks.some((b) => b.blockType === 'site_footer')
+  const globalNav = (site as { site_nav?: Block | null }).site_nav
+  const globalFooter = (site as { site_footer?: Block | null }).site_footer
+  const blocksWithChrome: Block[] = [
+    ...(!hasNav && globalNav && (globalNav as Block).blockType === 'nav_header'
+      ? [{ ...(globalNav as Block), id: (globalNav as Block).id || 'site-nav' }]
+      : []),
+    ...pageBlocks,
+    ...(!hasFooter && globalFooter && (globalFooter as Block).blockType === 'site_footer'
+      ? [{ ...(globalFooter as Block), id: (globalFooter as Block).id || 'site-footer' }]
+      : []),
+  ]
+
+  const renderedBlocks = deepRenderTemplateVars(blocksWithChrome, site)
   const tc = await loadTrackingConfig(site.id)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>

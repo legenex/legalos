@@ -113,6 +113,22 @@ export const Sites: CollectionConfig = {
       ],
     },
     {
+      name: 'site_nav',
+      type: 'json',
+      admin: {
+        description:
+          'Global nav block (one body_blocks "nav_header" object). Auto-prepended to any page whose body_blocks does not already include a nav_header. Authored from the page builder by clicking "Save as Site default" on a nav_header block.',
+      },
+    },
+    {
+      name: 'site_footer',
+      type: 'json',
+      admin: {
+        description:
+          'Global footer block (one body_blocks "site_footer" object). Auto-appended to any page whose body_blocks does not already include a site_footer.',
+      },
+    },
+    {
       name: 'legal',
       type: 'group',
       admin: { description: 'Legal copy surfaced across funnels and footers.' },
