@@ -47,7 +47,11 @@ export default async function EditPageRoute({ params }: Props) {
   })
   const primaryHost = (dom.docs[0]?.host as string | undefined) || `${slug}.preview.legenex.com`
 
-  const usesBuilder = (page.template_key as string) === 'custom' && !page.uses_shared_template
+  // Any page that is NOT rendering a shared legal template gets the LP-style
+  // builder. template_key acts as a starter-template slot (custom/home/privacy
+  // /etc.) but the editing UX is unified across them, per direct user request:
+  // "the landing pages and site pages backend builder must be the same".
+  const usesBuilder = !page.uses_shared_template
 
   if (usesBuilder) {
     // Custom pages use the SAME backend builder as Landing Pages. The LP-shape
