@@ -27,6 +27,7 @@ import {
 } from '../ui'
 import { BlockRenderer } from '@/components/blocks/BlockRenderer'
 import { ImagePickerField } from './ImagePicker'
+import { LinkPickerField } from './LinkPicker'
 import { GoogleSerpPreview, OgPreviewCards } from './PageSettingsPreviews'
 import { savePageBodyBlocks } from '@/app/(app)/admin/sites/[slug]/pages/[id]/blocks-actions'
 import { rewriteSection } from '@/app/(app)/admin/sites/[slug]/pages/[id]/ai-rewrite-action'
@@ -430,6 +431,89 @@ const AIRewritePanel = ({ block, onAccept }) => {
 }
 
 // ============================================================================
+// SECTION CONTEXT MENU — right-click on any section row to get a quick menu
+// (Duplicate / Move to top / Move to bottom / Hide-Show / Delete). Position
+// follows the cursor; clicking outside or pressing Escape closes it.
+// ============================================================================
+const SectionContextMenu = ({ x, y, items, onClose }) => {
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose()
+    }
+    const onClick = () => onClose()
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('mousedown', onClick)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('mousedown', onClick)
+    }
+  }, [onClose])
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: y,
+        left: x,
+        zIndex: 300,
+        minWidth: 200,
+        background: T.bg,
+        border: `1px solid ${T.border}`,
+        borderRadius: 8,
+        boxShadow: '0 20px 50px rgba(0,0,0,0.55)',
+        padding: 4,
+      }}
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      {items.map((it, i) => {
+        if (it.separator) {
+          return (
+            <div
+              key={`sep-${i}`}
+              style={{ height: 1, background: T.border, margin: '4px 6px' }}
+            />
+          )
+        }
+        const Icon = it.icon
+        return (
+          <button
+            key={it.id || i}
+            onClick={() => {
+              it.onClick()
+              onClose()
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              width: '100%',
+              background: 'transparent',
+              border: 'none',
+              color: it.danger ? T.danger : T.text,
+              padding: '7px 10px',
+              cursor: 'pointer',
+              textAlign: 'left',
+              borderRadius: 5,
+              fontSize: 12.5,
+            }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = T.bgElev)}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
+          >
+            {Icon ? <Icon size={13} /> : <span style={{ width: 13 }} />}
+            <span style={{ flex: 1 }}>{it.label}</span>
+            {it.shortcut ? (
+              <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 10, color: T.textLow }}>
+                {it.shortcut}
+              </span>
+            ) : null}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ============================================================================
 // VIEWPORT TOGGLE — three buttons in the top bar that constrain the canvas
 // max-width to a rough desktop / tablet / mobile width. This is an
 // *approximate* preview — the underlying CSS @media queries still fire based
@@ -718,7 +802,7 @@ const FormFieldsEditor = ({ items, onChange }) => {
 // into the block. They render only the fields that block type owns.
 // ============================================================================
 const Ed = {
-  nav_header: (b, set) => (
+  nav_header: (b, set, ctx) => (
     <>
       <Label>Links</Label>
       <ArrayEditor
@@ -728,7 +812,10 @@ const Ed = {
         render={(it, u) => (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             <div><Label>Label</Label><Input value={it.label || ''} onChange={(e) => u({ label: e.target.value })} /></div>
-            <div><Label>Href</Label><Input mono value={it.href || ''} onChange={(e) => u({ href: e.target.value })} /></div>
+            <div>
+              <Label>Href</Label>
+              <LinkPickerField label="Href" value={it.href || ''} onChange={(v) => u({ href: v })} sitePages={ctx.sitePages} />
+            </div>
           </div>
         )}
         addLabel="Add link"
@@ -736,7 +823,7 @@ const Ed = {
       <Label style={{ marginTop: 12 }}>CTA label</Label>
       <Input value={b.cta_label || ''} onChange={(e) => set({ cta_label: e.target.value })} />
       <Label>CTA href</Label>
-      <Input mono value={b.cta_href || ''} onChange={(e) => set({ cta_href: e.target.value })} />
+      <LinkPickerField label="CTA href" value={b.cta_href || ''} onChange={(v) => set({ cta_href: v })} sitePages={ctx.sitePages} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
         <input id="np" type="checkbox" checked={b.show_phone !== false} onChange={(e) => set({ show_phone: e.target.checked })} />
         <label htmlFor="np" style={{ fontSize: 12.5, color: T.text }}>Show phone number</label>
@@ -750,9 +837,15 @@ const Ed = {
       <Label>Sub</Label><Textarea rows={3} value={b.sub || ''} onChange={(e) => set({ sub: e.target.value })} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
         <div><Label>Primary CTA label</Label><Input value={b.primary_cta_label || ''} onChange={(e) => set({ primary_cta_label: e.target.value })} /></div>
-        <div><Label>Primary CTA href</Label><Input mono value={b.primary_cta_href || ''} onChange={(e) => set({ primary_cta_href: e.target.value })} /></div>
+        <div>
+          <Label>Primary CTA href</Label>
+          <LinkPickerField label="Primary CTA href" value={b.primary_cta_href || ''} onChange={(v) => set({ primary_cta_href: v })} sitePages={ctx.sitePages} />
+        </div>
         <div><Label>Secondary CTA label</Label><Input value={b.secondary_cta_label || ''} onChange={(e) => set({ secondary_cta_label: e.target.value })} /></div>
-        <div><Label>Secondary CTA href</Label><Input mono value={b.secondary_cta_href || ''} onChange={(e) => set({ secondary_cta_href: e.target.value })} /></div>
+        <div>
+          <Label>Secondary CTA href</Label>
+          <LinkPickerField label="Secondary CTA href" value={b.secondary_cta_href || ''} onChange={(v) => set({ secondary_cta_href: v })} sitePages={ctx.sitePages} />
+        </div>
       </div>
       <ImagePickerField
         label="Background image"
@@ -934,21 +1027,23 @@ const Ed = {
       <Label>Caption</Label><Input value={b.caption || ''} onChange={(e) => set({ caption: e.target.value })} />
     </>
   ),
-  cta: (b, set) => (
+  cta: (b, set, ctx) => (
     <>
       <Label>Heading</Label><Input value={b.heading || ''} onChange={(e) => set({ heading: e.target.value })} />
       <Label>Sub</Label><Textarea rows={2} value={b.sub || ''} onChange={(e) => set({ sub: e.target.value })} />
       <Label>Button label</Label><Input value={b.label || ''} onChange={(e) => set({ label: e.target.value })} />
-      <Label>Button href</Label><Input mono value={b.href || ''} onChange={(e) => set({ href: e.target.value })} />
+      <Label>Button href</Label>
+      <LinkPickerField label="Button href" value={b.href || ''} onChange={(v) => set({ href: v })} sitePages={ctx.sitePages} />
     </>
   ),
-  final_cta: (b, set) => (
+  final_cta: (b, set, ctx) => (
     <>
       <Label>Eyebrow</Label><Input value={b.eyebrow || ''} onChange={(e) => set({ eyebrow: e.target.value })} />
       <Label>Heading</Label><Input value={b.heading || ''} onChange={(e) => set({ heading: e.target.value })} />
       <Label>Sub</Label><Textarea rows={2} value={b.sub || ''} onChange={(e) => set({ sub: e.target.value })} />
       <Label>Primary CTA label</Label><Input value={b.primary_cta_label || ''} onChange={(e) => set({ primary_cta_label: e.target.value })} />
-      <Label>Primary CTA href</Label><Input mono value={b.primary_cta_href || ''} onChange={(e) => set({ primary_cta_href: e.target.value })} />
+      <Label>Primary CTA href</Label>
+      <LinkPickerField label="Primary CTA href" value={b.primary_cta_href || ''} onChange={(v) => set({ primary_cta_href: v })} sitePages={ctx.sitePages} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
         <input id="fcp" type="checkbox" checked={b.show_phone !== false} onChange={(e) => set({ show_phone: e.target.checked })} />
         <label htmlFor="fcp" style={{ fontSize: 12.5, color: T.text }}>Show phone number</label>
@@ -1113,7 +1208,7 @@ const AddBlockModal = ({ open, onPick, onClose }) => {
 // ============================================================================
 // MAIN APP
 // ============================================================================
-export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, initial }) {
+export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, sitePages = [], initial }) {
   const router = useRouter()
   const [title, setTitle] = useState(initial.title || 'Untitled')
   const [slug, setSlug] = useState(initial.slug || '/')
@@ -1141,6 +1236,8 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
   const [saving, setSaving] = useState(false)
   const [dragId, setDragId] = useState(null)
   const [dragOverId, setDragOverId] = useState(null)
+  // { x, y, blockId } — null means closed.
+  const [ctxMenu, setCtxMenu] = useState(null)
   // 'desktop' | 'tablet' | 'mobile' — drives the canvas max-width so the
   // user can see roughly how a page will look at each breakpoint.
   const [viewport, setViewport] = useState('desktop')
@@ -1244,6 +1341,19 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
     bump({ blocks: next })
   }
 
+  const moveBlockTo = (id, where) => {
+    const idx = blocks.findIndex((b) => b.id === id)
+    if (idx === -1) return
+    if (where === 'top' && idx === 0) return
+    if (where === 'bottom' && idx === blocks.length - 1) return
+    const next = [...blocks]
+    const [moved] = next.splice(idx, 1)
+    if (where === 'top') next.unshift(moved)
+    else next.push(moved)
+    setBlocks(next)
+    bump({ blocks: next })
+  }
+
   const duplicateBlock = (id) => {
     const idx = blocks.findIndex((b) => b.id === id)
     if (idx === -1) return
@@ -1301,6 +1411,45 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
     setBlocks(next)
     bump({ blocks: next })
   }
+
+  // Keyboard shortcuts:
+  //   /      open Add Section modal (when not typing in a field)
+  //   Esc    deselect / close modal
+  //   Cmd+S / Ctrl+S → force-save (auto-save runs in 600ms anyway, but
+  //          authors hit Cmd+S out of habit; we ack with a toast).
+  useEffect(() => {
+    const isTypingTarget = (t) => {
+      if (!t) return false
+      const tag = (t as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+      if ((t as HTMLElement).isContentEditable) return true
+      return false
+    }
+    const onKey = (e: KeyboardEvent) => {
+      const cmdOrCtrl = e.metaKey || e.ctrlKey
+      if (cmdOrCtrl && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault()
+        // Force an immediate save by clearing the debounce + calling persist
+        // with the current state. The next render will fire again, idempotently.
+        if (saveTimer.current) clearTimeout(saveTimer.current)
+        bump({})
+        setToast({ message: 'Saved.', type: 'success' })
+        return
+      }
+      if (e.key === '/' && !cmdOrCtrl && !e.altKey && !isTypingTarget(e.target)) {
+        e.preventDefault()
+        setAddOpen(true)
+        return
+      }
+      if (e.key === 'Escape') {
+        if (addOpen) setAddOpen(false)
+        else if (ctxMenu) setCtxMenu(null)
+        else if (selectedId) setSelectedId(null)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [addOpen, selectedId, ctxMenu])
 
   const handleBack = () => router.push(`/admin/sites/${siteSlug}/pages`)
   const handlePreview = () => {
@@ -1386,6 +1535,11 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
                   onDragOver={(e) => handleDragOver(e, b.id)}
                   onDragEnd={handleDragEnd}
                   onDrop={(e) => handleDrop(e, b.id)}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    setSelectedId(b.id)
+                    setCtxMenu({ x: e.clientX, y: e.clientY, blockId: b.id })
+                  }}
                   style={{
                     padding: '8px 8px 8px 4px',
                     backgroundColor: active ? T.bgElev2 : T.bgElev,
@@ -1548,7 +1702,7 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
                 onPatch={(patch) => setBlockMetaFor(selected.id, patch)}
               />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <BlockEditor block={selected} onChange={(next) => updateBlock(selected.id, next)} ctx={{ siteSlug, siteId }} />
+                <BlockEditor block={selected} onChange={(next) => updateBlock(selected.id, next)} ctx={{ siteSlug, siteId, sitePages }} />
               </div>
             </>
           ) : (
@@ -1634,6 +1788,35 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
       </div>
 
       <AddBlockModal open={addOpen} onClose={() => setAddOpen(false)} onPick={addBlock} />
+      {ctxMenu ? (
+        (() => {
+          const target = blocks.find((b) => b.id === ctxMenu.blockId)
+          if (!target) return null
+          const isHidden = hiddenBlocks.includes(target.id)
+          const idx = blocks.findIndex((b) => b.id === target.id)
+          return (
+            <SectionContextMenu
+              x={ctxMenu.x}
+              y={ctxMenu.y}
+              onClose={() => setCtxMenu(null)}
+              items={[
+                { id: 'dup', label: 'Duplicate', icon: Copy, onClick: () => duplicateBlock(target.id) },
+                { id: 'top', label: 'Move to top', icon: MoveUp, onClick: () => moveBlockTo(target.id, 'top') },
+                { id: 'bot', label: 'Move to bottom', icon: MoveDown, onClick: () => moveBlockTo(target.id, 'bottom') },
+                { separator: true },
+                {
+                  id: 'vis',
+                  label: isHidden ? 'Show on public site' : 'Hide on public site',
+                  icon: isHidden ? Eye : EyeOff,
+                  onClick: () => toggleHidden(target.id),
+                },
+                { separator: true },
+                { id: 'del', label: 'Delete section', icon: Trash2, danger: true, onClick: () => deleteBlock(target.id) },
+              ]}
+            />
+          )
+        })()
+      ) : null}
       <Toast message={toast?.message} type={toast?.type} onDismiss={() => setToast(null)} />
     </div>
   )

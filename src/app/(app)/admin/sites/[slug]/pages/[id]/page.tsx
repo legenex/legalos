@@ -39,6 +39,23 @@ export default async function EditPageRoute({ params }: Props) {
   })
   const primaryHost = (dom.docs[0]?.host as string | undefined) || `${slug}.preview.legenex.com`
 
+  // Site pages list — feeds the LinkPicker in the builder so href fields
+  // can offer the Site's own pages as a dropdown instead of asking the
+  // author to type a slug from memory.
+  const sitePagesRes = await payload.find({
+    collection: 'pages',
+    where: { site: { equals: site.id } },
+    limit: 200,
+    sort: 'slug',
+    overrideAccess: true,
+  })
+  const sitePages = sitePagesRes.docs.map((p) => ({
+    id: String(p.id),
+    title: (p.title as string) || '(untitled)',
+    slug: (p.slug as string) || '/',
+    status: (p.status as string) || 'draft',
+  }))
+
   // Every Page edit opens in the body_blocks builder, including pages that
   // currently render via a shared legal template. If body_blocks is empty
   // (the page has only ever rendered the shared template), the builder
@@ -80,6 +97,7 @@ export default async function EditPageRoute({ params }: Props) {
       siteSlug={slug}
       siteId={site.id as number}
       primaryHost={primaryHost}
+      sitePages={sitePages}
       initial={{
         title: (page.title as string) || '',
         slug: (page.slug as string) || '/',
