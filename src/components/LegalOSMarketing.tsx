@@ -187,7 +187,7 @@ function Hero() {
       <div className="relative max-w-[1280px] mx-auto px-5 sm:px-6 pt-16 sm:pt-20 md:pt-24 pb-12 text-center">
         <div className="fade-up">
           <Pill tone="cyan">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--color-info)] mr-2 pulse-glow" />
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#5DC1E2] mr-2 pulse-glow" />
             AI Operating System for Legal Brand Creation
           </Pill>
         </div>
@@ -386,7 +386,7 @@ function AboutSection() {
 
       <div className="relative max-w-[1280px] mx-auto px-5 sm:px-6">
         <header className="text-center max-w-[760px] mx-auto">
-          <Pill tone="red">● ABOUT LEGALOS</Pill>
+          <Pill tone="cyan">● ABOUT LEGALOS</Pill>
           <h2 className="mt-5 sm:mt-6 text-[32px] sm:text-[44px] md:text-[52px] font-bold tracking-tight text-white leading-tight">
             One platform. <span className="brand-gradient-text">Every brand system.</span>
           </h2>
@@ -604,7 +604,7 @@ function TechSection() {
 
       <div className="relative max-w-[1280px] mx-auto px-5 sm:px-6">
         <header className="text-center max-w-[760px] mx-auto">
-          <Pill tone="cyan">● TECHNOLOGY</Pill>
+          <Pill tone="red">● TECHNOLOGY</Pill>
           <h2 className="mt-5 sm:mt-6 text-[32px] sm:text-[44px] md:text-[52px] font-bold tracking-tight text-white leading-tight">
             <span className="brand-gradient-text">AI-driven</span> from input to launch
           </h2>
@@ -909,9 +909,9 @@ function Footer() {
 /* -------------------------------------------------------------------------- */
 
 function Pill({ tone, children }: { tone: 'red' | 'cyan'; children: React.ReactNode }) {
-  const color = tone === 'red' ? '#FF5C75' : '#5CC1E1'
-  const bg = tone === 'red' ? 'rgba(255,92,117,0.08)' : 'rgba(92,193,225,0.08)'
-  const border = tone === 'red' ? 'rgba(255,92,117,0.30)' : 'rgba(92,193,225,0.30)'
+  const color = tone === 'red' ? '#FF5C75' : '#5DC1E2'
+  const bg = tone === 'red' ? 'rgba(255,92,117,0.08)' : 'rgba(93,193,226,0.08)'
+  const border = tone === 'red' ? 'rgba(255,92,117,0.30)' : 'rgba(93,193,226,0.30)'
   return (
     <span
       className="inline-flex items-center text-[11px] font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-full"
