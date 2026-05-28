@@ -4,18 +4,18 @@
 
 export const BESPOKE_CSS = `
 /* High-specificity overrides for site-shell brand vars from PublicLayout. */
-html.site-shell .hero h1, html.site-shell .hero__heading,
-html.site-shell .hero__heading .hero__heading-gradient { color: #ffffff; }
-html.site-shell .hero__heading .hero__heading-gradient { background: linear-gradient(90deg,#4ba8ee,#0486e9); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-html.site-shell .hero__sub { color: #d1d5db; }
-html.site-shell .hero__cta-sub { color: #9ca3af; }
-html.site-shell .hero__pill-text { color: rgba(255,255,255,.80); }
-html.site-shell .trust-banner__label { color: #ffffff; }
-html.site-shell .panel-dark, html.site-shell .panel-dark p, html.site-shell .panel-dark h1, html.site-shell .panel-dark h2, html.site-shell .panel-dark h3, html.site-shell .panel-dark span { color: #ffffff; }
-html.site-shell .btn-nav, html.site-shell .btn-hero, html.site-shell a.btn-nav, html.site-shell a.btn-hero { color: #ffffff; }
-html.site-shell .footer, html.site-shell .footer h1, html.site-shell .footer h2, html.site-shell .footer h3, html.site-shell .footer__heading, html.site-shell .footer__logo + .footer__desc { color: #ffffff; }
-html.site-shell .footer .footer__link, html.site-shell .footer .footer__contact-row, html.site-shell .footer .footer__policy-link { color: rgba(255,255,255,.70); }
-html.site-shell .footer .footer__link:hover, html.site-shell .footer .footer__contact-row:hover, html.site-shell .footer .footer__policy-link:hover { color: var(--color-blue-start); }
+html.site-shell .hero h1, .legalos-builder-canvas .hero h1, html.site-shell .hero__heading, .legalos-builder-canvas .hero__heading,
+html.site-shell .hero__heading .hero__heading-gradient , .legalos-builder-canvas .hero__heading .hero__heading-gradient { color: #ffffff; }
+html.site-shell .hero__heading .hero__heading-gradient , .legalos-builder-canvas .hero__heading .hero__heading-gradient { background: linear-gradient(90deg,#4ba8ee,#0486e9); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+html.site-shell .hero__sub , .legalos-builder-canvas .hero__sub { color: #d1d5db; }
+html.site-shell .hero__cta-sub , .legalos-builder-canvas .hero__cta-sub { color: #9ca3af; }
+html.site-shell .hero__pill-text , .legalos-builder-canvas .hero__pill-text { color: rgba(255,255,255,.80); }
+html.site-shell .trust-banner__label , .legalos-builder-canvas .trust-banner__label { color: #ffffff; }
+html.site-shell .panel-dark, .legalos-builder-canvas .panel-dark, html.site-shell .panel-dark p, .legalos-builder-canvas .panel-dark p, html.site-shell .panel-dark h1, .legalos-builder-canvas .panel-dark h1, html.site-shell .panel-dark h2, .legalos-builder-canvas .panel-dark h2, html.site-shell .panel-dark h3, .legalos-builder-canvas .panel-dark h3, html.site-shell .panel-dark span , .legalos-builder-canvas .panel-dark span { color: #ffffff; }
+html.site-shell .btn-nav, .legalos-builder-canvas .btn-nav, html.site-shell .btn-hero, .legalos-builder-canvas .btn-hero, html.site-shell a.btn-nav, .legalos-builder-canvas a.btn-nav, html.site-shell a.btn-hero , .legalos-builder-canvas a.btn-hero { color: #ffffff; }
+html.site-shell .footer, .legalos-builder-canvas .footer, html.site-shell .footer h1, .legalos-builder-canvas .footer h1, html.site-shell .footer h2, .legalos-builder-canvas .footer h2, html.site-shell .footer h3, .legalos-builder-canvas .footer h3, html.site-shell .footer__heading, .legalos-builder-canvas .footer__heading, html.site-shell .footer__logo + .footer__desc , .legalos-builder-canvas .footer__logo + .footer__desc { color: #ffffff; }
+html.site-shell .footer .footer__link, .legalos-builder-canvas .footer .footer__link, html.site-shell .footer .footer__contact-row, .legalos-builder-canvas .footer .footer__contact-row, html.site-shell .footer .footer__policy-link , .legalos-builder-canvas .footer .footer__policy-link { color: rgba(255,255,255,.70); }
+html.site-shell .footer .footer__link:hover, .legalos-builder-canvas .footer .footer__link:hover, html.site-shell .footer .footer__contact-row:hover, .legalos-builder-canvas .footer .footer__contact-row:hover, html.site-shell .footer .footer__policy-link:hover , .legalos-builder-canvas .footer .footer__policy-link:hover { color: var(--color-blue-start); }
 
 :root {
   --color-navy: #111E30;
@@ -35,10 +35,10 @@ html.site-shell .footer .footer__link:hover, html.site-shell .footer .footer__co
   --radius-pill: 9999px;
 }
 
-html.site-shell, html.site-shell body { background: #ffffff; color: var(--color-navy); margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.5; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-html.site-shell * { box-sizing: border-box; }
-html.site-shell h1, html.site-shell h2, html.site-shell h3, html.site-shell h4, html.site-shell h5, html.site-shell h6 { line-height: 1.1; color: var(--color-navy); font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-html.site-shell a { color: inherit; text-decoration: none; }
+html.site-shell, .legalos-builder-canvas, html.site-shell body , .legalos-builder-canvas body { background: #ffffff; color: var(--color-navy); margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.5; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+html.site-shell * , .legalos-builder-canvas * { box-sizing: border-box; }
+html.site-shell h1, .legalos-builder-canvas h1, html.site-shell h2, .legalos-builder-canvas h2, html.site-shell h3, .legalos-builder-canvas h3, html.site-shell h4, .legalos-builder-canvas h4, html.site-shell h5, .legalos-builder-canvas h5, html.site-shell h6 , .legalos-builder-canvas h6 { line-height: 1.1; color: var(--color-navy); font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+html.site-shell a , .legalos-builder-canvas a { color: inherit; text-decoration: none; }
 
 button { cursor: pointer; background: none; border: none; font: inherit; color: inherit; }
 img, video { display: block; max-width: 100%; height: auto; }
