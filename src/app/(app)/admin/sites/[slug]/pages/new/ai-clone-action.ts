@@ -16,13 +16,12 @@ const HERO_SCHEMA = z.object({
   blockType: z.literal('hero'),
   eyebrow: z.string().optional(),
   heading: z.string(),
-  heading_gradient: z.string().optional(),
   sub: z.string().optional(),
   primary_cta_label: z.string().optional(),
   primary_cta_href: z.string().optional(),
-  cta_sub: z.string().optional(),
+  secondary_cta_label: z.string().optional(),
+  secondary_cta_href: z.string().optional(),
   image_url: z.string().optional(),
-  pills: z.array(z.object({ text: z.string() })).optional(),
 })
 
 const NAV_HEADER_SCHEMA = z.object({
@@ -219,7 +218,7 @@ export async function createPageFromUrl(args: {
         '',
         'Mapping rules:',
         '- Top navigation/header bar -> nav_header (links array, cta_label, cta_href).',
-        '- Main above-the-fold hero -> hero. If the headline has a visually accented second line (color/gradient/bigger), put the first line in `heading` and the accented line in `heading_gradient`. Set `image_url` only if the hero uses an image background or right-side photo.',
+        '- Main above-the-fold hero -> hero. Put the full headline (including any accented second line) into `heading`. Set `image_url` only if the hero uses an image background or right-side photo.',
         '- A strip of small trust badges right under the hero -> trust_strip with one item per badge (value = the wordmark text).',
         '- "Our services / We specialize in" 3-4 up cards -> services_grid.',
         '- Numbered or stepped process explainer (1/2/3) -> how_it_works.',
