@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { ChevronLeft } from 'lucide-react'
 import { EditPageForm } from './EditPageForm'
+import { PageBuilderApp } from '@/components/builder/page-builder/PageBuilderApp'
 import { TEMPLATE_KEYS } from '@/collections/SharedLegalTemplates'
 
 export const dynamic = 'force-dynamic'
@@ -47,6 +48,31 @@ export default async function EditPageRoute({ params }: Props) {
   ]
 
   const blockCount = Array.isArray(page.body_blocks) ? (page.body_blocks as unknown[]).length : 0
+
+  // Custom pages get the LP-style PageBuilder; legal-template pages stay on the
+  // simpler metadata form (they don't author body_blocks).
+  const usesBuilder = (page.template_key as string) === 'custom' && !page.uses_shared_template
+  if (usesBuilder) {
+    return (
+      <PageBuilderApp
+        pageId={page.id as number}
+        siteSlug={slug}
+        primaryHost={primaryHost}
+        initial={{
+          title: (page.title as string) || '',
+          slug: (page.slug as string) || '',
+          status: (page.status as string) || 'draft',
+          template_key: (page.template_key as string) || 'custom',
+          visual_template: (page.visual_template as string) || 'bold_modern',
+          uses_shared_template: Boolean(page.uses_shared_template),
+          meta_title: (page.meta_title as string | null) || '',
+          meta_description: (page.meta_description as string | null) || '',
+          og_image_url: (page.og_image_url as string | null) || '',
+          body_blocks: (page.body_blocks as Array<Record<string, unknown>>) || [],
+        }}
+      />
+    )
+  }
 
   return (
     <div className="px-10 py-8 max-w-[820px]">

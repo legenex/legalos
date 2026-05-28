@@ -342,6 +342,22 @@ export const Pages: CollectionConfig = {
       ...bodyBlocks,
       admin: { condition: (_, siblingData) => !siblingData.uses_shared_template || siblingData.template_key === 'custom' },
     },
+    {
+      // Visual template for the branded /admin/ page builder when
+      // template_key === 'custom'. Controls canvas color, typography, and
+      // accent treatment in the live preview. Ignored when rendering a shared
+      // legal template.
+      name: 'visual_template',
+      type: 'select',
+      defaultValue: 'bold_modern',
+      options: [
+        { label: 'Bold Modern', value: 'bold_modern' },
+        { label: 'Classic Authority', value: 'classic_authority' },
+        { label: 'Editorial Investigation', value: 'editorial_investigation' },
+        { label: 'Urgent Streamlined', value: 'urgent_streamlined' },
+      ],
+      admin: { condition: (_, siblingData) => siblingData.template_key === 'custom' },
+    },
     { name: 'meta_title', type: 'text' },
     { name: 'meta_description', type: 'textarea' },
     { name: 'og_image_url', type: 'text' },
