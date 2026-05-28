@@ -22,6 +22,7 @@ import { Leads } from './collections/Leads'
 import { BlogPosts } from './collections/BlogPosts'
 import { Numbers } from './collections/Numbers'
 import { TrackingConfigs } from './collections/TrackingConfigs'
+import { Media } from './collections/Media'
 import { AuditLog } from './collections/AuditLog'
 import { IntegrationConfig } from './globals/IntegrationConfig'
 
@@ -66,6 +67,7 @@ export default buildConfig({
     BlogPosts,
     Numbers,
     TrackingConfigs,
+    Media,
     AuditLog,
   ],
   globals: [IntegrationConfig],

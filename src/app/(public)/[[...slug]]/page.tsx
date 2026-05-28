@@ -9,7 +9,6 @@ import { resolvePhoneForPath } from '@/lib/resolve-phone'
 import LegalOSMarketing from '@/components/LegalOSMarketing'
 import { BlockRenderer, type Block, type SiteForRender } from '@/components/blocks/BlockRenderer'
 import { SiteScripts, type TrackingConfigShape } from '@/components/public/SiteScripts'
-import CheckMyClaimHome from '@/components/public/check-my-claim/Home'
 import CmcAdvertisingDisclosure from '@/components/public/check-my-claim/AdvertisingDisclosure'
 import CmcPrivacyPolicy from '@/components/public/check-my-claim/PrivacyPolicy'
 import CmcTermsOfService from '@/components/public/check-my-claim/TermsOfService'
@@ -21,8 +20,14 @@ import CmcSb37List from '@/components/public/check-my-claim/Sb37List'
 
 // Map of normalized path → custom component for the check-my-claim brand.
 // Path comparison is case-insensitive (live site accepts /PartnerList and /partnerlist).
+//
+// '/' is INTENTIONALLY omitted so the Home page falls through to the Pages
+// collection and its body_blocks render via BlockRenderer. This is what makes
+// the /admin Pages editor and the public Home page share a single source of
+// truth — what you save in /admin renders for visitors. The bespoke
+// CheckMyClaimHome component is kept in the codebase as the historical
+// reference for the design but no longer wired to a route.
 const CMC_PAGES: Record<string, () => ReactNode> = {
-  '/': CheckMyClaimHome,
   '/partnerlist': CmcPartnerList,
   '/partners': CmcPartnerList,
   '/submitted': CmcSubmitted,
@@ -169,6 +174,22 @@ export default async function PublicCatchAll({ params }: Props) {
     }
   }
 
+  // Pages are visible publicly if status='published', OR if status='scheduled'
+  // and publish_at has already passed. Captured once so the Pages + redirect
+  // queries below stay terse.
+  const nowIso = new Date().toISOString()
+  const publishedOrLive = {
+    or: [
+      { status: { equals: 'published' } },
+      {
+        and: [
+          { status: { equals: 'scheduled' } },
+          { publish_at: { less_than_equal: nowIso } },
+        ],
+      },
+    ],
+  }
+
   // 1. Look for an explicit Page that matches this path.
   const slugVariants = [path, path.replace(/^\//, '')]
   const explicit = await payload.find({
@@ -176,7 +197,7 @@ export default async function PublicCatchAll({ params }: Props) {
     where: {
       and: [
         { site: { equals: siteId } },
-        { status: { equals: 'published' } },
+        publishedOrLive,
         { slug: { in: slugVariants } },
       ],
     },
@@ -194,7 +215,7 @@ export default async function PublicCatchAll({ params }: Props) {
     where: {
       and: [
         { site: { equals: siteId } },
-        { status: { equals: 'published' } },
+        publishedOrLive,
         { 'slug_redirects.from': { in: slugVariants } },
       ],
     },
@@ -275,6 +296,9 @@ type RenderPageDoc = {
   shared_template_overrides?: Record<string, string> | null
   title: string
   body_blocks?: unknown[]
+  hidden_blocks?: string[] | null
+  block_meta?: Record<string, { hide_mobile?: boolean; hide_desktop?: boolean }> | null
+  schema_json?: Record<string, unknown> | null
 }
 
 async function RenderPage({
@@ -308,14 +332,46 @@ async function RenderPage({
   }
 
   // Custom blocks path: substitute {{site.*}} server-side then dispatch.
-  const blocks = (page.body_blocks ?? []) as Block[]
-  const renderedBlocks = deepRenderTemplateVars(blocks, site)
+  // Filter out blocks the page author has marked as hidden in the builder.
+  const hidden = new Set(Array.isArray(page.hidden_blocks) ? page.hidden_blocks : [])
+  const pageBlocks = ((page.body_blocks ?? []) as Block[]).filter(
+    (b) => !b.id || !hidden.has(b.id),
+  )
+
+  // Global nav + footer: if the page's body_blocks doesn't include a
+  // nav_header / site_footer, fall back to the Site's globals. Authors set
+  // these once per Site (via 'Save as Site default' on any nav_header /
+  // site_footer block); we stash them inside brand_identity to avoid a
+  // schema migration that was breaking prod.
+  const hasNav = pageBlocks.some((b) => b.blockType === 'nav_header')
+  const hasFooter = pageBlocks.some((b) => b.blockType === 'site_footer')
+  const bi = ((site as { brand_identity?: Record<string, unknown> | null }).brand_identity || {}) as Record<string, unknown>
+  const globalNav = bi.site_nav as Block | undefined
+  const globalFooter = bi.site_footer as Block | undefined
+  const blocksWithChrome: Block[] = [
+    ...(!hasNav && globalNav && (globalNav as Block).blockType === 'nav_header'
+      ? [{ ...(globalNav as Block), id: (globalNav as Block).id || 'site-nav' }]
+      : []),
+    ...pageBlocks,
+    ...(!hasFooter && globalFooter && (globalFooter as Block).blockType === 'site_footer'
+      ? [{ ...(globalFooter as Block), id: (globalFooter as Block).id || 'site-footer' }]
+      : []),
+  ]
+
+  const renderedBlocks = deepRenderTemplateVars(blocksWithChrome, site)
   const tc = await loadTrackingConfig(site.id)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <SiteScripts tc={tc} hasForm={hasLeadFormBlock(renderedBlocks)} />
+      {page.schema_json ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(page.schema_json) }}
+        />
+      ) : null}
       <BlockRenderer
         blocks={renderedBlocks}
+        blockMeta={page.block_meta ?? undefined}
         ctx={{
           site: site as SiteForRender,
           phone: { display: phone.display, tel: phone.tel },

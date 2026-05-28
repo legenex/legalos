@@ -26,6 +26,11 @@ const Body = z.object({
   source_entity_id: z.string().optional(),
   test_capture: z.boolean().optional(),
   contact: ContactSchema,
+  // Arbitrary key/value blob for custom lead_form fields the page author added
+  // beyond the canonical contact set (case_type, accident_date, agreed_to_tcpa,
+  // etc.). Stored as JSON on the lead row by the pipeline. Optional so legacy
+  // hardcoded forms keep working unchanged.
+  extra: z.record(z.unknown()).optional(),
   quiz_answers: z.record(z.unknown()).optional(),
   attribution: z.record(z.unknown()).optional(),
   trustedform_cert_url: z.string().optional(),

@@ -239,6 +239,110 @@ const bodyBlocks: Field = {
       ],
     },
     {
+      slug: 'video',
+      fields: [
+        { name: 'heading', type: 'text' },
+        {
+          name: 'provider',
+          type: 'select',
+          defaultValue: 'youtube',
+          options: [
+            { label: 'YouTube', value: 'youtube' },
+            { label: 'Vimeo', value: 'vimeo' },
+            { label: 'Direct URL (mp4 / iframe)', value: 'url' },
+          ],
+        },
+        {
+          name: 'video_id',
+          type: 'text',
+          required: true,
+          admin: {
+            description:
+              'YouTube/Vimeo id OR a full URL — the renderer parses both. e.g. dQw4w9WgXcQ, https://www.youtube.com/watch?v=dQw4w9WgXcQ, or https://example.com/file.mp4',
+          },
+        },
+        {
+          name: 'aspect_ratio',
+          type: 'select',
+          defaultValue: '16:9',
+          options: [
+            { label: '16:9 (widescreen)', value: '16:9' },
+            { label: '4:3 (classic)', value: '4:3' },
+            { label: '1:1 (square)', value: '1:1' },
+          ],
+        },
+        { name: 'caption', type: 'text' },
+      ],
+    },
+    {
+      slug: 'gallery',
+      fields: [
+        { name: 'heading', type: 'text' },
+        {
+          name: 'columns',
+          type: 'select',
+          defaultValue: '3',
+          options: [
+            { label: '2 columns', value: '2' },
+            { label: '3 columns', value: '3' },
+            { label: '4 columns', value: '4' },
+          ],
+        },
+        {
+          name: 'images',
+          type: 'array',
+          fields: [
+            { name: 'image_url', type: 'text', required: true },
+            { name: 'alt', type: 'text' },
+            { name: 'caption', type: 'text' },
+          ],
+        },
+      ],
+    },
+    {
+      slug: 'logo_cloud',
+      fields: [
+        { name: 'heading', type: 'text' },
+        {
+          name: 'grayscale',
+          type: 'checkbox',
+          defaultValue: true,
+          admin: { description: 'Render logos at reduced opacity and grayscale, the standard "as seen on" look.' },
+        },
+        {
+          name: 'logos',
+          type: 'array',
+          fields: [
+            { name: 'image_url', type: 'text', required: true },
+            { name: 'alt', type: 'text' },
+            { name: 'href', type: 'text' },
+          ],
+        },
+      ],
+    },
+    {
+      slug: 'spacer',
+      fields: [
+        {
+          name: 'size',
+          type: 'select',
+          defaultValue: 'md',
+          options: [
+            { label: 'Small (32px)', value: 'sm' },
+            { label: 'Medium (64px)', value: 'md' },
+            { label: 'Large (96px)', value: 'lg' },
+            { label: 'Extra large (128px)', value: 'xl' },
+          ],
+        },
+        {
+          name: 'show_divider',
+          type: 'checkbox',
+          defaultValue: false,
+          admin: { description: 'Show a thin horizontal rule inside the gap.' },
+        },
+      ],
+    },
+    {
       slug: 'lead_form',
       fields: [
         { name: 'eyebrow', type: 'text' },
@@ -260,6 +364,14 @@ const bodyBlocks: Field = {
         },
         { name: 'funnel_id', type: 'text', admin: { description: 'Optional quiz/LP id this form belongs to.' } },
         { name: 'success_slug', type: 'text', defaultValue: '/submitted' },
+        {
+          name: 'form_fields',
+          type: 'json',
+          admin: {
+            description:
+              'Custom form fields config. Leave empty to render the default name/email/phone/state/zip set. JSON array of { name, label, placeholder, type, required, half_width, options }.',
+          },
+        },
       ],
     },
   ],
@@ -307,9 +419,19 @@ export const Pages: CollectionConfig = {
       defaultValue: 'draft',
       options: [
         { label: 'Draft', value: 'draft' },
+        { label: 'Scheduled', value: 'scheduled' },
         { label: 'Published', value: 'published' },
         { label: 'Archived', value: 'archived' },
       ],
+    },
+    {
+      name: 'publish_at',
+      type: 'date',
+      admin: {
+        description:
+          'When status is Scheduled, the page becomes public at this time. Ignored for Draft / Published / Archived.',
+        condition: (_, siblingData) => siblingData.status === 'scheduled',
+      },
     },
     {
       name: 'template_key',
@@ -346,6 +468,22 @@ export const Pages: CollectionConfig = {
     { name: 'meta_description', type: 'textarea' },
     { name: 'og_image_url', type: 'text' },
     { name: 'schema_json', type: 'json', admin: { description: 'JSON-LD payload for this page.' } },
+    {
+      name: 'hidden_blocks',
+      type: 'json',
+      admin: {
+        description:
+          'Array of body_blocks ids to hide on the public site without deleting. Toggled from the page builder; the renderer skips matching blocks.',
+      },
+    },
+    {
+      name: 'block_meta',
+      type: 'json',
+      admin: {
+        description:
+          'Per-block metadata keyed by body_blocks id. Currently stores responsive-visibility flags like { [blockId]: { hide_mobile?: true, hide_desktop?: true } } so the public site can hide a section at a breakpoint via CSS.',
+      },
+    },
     {
       name: 'slug_redirects',
       type: 'array',

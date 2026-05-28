@@ -2,6 +2,17 @@
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 
+type FormFieldDef = {
+  name: string
+  label?: string
+  placeholder?: string
+  type?: 'text' | 'email' | 'tel' | 'textarea' | 'select' | 'checkbox' | 'hidden'
+  required?: boolean
+  half_width?: boolean
+  options?: Array<{ value?: string; label?: string }>
+  value?: string
+}
+
 type LeadFormBlock = {
   eyebrow?: string
   heading?: string
@@ -11,7 +22,12 @@ type LeadFormBlock = {
   funnel_type?: 'quiz' | 'landing-page' | 'contact-form' | 'page' | 'advertorial'
   funnel_id?: string
   success_slug?: string
+  form_fields?: FormFieldDef[] | null
 }
+
+// Field names that map into the canonical `contact` object the lead pipeline
+// expects. Anything else the user puts in form_fields rides along as `extra`.
+const CONTACT_KEYS = new Set(['first_name', 'last_name', 'email', 'phone', 'state', 'zip'])
 
 type Site = {
   slug: string
@@ -97,19 +113,43 @@ export function LeadForm({ block, site }: { block: LeadFormBlock; site: Site }) 
       }
     }
 
+    // Walk every form value once. Known contact keys land in `contact`,
+    // anything else from a custom form_fields entry rides along as `extra`
+    // so we keep the canonical lead-pipeline shape backward-compatible.
+    const contact: Record<string, string> = {
+      first_name: '',
+      last_name: '',
+      email: '',
+      phone: '',
+      state: '',
+      zip: '',
+    }
+    const extra: Record<string, unknown> = {}
+    for (const [k, v] of fd.entries()) {
+      if (typeof k !== 'string' || k.startsWith('attr_')) continue
+      const val = typeof v === 'string' ? v : ''
+      if (CONTACT_KEYS.has(k)) {
+        contact[k] = val
+      } else {
+        // Checkboxes that weren't checked won't appear in FormData; presence
+        // here means it was checked.
+        if (k in extra) {
+          // Multiple values for the same name (e.g. checkbox group) — collect.
+          const prev = extra[k]
+          extra[k] = Array.isArray(prev) ? [...prev, val] : [prev, val]
+        } else {
+          extra[k] = val
+        }
+      }
+    }
+
     const payload = {
       site_slug: site.slug,
       funnel_type: (block.funnel_type ?? 'contact-form') as 'contact-form',
       funnel_id: block.funnel_id,
       funnel_path: typeof window !== 'undefined' ? window.location.pathname : undefined,
-      contact: {
-        first_name: String(fd.get('first_name') ?? ''),
-        last_name: String(fd.get('last_name') ?? ''),
-        email: String(fd.get('email') ?? ''),
-        phone: String(fd.get('phone') ?? ''),
-        state: String(fd.get('state') ?? ''),
-        zip: String(fd.get('zip') ?? ''),
-      },
+      contact,
+      extra: Object.keys(extra).length > 0 ? extra : undefined,
       attribution,
       trustedform_cert_url: readTrustedFormCert() || undefined,
       jornaya_lead_id: readJornayaLeadId() || undefined,
@@ -192,16 +232,7 @@ export function LeadForm({ block, site }: { block: LeadFormBlock; site: Site }) 
           ) : null}
 
           <form ref={formRef} onSubmit={onSubmit} style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 12 }} noValidate>
-            <Row>
-              <Input name="first_name" placeholder="First name" required />
-              <Input name="last_name" placeholder="Last name" required />
-            </Row>
-            <Input name="email" type="email" placeholder="Email" required />
-            <Input name="phone" type="tel" placeholder="Phone" required />
-            <Row>
-              <Input name="state" placeholder="State" />
-              <Input name="zip" placeholder="ZIP" />
-            </Row>
+            <FieldsRenderer fields={block.form_fields} />
 
             {/* Hidden attribution inputs — hydrated client-side after mount */}
             {[
@@ -280,5 +311,130 @@ function Input({ name, placeholder, type = 'text', required }: { name: string; p
         outline: 'none',
       }}
     />
+  )
+}
+
+// Default field set: matches the canonical lead pipeline contact{} shape.
+// Used when the block doesn't override via form_fields[].
+const DEFAULT_FIELDS: FormFieldDef[] = [
+  { name: 'first_name', type: 'text', placeholder: 'First name', required: true, half_width: true },
+  { name: 'last_name', type: 'text', placeholder: 'Last name', required: true, half_width: true },
+  { name: 'email', type: 'email', placeholder: 'Email', required: true },
+  { name: 'phone', type: 'tel', placeholder: 'Phone', required: true },
+  { name: 'state', type: 'text', placeholder: 'State', half_width: true },
+  { name: 'zip', type: 'text', placeholder: 'ZIP', half_width: true },
+]
+
+function FieldsRenderer({ fields }: { fields?: FormFieldDef[] | null }) {
+  const list = Array.isArray(fields) && fields.length > 0 ? fields : DEFAULT_FIELDS
+  // Pair consecutive half_width fields into rows.
+  const rows: Array<{ kind: 'full' | 'pair'; items: FormFieldDef[] }> = []
+  for (let i = 0; i < list.length; i++) {
+    const f = list[i]
+    if (f.half_width && list[i + 1]?.half_width) {
+      rows.push({ kind: 'pair', items: [f, list[i + 1]!] })
+      i++
+    } else {
+      rows.push({ kind: 'full', items: [f] })
+    }
+  }
+  return (
+    <>
+      {rows.map((row, i) =>
+        row.kind === 'pair' ? (
+          <Row key={i}>
+            {row.items.map((f) => (
+              <FieldEl key={f.name} field={f} />
+            ))}
+          </Row>
+        ) : (
+          <FieldEl key={i} field={row.items[0]} />
+        ),
+      )}
+    </>
+  )
+}
+
+function FieldEl({ field }: { field: FormFieldDef }) {
+  const t = field.type ?? 'text'
+  if (t === 'hidden') {
+    return <input type="hidden" name={field.name} defaultValue={field.value ?? ''} />
+  }
+  if (t === 'textarea') {
+    return (
+      <FieldWrap label={field.label}>
+        <textarea
+          name={field.name}
+          required={!!field.required}
+          placeholder={field.placeholder ?? ''}
+          rows={4}
+          style={{
+            width: '100%',
+            background: '#fff',
+            border: '1px solid rgba(0,0,0,0.15)',
+            borderRadius: 8,
+            padding: '14px 16px',
+            fontSize: 15,
+            color: 'var(--site-ink)',
+            outline: 'none',
+            resize: 'vertical',
+            fontFamily: 'inherit',
+          }}
+        />
+      </FieldWrap>
+    )
+  }
+  if (t === 'select') {
+    return (
+      <FieldWrap label={field.label}>
+        <select
+          name={field.name}
+          required={!!field.required}
+          style={{
+            width: '100%',
+            background: '#fff',
+            border: '1px solid rgba(0,0,0,0.15)',
+            borderRadius: 8,
+            padding: '14px 16px',
+            fontSize: 15,
+            color: 'var(--site-ink)',
+            outline: 'none',
+          }}
+          defaultValue=""
+        >
+          <option value="" disabled>
+            {field.placeholder ?? 'Select…'}
+          </option>
+          {(field.options ?? []).map((opt, i) => (
+            <option key={i} value={opt.value ?? ''}>
+              {opt.label || opt.value || ''}
+            </option>
+          ))}
+        </select>
+      </FieldWrap>
+    )
+  }
+  if (t === 'checkbox') {
+    return (
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14, color: 'var(--site-ink)', lineHeight: 1.45, padding: '4px 0' }}>
+        <input type="checkbox" name={field.name} required={!!field.required} value="1" style={{ marginTop: 4 }} />
+        <span>{field.label ?? field.placeholder ?? field.name}</span>
+      </label>
+    )
+  }
+  return (
+    <FieldWrap label={field.label}>
+      <Input name={field.name} type={t} placeholder={field.placeholder ?? ''} required={!!field.required} />
+    </FieldWrap>
+  )
+}
+
+function FieldWrap({ label, children }: { label?: string; children: React.ReactNode }) {
+  if (!label) return <>{children}</>
+  return (
+    <div>
+      <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: 'var(--site-muted)', marginBottom: 6 }}>{label}</label>
+      {children}
+    </div>
   )
 }

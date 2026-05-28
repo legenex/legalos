@@ -4,9 +4,16 @@
  *
  * All block data is assumed to be already site-var-substituted upstream (in the catch-all route).
  */
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import Link from 'next/link'
 import { LeadForm } from './LeadForm'
+import { BESPOKE_CSS } from './bespoke-css'
+
+// Hero background — kept on the renderer so the editor preview matches the
+// public page even before the user uploads their own image_url. Per-block
+// hero.image_url overrides this when present.
+const DEFAULT_HERO_BG =
+  'https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/699c27e1ee245bcd8cd77386/c7a33cdfe_1.png'
 
 export type Block = {
   blockType: string
@@ -33,13 +40,48 @@ export type RenderContext = {
   isPreview?: boolean
 }
 
-export function BlockRenderer({ blocks, ctx }: { blocks: Block[] | null | undefined; ctx: RenderContext }) {
+// Per-block metadata for responsive visibility. Server renders every block
+// (so SEO + crawlers see everything); CSS hides the wrappers at the
+// configured breakpoint via .legalos-hide-mobile and .legalos-hide-desktop
+// (defined in RESPONSIVE_CSS).
+type BlockMeta = Record<string, { hide_mobile?: boolean; hide_desktop?: boolean } | undefined>
+
+const RESPONSIVE_CSS = `
+@media (max-width: 640px) { .legalos-hide-mobile { display: none !important; } }
+@media (min-width: 1024px) { .legalos-hide-desktop { display: none !important; } }
+`
+
+export function BlockRenderer({
+  blocks,
+  ctx,
+  blockMeta,
+}: {
+  blocks: Block[] | null | undefined
+  ctx: RenderContext
+  blockMeta?: BlockMeta
+}) {
   if (!blocks || blocks.length === 0) return <FallbackEmpty />
   return (
     <>
-      {blocks.map((block, idx) => (
-        <BlockDispatch key={block.id ?? `${block.blockType}-${idx}`} block={block} ctx={ctx} />
-      ))}
+      {/* Bespoke CSS injected once per render. Used by the bespoke-styled
+          block components below. Safe to ship twice in the same DOM (a page
+          + the admin builder canvas) — duplicate rules are idempotent. */}
+      <style dangerouslySetInnerHTML={{ __html: BESPOKE_CSS }} />
+      <style dangerouslySetInnerHTML={{ __html: RESPONSIVE_CSS }} />
+      {blocks.map((block, idx) => {
+        const meta = block.id ? blockMeta?.[block.id] : undefined
+        const classes: string[] = []
+        if (meta?.hide_mobile) classes.push('legalos-hide-mobile')
+        if (meta?.hide_desktop) classes.push('legalos-hide-desktop')
+        const key = block.id ?? `${block.blockType}-${idx}`
+        const child = <BlockDispatch block={block} ctx={ctx} />
+        if (classes.length === 0) return <Fragment key={key}>{child}</Fragment>
+        return (
+          <div key={key} className={classes.join(' ')}>
+            {child}
+          </div>
+        )
+      })}
     </>
   )
 }
@@ -84,6 +126,14 @@ function BlockDispatch({ block, ctx }: { block: Block; ctx: RenderContext }) {
       return <Disclosure block={block} />
     case 'site_footer':
       return <SiteFooter block={block} ctx={ctx} />
+    case 'video':
+      return <Video block={block} />
+    case 'gallery':
+      return <Gallery block={block} />
+    case 'logo_cloud':
+      return <LogoCloud block={block} />
+    case 'spacer':
+      return <Spacer block={block} />
     case 'lead_form':
       return <LeadForm block={block as never} site={{ slug: String((ctx.site as { slug?: string }).slug ?? ''), name: ctx.site.name ?? null }} />
     default:
@@ -145,69 +195,32 @@ function MarkdownLite({ source }: { source: string }) {
 /*                                Nav Header                                  */
 /* -------------------------------------------------------------------------- */
 
+// Brand logo URL: per-block override > Site.logo_url > fallback wordmark.
 function NavHeader({ block, ctx }: { block: Block; ctx: RenderContext }) {
   const links = (get<Array<{ label: string; href: string }>>(block, 'links') ?? []) as Array<{ label: string; href: string }>
   const ctaLabel = get<string>(block, 'cta_label')
   const ctaHref = get<string>(block, 'cta_href') ?? '#'
-  const showPhone = get<boolean>(block, 'show_phone') ?? true
+  const logoUrl =
+    get<string>(block, 'logo_url') ??
+    (ctx.site as { logo_url?: string }).logo_url ??
+    'https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/699c8efa75d8857518d34273/440596289_PrimaryLogo_CheckMyClaim.png'
   return (
-    <header
-      style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 50,
-        background: 'rgba(255,255,255,0.92)',
-        backdropFilter: 'blur(8px)',
-        borderBottom: '1px solid rgba(0,0,0,0.06)',
-      }}
-    >
-      <div
-        className="mx-auto px-6"
-        style={{
-          maxWidth: 1180,
-          height: 68,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 24,
-        }}
-      >
-        <Link href="/" style={{ fontWeight: 800, fontSize: 18, color: 'var(--site-primary)', textDecoration: 'none' }}>
-          {ctx.site.name ?? 'Home'}
-        </Link>
-        <nav style={{ display: 'flex', gap: 28, alignItems: 'center' }}>
+    <nav className="navbar">
+      <div className="navbar__inner">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={logoUrl} alt={ctx.site.name ?? 'Site logo'} className="navbar__logo" />
+        <div className="navbar__links">
           {links.map((l, i) => (
-            <Link key={i} href={l.href} style={{ fontSize: 14, color: 'var(--site-ink)', textDecoration: 'none' }}>
+            <a key={i} href={l.href} className="navbar__link">
               {l.label}
-            </Link>
-          ))}
-          {showPhone && ctx.phone.display ? (
-            <a
-              href={`tel:${ctx.phone.tel}`}
-              style={{ fontSize: 14, fontWeight: 700, color: 'var(--site-primary)', textDecoration: 'none' }}
-            >
-              {ctx.phone.display}
             </a>
-          ) : null}
-          {ctaLabel ? (
-            <Link
-              href={ctaHref}
-              style={{
-                background: 'var(--site-accent)',
-                color: 'var(--site-ink)',
-                fontWeight: 700,
-                fontSize: 14,
-                padding: '10px 18px',
-                borderRadius: 999,
-                textDecoration: 'none',
-              }}
-            >
-              {ctaLabel}
-            </Link>
-          ) : null}
-        </nav>
+          ))}
+        </div>
+        {ctaLabel ? (
+          <a href={ctaHref} className="btn-nav">{ctaLabel}</a>
+        ) : null}
       </div>
-    </header>
+    </nav>
   )
 }
 
@@ -215,102 +228,64 @@ function NavHeader({ block, ctx }: { block: Block; ctx: RenderContext }) {
 /*                                    Hero                                    */
 /* -------------------------------------------------------------------------- */
 
-function Hero({ block, ctx }: { block: Block; ctx: RenderContext }) {
-  const eyebrow = get<string>(block, 'eyebrow')
+function Hero({ block, ctx: _ctx }: { block: Block; ctx: RenderContext }) {
+  const eyebrow = get<string>(block, 'eyebrow') ?? '100% Free • No Win, No Fee • Fast Results'
   const heading = get<string>(block, 'heading') ?? ''
+  const headingGradient = get<string>(block, 'heading_gradient')
   const sub = get<string>(block, 'sub')
   const primaryLabel = get<string>(block, 'primary_cta_label')
   const primaryHref = get<string>(block, 'primary_cta_href') ?? '#'
-  const secondaryLabel = get<string>(block, 'secondary_cta_label')
-  const secondaryHref = get<string>(block, 'secondary_cta_href') ?? '#'
-  const imageUrl = get<string>(block, 'image_url')
+  const ctaSub = get<string>(block, 'cta_sub') ?? 'Takes less than 2 minutes'
+  const bgImage = get<string>(block, 'image_url') ?? DEFAULT_HERO_BG
+  const pills =
+    (get<Array<{ text: string }>>(block, 'pills') as Array<{ text: string }> | undefined) ??
+    [{ text: 'Vetted Attorneys Only' }, { text: 'No Upfront Fees' }, { text: 'Results in Minutes' }]
   return (
-    <section
-      style={{
-        background: `linear-gradient(180deg, var(--site-surface, #F7F5F0) 0%, rgba(255,255,255,0) 60%)`,
-        padding: '64px 0 48px',
-      }}
-    >
-      <Container>
-        <div style={{ display: 'grid', gridTemplateColumns: imageUrl ? '1.1fr 0.9fr' : '1fr', gap: 48, alignItems: 'center' }}>
-          <div>
-            {eyebrow ? (
-              <p
-                style={{
-                  display: 'inline-block',
-                  color: 'var(--site-primary)',
-                  fontSize: 13,
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: 1.5,
-                  background: 'rgba(0,0,0,0.04)',
-                  padding: '6px 14px',
-                  borderRadius: 999,
-                  marginBottom: 20,
-                }}
-              >
-                {eyebrow}
-              </p>
-            ) : null}
-            <h1 style={{ fontSize: 52, lineHeight: 1.05, fontWeight: 800, letterSpacing: '-0.02em', margin: 0, color: 'var(--site-ink)' }}>
-              {heading}
-            </h1>
-            {sub ? (
-              <p style={{ marginTop: 20, fontSize: 18, lineHeight: 1.55, color: 'var(--site-muted)', maxWidth: 560 }}>{sub}</p>
-            ) : null}
-            <div style={{ marginTop: 28, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              {primaryLabel ? (
-                <Link
-                  href={primaryHref}
-                  style={{
-                    background: 'var(--site-primary)',
-                    color: '#fff',
-                    fontWeight: 700,
-                    fontSize: 15,
-                    padding: '14px 24px',
-                    borderRadius: 999,
-                    textDecoration: 'none',
-                    display: 'inline-block',
-                  }}
-                >
-                  {primaryLabel}
-                </Link>
-              ) : null}
-              {secondaryLabel ? (
-                <Link
-                  href={secondaryHref}
-                  style={{
-                    color: 'var(--site-ink)',
-                    fontWeight: 700,
-                    fontSize: 15,
-                    padding: '14px 24px',
-                    borderRadius: 999,
-                    textDecoration: 'none',
-                    border: '1px solid rgba(0,0,0,0.18)',
-                    display: 'inline-block',
-                  }}
-                >
-                  {secondaryLabel}
-                </Link>
-              ) : null}
+    <section className="hero" id="home">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={bgImage} alt="" className="hero__bg-img" />
+      <div className="hero__overlay" />
+      <div className="hero__pattern" />
+      <div className="hero__content">
+        <div className="hero__inner">
+          {eyebrow ? (
+            <div className="hero__badge">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+              {eyebrow}
             </div>
-            {ctx.phone.display ? (
-              <p style={{ marginTop: 16, fontSize: 13, color: 'var(--site-muted)' }}>
-                Or speak with us now:{' '}
-                <a href={`tel:${ctx.phone.tel}`} style={{ color: 'var(--site-primary)', fontWeight: 700 }}>
-                  {ctx.phone.display}
-                </a>
-              </p>
+          ) : null}
+          <h1 className="hero__heading">
+            {heading}
+            {headingGradient ? (
+              <>
+                <br />
+                <span className="hero__heading-gradient">{headingGradient}</span>
+              </>
             ) : null}
-          </div>
-          {imageUrl ? (
-            <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 30px 60px rgba(0,0,0,0.15)' }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={imageUrl} alt="" style={{ width: '100%', height: 'auto', display: 'block' }} />
+          </h1>
+          {sub ? <p className="hero__sub">{sub}</p> : null}
+          {primaryLabel ? (
+            <div className="hero__cta-row">
+              <a href={primaryHref} className="btn-hero">{primaryLabel}</a>
+              <span className="hero__cta-sub">{ctaSub}</span>
+            </div>
+          ) : null}
+          {pills.length > 0 ? (
+            <div className="hero__pills">
+              {pills.map((p, i) => (
+                <div key={i} className="hero__pill">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 11l3 3L22 4" />
+                  </svg>
+                  <span className="hero__pill-text">{p.text}</span>
+                </div>
+              ))}
             </div>
           ) : null}
         </div>
-      </Container>
+      </div>
     </section>
   )
 }
@@ -320,33 +295,21 @@ function Hero({ block, ctx }: { block: Block; ctx: RenderContext }) {
 /* -------------------------------------------------------------------------- */
 
 function TrustStrip({ block }: { block: Block }) {
-  const items = (get<Array<{ value: string; label: string }>>(block, 'items') ?? []) as Array<{ value: string; label: string }>
+  const items = (get<Array<{ value?: string; label?: string }>>(block, 'items') ?? []) as Array<{ value?: string; label?: string }>
   if (items.length === 0) return null
+  // The bespoke trust banner shows the `value` field uppercased as the label
+  // — there's no two-line value+label split in the CMC design, just bold
+  // wordmarks separated by dots.
   return (
-    <section
-      style={{
-        background: 'var(--site-primary)',
-        color: '#fff',
-        padding: '28px 0',
-      }}
-    >
-      <Container>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(${Math.min(items.length, 4)}, minmax(0,1fr))`,
-            gap: 20,
-            textAlign: 'center',
-          }}
-        >
-          {items.map((it, i) => (
-            <div key={i}>
-              <p style={{ fontSize: 28, fontWeight: 800, margin: 0, color: 'var(--site-accent)' }}>{it.value}</p>
-              <p style={{ fontSize: 13, margin: '6px 0 0', opacity: 0.85 }}>{it.label}</p>
-            </div>
-          ))}
-        </div>
-      </Container>
+    <section className="trust-banner">
+      <div className="trust-banner__inner">
+        {items.map((it, i) => (
+          <div key={i} className="trust-banner__item">
+            <span className="trust-banner__label">{(it.value || it.label || '').toUpperCase()}</span>
+            {i < items.length - 1 ? <span className="trust-banner__dot" /> : null}
+          </div>
+        ))}
+      </div>
     </section>
   )
 }
@@ -894,6 +857,227 @@ function SectionHeader({
         <h2 style={{ fontSize: 36, fontWeight: 800, color: 'var(--site-ink)', margin: 0, lineHeight: 1.15 }}>{heading}</h2>
       ) : null}
       {sub ? <p style={{ marginTop: 12, fontSize: 17, color: 'var(--site-muted)', lineHeight: 1.55 }}>{sub}</p> : null}
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                    Video                                   */
+/* -------------------------------------------------------------------------- */
+
+// Parse a YouTube id from any of the common URL shapes (watch?v=, youtu.be,
+// embed/, shorts/). Falls back to whatever the user typed if it's already an
+// 11-char id.
+function parseYouTubeId(input: string): string {
+  if (!input) return ''
+  const direct = input.trim()
+  if (/^[\w-]{11}$/.test(direct)) return direct
+  const m =
+    direct.match(/[?&]v=([\w-]{11})/) ||
+    direct.match(/youtu\.be\/([\w-]{11})/) ||
+    direct.match(/youtube\.com\/embed\/([\w-]{11})/) ||
+    direct.match(/youtube\.com\/shorts\/([\w-]{11})/)
+  return m ? m[1] : direct
+}
+
+// Vimeo ids are all-numeric, typically 7–10 digits. Accept a bare id OR a
+// vimeo.com URL.
+function parseVimeoId(input: string): string {
+  if (!input) return ''
+  const direct = input.trim()
+  if (/^\d{6,12}$/.test(direct)) return direct
+  const m = direct.match(/vimeo\.com\/(\d+)/)
+  return m ? m[1] : direct
+}
+
+function Video({ block }: { block: Block }) {
+  const heading = get<string>(block, 'heading')
+  const provider = (get<string>(block, 'provider') ?? 'youtube') as 'youtube' | 'vimeo' | 'url'
+  const raw = get<string>(block, 'video_id') ?? ''
+  const aspect = (get<string>(block, 'aspect_ratio') ?? '16:9') as '16:9' | '4:3' | '1:1'
+  const caption = get<string>(block, 'caption')
+
+  let src = ''
+  if (provider === 'youtube') src = `https://www.youtube.com/embed/${parseYouTubeId(raw)}`
+  else if (provider === 'vimeo') src = `https://player.vimeo.com/video/${parseVimeoId(raw)}`
+  else src = raw
+
+  if (!src) return null
+
+  const aspectStyle = { aspectRatio: aspect.replace(':', ' / ') as string }
+  const isFile = provider === 'url' && /\.(mp4|webm|ogv|mov)$/i.test(src)
+
+  return (
+    <Section>
+      <Container>
+        {heading ? <SectionHeader heading={heading} /> : null}
+        <div
+          style={{
+            marginTop: heading ? 24 : 0,
+            borderRadius: 12,
+            overflow: 'hidden',
+            boxShadow: '0 12px 40px rgba(0,0,0,0.12)',
+            background: '#000',
+            ...aspectStyle,
+            position: 'relative',
+          }}
+        >
+          {isFile ? (
+            <video
+              src={src}
+              controls
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+            />
+          ) : (
+            <iframe
+              src={src}
+              title={heading ?? 'Video'}
+              loading="lazy"
+              allowFullScreen
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
+            />
+          )}
+        </div>
+        {caption ? (
+          <p style={{ marginTop: 12, fontSize: 13, color: 'var(--site-muted)', textAlign: 'center' }}>{caption}</p>
+        ) : null}
+      </Container>
+    </Section>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                   Gallery                                  */
+/* -------------------------------------------------------------------------- */
+
+function Gallery({ block }: { block: Block }) {
+  const heading = get<string>(block, 'heading')
+  const columnsStr = (get<string>(block, 'columns') ?? '3') as '2' | '3' | '4'
+  const columns = Number(columnsStr) || 3
+  const images =
+    (get<Array<{ image_url?: string; alt?: string; caption?: string }>>(block, 'images') ?? []) as Array<{
+      image_url?: string
+      alt?: string
+      caption?: string
+    }>
+  if (images.length === 0) return null
+  return (
+    <Section>
+      <Container>
+        {heading ? <SectionHeader heading={heading} /> : null}
+        <div
+          style={{
+            marginTop: heading ? 32 : 0,
+            display: 'grid',
+            gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+            gap: 16,
+          }}
+        >
+          {images.map((it, i) => (
+            <figure key={i} style={{ margin: 0, borderRadius: 10, overflow: 'hidden', background: '#0001' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                loading="lazy"
+                decoding="async"
+                src={it.image_url}
+                alt={it.alt ?? ''}
+                style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', aspectRatio: '4 / 3' }}
+              />
+              {it.caption ? (
+                <figcaption style={{ padding: '8px 12px', fontSize: 12, color: 'var(--site-muted)' }}>{it.caption}</figcaption>
+              ) : null}
+            </figure>
+          ))}
+        </div>
+      </Container>
+    </Section>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                 Logo Cloud                                 */
+/* -------------------------------------------------------------------------- */
+
+function LogoCloud({ block }: { block: Block }) {
+  const heading = get<string>(block, 'heading')
+  const grayscale = get<boolean>(block, 'grayscale') ?? true
+  const logos =
+    (get<Array<{ image_url?: string; alt?: string; href?: string }>>(block, 'logos') ?? []) as Array<{
+      image_url?: string
+      alt?: string
+      href?: string
+    }>
+  if (logos.length === 0) return null
+  const filter = grayscale ? 'grayscale(1)' : 'none'
+  const opacity = grayscale ? 0.7 : 1
+  return (
+    <Section>
+      <Container>
+        {heading ? (
+          <p
+            style={{
+              textAlign: 'center',
+              fontSize: 11,
+              fontWeight: 700,
+              color: 'var(--site-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: 1.5,
+              marginBottom: 32,
+            }}
+          >
+            {heading}
+          </p>
+        ) : null}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+            gap: 40,
+            alignItems: 'center',
+            justifyItems: 'center',
+          }}
+        >
+          {logos.map((l, i) => {
+            const img = (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                loading="lazy"
+                decoding="async"
+                src={l.image_url}
+                alt={l.alt ?? ''}
+                style={{ maxHeight: 48, maxWidth: '100%', filter, opacity, objectFit: 'contain' }}
+              />
+            )
+            return l.href ? (
+              <Link key={i} href={l.href}>
+                {img}
+              </Link>
+            ) : (
+              <div key={i}>{img}</div>
+            )
+          })}
+        </div>
+      </Container>
+    </Section>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                   Spacer                                   */
+/* -------------------------------------------------------------------------- */
+
+function Spacer({ block }: { block: Block }) {
+  const size = (get<string>(block, 'size') ?? 'md') as 'sm' | 'md' | 'lg' | 'xl'
+  const showDivider = get<boolean>(block, 'show_divider') ?? false
+  const px = { sm: 32, md: 64, lg: 96, xl: 128 }[size] ?? 64
+  return (
+    <div style={{ height: px, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {showDivider ? (
+        <Container>
+          <hr style={{ border: 0, borderTop: '1px solid var(--site-border, rgba(0,0,0,0.08))', margin: 0 }} />
+        </Container>
+      ) : null}
     </div>
   )
 }
