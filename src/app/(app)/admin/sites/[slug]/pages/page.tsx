@@ -71,7 +71,7 @@ export default async function SitePagesPage({ params, searchParams }: Props) {
           <p className="text-[var(--color-ink-muted)] text-[15px] mt-1">{site.name} site pages</p>
         </div>
         <Link
-          href={`/cms/collections/pages/create?site=${site.id}`}
+          href={`/admin/sites/${slug}/pages/new`}
           className="brand-gradient text-white font-medium text-[14px] px-4 py-2.5 rounded-lg inline-flex items-center gap-1.5 hover:opacity-90"
         >
           <Plus className="w-4 h-4" /> New Page
@@ -108,7 +108,7 @@ export default async function SitePagesPage({ params, searchParams }: Props) {
                   key={p.id}
                   className="grid grid-cols-[1.5fr_1.4fr_1.2fr_0.8fr_0.9fr_60px] px-5 py-3.5 items-center border-b border-[var(--color-border)] last:border-b-0 hover:bg-[var(--color-surface-2)] transition-colors"
                 >
-                  <Link href={`/cms/collections/pages/${p.id}`} className="text-white font-medium text-[14px] hover:underline truncate">
+                  <Link href={`/admin/sites/${slug}/pages/${p.id}`} className="text-white font-medium text-[14px] hover:underline truncate">
                     {p.title}
                   </Link>
                   <code className="text-[13px] text-[var(--color-ink-muted)] font-mono">/{p.slug.replace(/^\//, '')}</code>

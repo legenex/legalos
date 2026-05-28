@@ -4,6 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## ⛔ READ-THIS-FIRST: Every push needs a manual server deploy
+
+**The user has explicitly asked to be reminded every single time.** Whenever you `git push` changes that touch `src/`, `package.json`, `next.config.mjs`, `tailwind.config.*`, `payload.config.ts`, `src/migrations/`, or anything that ends up in `.next/`, the **last block of your reply MUST be the SSH deploy commands** the user copy-pastes — starting with `git pull` and ending with `systemctl status`. The change is NOT live without it. Don't say "deploy to see it" without the block. Don't shorten the block. Don't omit it even if the previous reply already showed it. See the "MANDATORY" section below for the exact commands.
+
+---
+
 ## CRITICAL: Standard workflow — edit local, push, webhook deploys
 
 **The flow is:** edit files in this local repo → `git commit && git push` → GitHub webhook fires → Plesk pulls into `/var/www/vhosts/legenex.com/os.legenex.com/` on `root@51.81.202.161` → **you must run `pnpm build && systemctl restart legalos-dev` on the server** → change is live at `https://os.legenex.com` once the build finishes.
@@ -35,7 +41,9 @@ ssh root@51.81.202.161 'systemctl status legalos-dev --no-pager'
 
 ### 🚨 MANDATORY: every reply that pushes src/ MUST end with the deploy block
 
-After **any** `git push` you make that touches `src/`, `package.json`, `next.config.mjs`, `tailwind.config.*`, `payload.config.ts`, or anything compiled into `.next/`, the **final block of your reply** must be the exact SSH commands below so the user can copy-paste them. This applies *every* time, even for a one-line fix, even if the previous reply already showed them. The user has explicitly asked for this and will get stuck without it.
+After **any** `git push` you make that touches `src/`, `package.json`, `next.config.mjs`, `tailwind.config.*`, `payload.config.ts`, `src/migrations/`, or anything compiled into `.next/`, the **final block of your reply** must be the exact SSH commands below so the user can copy-paste them. This applies *every* time, even for a one-line fix, even if the previous reply already showed them, and even if you just want to say "deploy this and see if it works." The user has explicitly and repeatedly asked for this rule and gets stuck on the server without it.
+
+**Do not summarize.** Paste the exact 8-line block. **Do not say "run pnpm build" instead** — `pnpm build` alone is not enough; `git pull` must come first to fetch your commits, and `systemctl stop` must come before `pnpm build` to free `.next/` from the running process.
 
 ```
 cd /var/www/vhosts/legenex.com/os.legenex.com
