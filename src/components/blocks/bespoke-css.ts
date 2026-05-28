@@ -252,4 +252,28 @@ img, video { display: block; max-width: 100%; height: auto; }
 .faq-item__q.open { color: var(--color-blue); }
 .faq-item__chev { color: var(--color-muted); transition: transform .3s ease; flex-shrink: 0; }
 .faq-item__a { padding: 0 24px 24px 76px; color: var(--color-muted); font-size: 0.95rem; line-height: 1.625; }
+
+/* -------------------------------------------------------------------------- */
+/* Builder canvas overrides                                                   */
+/* -------------------------------------------------------------------------- */
+/* The bespoke design uses position:fixed for the navbar and min-height:100vh
+   for the hero. Both anchor to the BROWSER VIEWPORT (vh + fixed always do),
+   so inside the admin builder canvas they escape the center pane and cover
+   the left section list / right settings panel.
+
+   Inside .legalos-builder-canvas we re-anchor the navbar to absolute so it
+   stays inside the canvas, give the canvas relative positioning, and trim
+   the hero to a sensible viewable height. The public site is unaffected
+   because these selectors are scoped to the builder wrapper only. */
+.legalos-builder-canvas { position: relative; isolation: isolate; }
+.legalos-builder-canvas .navbar { position: absolute; }
+.legalos-builder-canvas .hero { min-height: 540px; margin-top: 0; }
+.legalos-builder-canvas .hero__content { padding-top: 96px; }
+/* The hero's full-viewport image was also bleeding through because img dims
+   inherit nothing from a sized parent until object-fit kicks in. inset:0
+   keeps it inside .hero. */
+.legalos-builder-canvas .hero__bg-img { max-width: 100%; }
+/* The .section--dark and .footer use width:100% and rely on viewport-anchored
+   positioning for their decorative ::before patterns; nothing escapes the
+   container so they're fine. No override needed. */
 `
