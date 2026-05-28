@@ -15,10 +15,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Plus, MoveUp, MoveDown, Trash2, ChevronLeft, ChevronRight, Eye, Save, X,
+  Plus, MoveUp, MoveDown, Trash2, ChevronLeft, ChevronRight, Eye, EyeOff, Save, X,
   Layers, Rocket, Image as ImageIcon, Megaphone, List, FileText, Code2, Quote,
   HelpCircle, Star, Award, Trophy, ListChecks, ListOrdered, Grid3x3, Shield,
-  MousePointerClick, RotateCw, Sparkles, Check, Loader2,
+  MousePointerClick, RotateCw, Sparkles, Check, Loader2, Copy, GripVertical,
 } from 'lucide-react'
 import {
   T, Btn, Input, Textarea, Select, Label, Pill, IconBtn, ConfirmDialog, Toast,
@@ -1015,10 +1015,15 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
       id: b.id || `${b.blockType || 'block'}_${i}_${genId()}`,
     })),
   )
+  const [hiddenBlocks, setHiddenBlocks] = useState(() =>
+    Array.isArray(initial.hidden_blocks) ? initial.hidden_blocks : [],
+  )
   const [selectedId, setSelectedId] = useState(blocks[0]?.id || null)
   const [addOpen, setAddOpen] = useState(false)
   const [toast, setToast] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [dragId, setDragId] = useState(null)
+  const [dragOverId, setDragOverId] = useState(null)
   const saveTimer = useRef(null)
 
   const selected = blocks.find((b) => b.id === selectedId)
@@ -1040,6 +1045,7 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
         meta_description: next.metaDescription,
         og_image_url: next.ogImageUrl,
         body_blocks: next.blocks.map(({ id, ...rest }) => ({ id, ...rest })),
+        hidden_blocks: next.hiddenBlocks,
       })
       setSaving(false)
       if (!res.ok) setToast({ message: res.error || 'Save failed', type: 'error' })
@@ -1048,7 +1054,7 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
 
   const bump = (patch = {}) => {
     persist({
-      title, slug, status, metaTitle, metaDescription, ogImageUrl, blocks,
+      title, slug, status, metaTitle, metaDescription, ogImageUrl, blocks, hiddenBlocks,
       ...patch,
     })
   }
@@ -1091,6 +1097,64 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
     if (swap < 0 || swap >= blocks.length) return
     const next = [...blocks]
     ;[next[idx], next[swap]] = [next[swap], next[idx]]
+    setBlocks(next)
+    bump({ blocks: next })
+  }
+
+  const duplicateBlock = (id) => {
+    const idx = blocks.findIndex((b) => b.id === id)
+    if (idx === -1) return
+    const src = blocks[idx]
+    // Deep clone + rebrand id so sibling ids stay distinct. Arrays inside
+    // (links/items/steps/etc.) get JSON-cloned too so editing the copy
+    // doesn't mutate the original.
+    const clone = JSON.parse(JSON.stringify(src))
+    clone.id = `${src.blockType || 'block'}_${genId()}`
+    const next = [...blocks.slice(0, idx + 1), clone, ...blocks.slice(idx + 1)]
+    setBlocks(next)
+    setSelectedId(clone.id)
+    bump({ blocks: next })
+  }
+
+  const toggleHidden = (id) => {
+    const next = hiddenBlocks.includes(id)
+      ? hiddenBlocks.filter((x) => x !== id)
+      : [...hiddenBlocks, id]
+    setHiddenBlocks(next)
+    bump({ hiddenBlocks: next })
+  }
+
+  // Drag-drop reorder. dragId is the block being dragged; dragOverId is the
+  // block currently under the pointer (used to highlight the drop target).
+  // On drop, we insert the dragged block in front of the over-block. Dropping
+  // onto self or onto the empty trailing area is a no-op.
+  const handleDragStart = (e, id) => {
+    setDragId(id)
+    try { e.dataTransfer.effectAllowed = 'move' } catch {}
+  }
+  const handleDragOver = (e, id) => {
+    e.preventDefault()
+    if (id !== dragOverId) setDragOverId(id)
+    try { e.dataTransfer.dropEffect = 'move' } catch {}
+  }
+  const handleDragEnd = () => {
+    setDragId(null)
+    setDragOverId(null)
+  }
+  const handleDrop = (e, targetId) => {
+    e.preventDefault()
+    const sourceId = dragId
+    setDragId(null)
+    setDragOverId(null)
+    if (!sourceId || sourceId === targetId) return
+    const fromIdx = blocks.findIndex((b) => b.id === sourceId)
+    const toIdx = blocks.findIndex((b) => b.id === targetId)
+    if (fromIdx === -1 || toIdx === -1) return
+    const next = [...blocks]
+    const [moved] = next.splice(fromIdx, 1)
+    // If we removed an earlier block, the target index shifts down by 1.
+    const insertAt = fromIdx < toIdx ? toIdx - 1 : toIdx
+    next.splice(insertAt, 0, moved)
     setBlocks(next)
     bump({ blocks: next })
   }
@@ -1161,6 +1225,9 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
               const meta = BLOCK_META[b.blockType] || { name: b.blockType, icon: Layers }
               const Icon = meta.icon
               const active = b.id === selectedId
+              const hidden = hiddenBlocks.includes(b.id)
+              const isDragging = dragId === b.id
+              const isDropTarget = dragOverId === b.id && dragId && dragId !== b.id
               const summary =
                 b.heading ||
                 b.title ||
@@ -1168,17 +1235,69 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
                 (typeof b.markdown === 'string' ? b.markdown.slice(0, 40) : '') ||
                 ''
               return (
-                <div key={b.id} style={{ padding: '8px 10px', backgroundColor: active ? T.bgElev2 : T.bgElev, border: `1px solid ${active ? T.primary : T.border}`, borderRadius: 7, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div
+                  key={b.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, b.id)}
+                  onDragOver={(e) => handleDragOver(e, b.id)}
+                  onDragEnd={handleDragEnd}
+                  onDrop={(e) => handleDrop(e, b.id)}
+                  style={{
+                    padding: '8px 8px 8px 4px',
+                    backgroundColor: active ? T.bgElev2 : T.bgElev,
+                    border: `1px solid ${isDropTarget ? T.primary : active ? T.primary : T.border}`,
+                    borderRadius: 7,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    opacity: isDragging ? 0.5 : hidden ? 0.55 : 1,
+                    boxShadow: isDropTarget ? `0 -2px 0 ${T.primary}` : 'none',
+                    transition: 'box-shadow 0.12s ease, border-color 0.12s ease',
+                  }}
+                >
+                  <span
+                    title="Drag to reorder"
+                    style={{ display: 'flex', alignItems: 'center', cursor: 'grab', color: T.textLow, padding: '0 2px' }}
+                  >
+                    <GripVertical size={12} />
+                  </span>
                   <Icon size={13} color={active ? T.primary : T.textMute} />
-                  <button onClick={() => setSelectedId(b.id)} style={{ flex: 1, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: T.text, minWidth: 0, overflow: 'hidden' }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meta.name}</div>
+                  <button
+                    onClick={() => setSelectedId(b.id)}
+                    style={{ flex: 1, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: T.text, minWidth: 0, overflow: 'hidden' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {meta.name}
+                      </div>
+                      {hidden ? (
+                        <span
+                          style={{
+                            fontSize: 9,
+                            fontWeight: 700,
+                            padding: '1px 5px',
+                            borderRadius: 3,
+                            background: `${T.textMute}30`,
+                            color: T.textMute,
+                            letterSpacing: '0.05em',
+                          }}
+                        >
+                          HIDDEN
+                        </span>
+                      ) : null}
+                    </div>
                     {summary && (
                       <div style={{ fontSize: 10.5, color: T.textMute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary}</div>
                     )}
                   </button>
-                  <IconBtn icon={MoveUp} onClick={() => moveBlock(b.id, -1)} style={{ padding: 3 }} />
-                  <IconBtn icon={MoveDown} onClick={() => moveBlock(b.id, 1)} style={{ padding: 3 }} />
-                  <IconBtn icon={Trash2} onClick={() => deleteBlock(b.id)} style={{ padding: 3, color: T.danger }} />
+                  <IconBtn
+                    icon={hidden ? EyeOff : Eye}
+                    onClick={() => toggleHidden(b.id)}
+                    style={{ padding: 3, color: hidden ? T.textMute : T.text }}
+                    title={hidden ? 'Show on public site' : 'Hide on public site'}
+                  />
+                  <IconBtn icon={Copy} onClick={() => duplicateBlock(b.id)} style={{ padding: 3 }} title="Duplicate" />
+                  <IconBtn icon={Trash2} onClick={() => deleteBlock(b.id)} style={{ padding: 3, color: T.danger }} title="Delete" />
                 </div>
               )
             })}
@@ -1205,6 +1324,7 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
               <div className="legalos-builder-canvas">
                 {blocks.map((b) => {
                   const active = b.id === selectedId
+                  const hidden = hiddenBlocks.includes(b.id)
                   return (
                     <div
                       key={b.id}
@@ -1214,6 +1334,8 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
                         outline: active ? `2px solid ${T.primary}` : '2px solid transparent',
                         outlineOffset: -2,
                         cursor: 'pointer',
+                        opacity: hidden ? 0.4 : 1,
+                        filter: hidden ? 'grayscale(0.6)' : 'none',
                       }}
                       onMouseEnter={(e) => {
                         if (!active) (e.currentTarget as HTMLElement).style.outline = `2px dashed ${T.primary}80`
@@ -1222,6 +1344,11 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
                         if (!active) (e.currentTarget as HTMLElement).style.outline = '2px solid transparent'
                       }}
                     >
+                      {hidden ? (
+                        <div style={{ position: 'absolute', top: 6, left: 6, zIndex: 20, padding: '4px 10px', background: '#000a', color: '#fff', fontSize: 10.5, fontFamily: '"JetBrains Mono", monospace', borderRadius: 4, fontWeight: 600, letterSpacing: '0.05em' }}>
+                          HIDDEN ON PUBLIC SITE
+                        </div>
+                      ) : null}
                       {active && (
                         <div style={{ position: 'absolute', top: 6, right: 6, zIndex: 20, padding: '4px 10px', background: T.primary, color: '#fff', fontSize: 10.5, fontFamily: '"JetBrains Mono", monospace', borderRadius: 4, fontWeight: 600 }}>
                           EDITING · {(BLOCK_META[b.blockType] || {}).name || b.blockType}

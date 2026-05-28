@@ -23,6 +23,7 @@ export async function savePageBodyBlocks(args: {
   meta_description?: string | null
   og_image_url?: string | null
   body_blocks: Block[]
+  hidden_blocks?: string[]
 }): Promise<Result> {
   const user = await getCurrentUser()
   if (!user) return { ok: false, error: 'unauthenticated' }
@@ -78,6 +79,7 @@ export async function savePageBodyBlocks(args: {
         meta_description: args.meta_description?.trim() || null,
         og_image_url: args.og_image_url?.trim() || null,
         body_blocks: Array.isArray(args.body_blocks) ? args.body_blocks : [],
+        hidden_blocks: Array.isArray(args.hidden_blocks) ? args.hidden_blocks : [],
       } as never,
       user: user as never,
       overrideAccess: false,

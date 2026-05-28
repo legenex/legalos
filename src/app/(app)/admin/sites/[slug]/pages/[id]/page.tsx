@@ -88,6 +88,9 @@ export default async function EditPageRoute({ params }: Props) {
         meta_description: (page.meta_description as string | null) || '',
         og_image_url: (page.og_image_url as string | null) || '',
         body_blocks: seedBlocks,
+        hidden_blocks: Array.isArray(page.hidden_blocks)
+          ? (page.hidden_blocks as string[])
+          : [],
       }}
     />
   )

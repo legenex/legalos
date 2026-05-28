@@ -355,6 +355,14 @@ export const Pages: CollectionConfig = {
     { name: 'og_image_url', type: 'text' },
     { name: 'schema_json', type: 'json', admin: { description: 'JSON-LD payload for this page.' } },
     {
+      name: 'hidden_blocks',
+      type: 'json',
+      admin: {
+        description:
+          'Array of body_blocks ids to hide on the public site without deleting. Toggled from the page builder; the renderer skips matching blocks.',
+      },
+    },
+    {
       name: 'slug_redirects',
       type: 'array',
       admin: { description: 'Old slugs that 301 to current. Auto-populated when you change a published slug.' },

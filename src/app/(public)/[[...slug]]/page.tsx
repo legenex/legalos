@@ -280,6 +280,7 @@ type RenderPageDoc = {
   shared_template_overrides?: Record<string, string> | null
   title: string
   body_blocks?: unknown[]
+  hidden_blocks?: string[] | null
 }
 
 async function RenderPage({
@@ -313,8 +314,12 @@ async function RenderPage({
   }
 
   // Custom blocks path: substitute {{site.*}} server-side then dispatch.
-  const blocks = (page.body_blocks ?? []) as Block[]
-  const renderedBlocks = deepRenderTemplateVars(blocks, site)
+  // Filter out blocks the page author has marked as hidden in the builder.
+  const hidden = new Set(Array.isArray(page.hidden_blocks) ? page.hidden_blocks : [])
+  const visibleBlocks = ((page.body_blocks ?? []) as Block[]).filter(
+    (b) => !b.id || !hidden.has(b.id),
+  )
+  const renderedBlocks = deepRenderTemplateVars(visibleBlocks, site)
   const tc = await loadTrackingConfig(site.id)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>

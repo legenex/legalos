@@ -4,6 +4,7 @@ import * as migration_20260518_134900_site_status_draft_default from './20260518
 import * as migration_20260525_214717_domains_pool_and_funnel_domain from './20260525_214717_domains_pool_and_funnel_domain';
 import * as migration_20260528_180000_add_media_collection from './20260528_180000_add_media_collection';
 import * as migration_20260528_200000_lead_form_form_fields from './20260528_200000_lead_form_form_fields';
+import * as migration_20260528_220000_pages_hidden_blocks from './20260528_220000_pages_hidden_blocks';
 
 export const migrations = [
   {
@@ -35,5 +36,10 @@ export const migrations = [
     up: migration_20260528_200000_lead_form_form_fields.up,
     down: migration_20260528_200000_lead_form_form_fields.down,
     name: '20260528_200000_lead_form_form_fields',
+  },
+  {
+    up: migration_20260528_220000_pages_hidden_blocks.up,
+    down: migration_20260528_220000_pages_hidden_blocks.down,
+    name: '20260528_220000_pages_hidden_blocks',
   },
 ];
