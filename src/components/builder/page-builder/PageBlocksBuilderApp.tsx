@@ -74,14 +74,21 @@ const SEED_FOR: Record<string, () => Record<string, unknown>> = {
   }),
   hero: () => ({
     blockType: 'hero',
-    eyebrow: 'Free case review',
-    heading: 'New hero headline',
-    sub: 'Sub copy explaining what this page offers.',
-    primary_cta_label: 'Get started',
-    primary_cta_href: '#',
+    eyebrow: '100% Free • No Win, No Fee • Fast Results',
+    heading: 'Check Your Claim,',
+    heading_gradient: 'Get What You Deserve',
+    sub: 'Unsure if you have a case after an accident? Our AI tool instantly checks if you may qualify for compensation and matches you with the best-suited attorney, at no upfront cost.',
+    primary_cta_label: 'Start Your Free Claim Check',
+    primary_cta_href: '#hero',
+    cta_sub: 'Takes less than 2 minutes',
     secondary_cta_label: '',
     secondary_cta_href: '',
     image_url: '',
+    pills: [
+      { text: 'Vetted Attorneys Only' },
+      { text: 'No Upfront Fees' },
+      { text: 'Results in Minutes' },
+    ],
   }),
   trust_strip: () => ({
     blockType: 'trust_strip',
@@ -259,16 +266,26 @@ const Ed = {
   ),
   hero: (b, set) => (
     <>
-      <Label>Eyebrow</Label><Input value={b.eyebrow || ''} onChange={(e) => set({ eyebrow: e.target.value })} />
-      <Label>Heading</Label><Input value={b.heading || ''} onChange={(e) => set({ heading: e.target.value })} />
+      <Label>Eyebrow (badge)</Label><Input value={b.eyebrow || ''} onChange={(e) => set({ eyebrow: e.target.value })} />
+      <Label>Heading (first line)</Label><Input value={b.heading || ''} onChange={(e) => set({ heading: e.target.value })} />
+      <Label>Heading gradient (second line)</Label><Input value={b.heading_gradient || ''} onChange={(e) => set({ heading_gradient: e.target.value })} />
       <Label>Sub</Label><Textarea rows={3} value={b.sub || ''} onChange={(e) => set({ sub: e.target.value })} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
         <div><Label>Primary CTA label</Label><Input value={b.primary_cta_label || ''} onChange={(e) => set({ primary_cta_label: e.target.value })} /></div>
         <div><Label>Primary CTA href</Label><Input mono value={b.primary_cta_href || ''} onChange={(e) => set({ primary_cta_href: e.target.value })} /></div>
-        <div><Label>Secondary CTA label</Label><Input value={b.secondary_cta_label || ''} onChange={(e) => set({ secondary_cta_label: e.target.value })} /></div>
-        <div><Label>Secondary CTA href</Label><Input mono value={b.secondary_cta_href || ''} onChange={(e) => set({ secondary_cta_href: e.target.value })} /></div>
       </div>
-      <Label>Image URL</Label><Input mono value={b.image_url || ''} onChange={(e) => set({ image_url: e.target.value })} />
+      <Label>CTA sub (small grey text)</Label><Input value={b.cta_sub || ''} onChange={(e) => set({ cta_sub: e.target.value })} />
+      <Label>Background image URL</Label><Input mono value={b.image_url || ''} onChange={(e) => set({ image_url: e.target.value })} />
+      <Label style={{ marginTop: 10 }}>Trust pills</Label>
+      <ArrayEditor
+        items={b.pills || []}
+        blank={{ text: '' }}
+        onChange={(pills) => set({ pills })}
+        render={(it, u) => (
+          <Input value={it.text || ''} onChange={(e) => u({ text: e.target.value })} />
+        )}
+        addLabel="Add pill"
+      />
     </>
   ),
   trust_strip: (b, set) => (

@@ -7,6 +7,13 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { LeadForm } from './LeadForm'
+import { BESPOKE_CSS } from './bespoke-css'
+
+// Hero background — kept on the renderer so the editor preview matches the
+// public page even before the user uploads their own image_url. Per-block
+// hero.image_url overrides this when present.
+const DEFAULT_HERO_BG =
+  'https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/699c27e1ee245bcd8cd77386/c7a33cdfe_1.png'
 
 export type Block = {
   blockType: string
@@ -37,6 +44,10 @@ export function BlockRenderer({ blocks, ctx }: { blocks: Block[] | null | undefi
   if (!blocks || blocks.length === 0) return <FallbackEmpty />
   return (
     <>
+      {/* Bespoke CSS injected once per render. Used by the bespoke-styled
+          block components below. Safe to ship twice in the same DOM (a page
+          + the admin builder canvas) — duplicate rules are idempotent. */}
+      <style dangerouslySetInnerHTML={{ __html: BESPOKE_CSS }} />
       {blocks.map((block, idx) => (
         <BlockDispatch key={block.id ?? `${block.blockType}-${idx}`} block={block} ctx={ctx} />
       ))}
@@ -145,69 +156,32 @@ function MarkdownLite({ source }: { source: string }) {
 /*                                Nav Header                                  */
 /* -------------------------------------------------------------------------- */
 
+// Brand logo URL: per-block override > Site.logo_url > fallback wordmark.
 function NavHeader({ block, ctx }: { block: Block; ctx: RenderContext }) {
   const links = (get<Array<{ label: string; href: string }>>(block, 'links') ?? []) as Array<{ label: string; href: string }>
   const ctaLabel = get<string>(block, 'cta_label')
   const ctaHref = get<string>(block, 'cta_href') ?? '#'
-  const showPhone = get<boolean>(block, 'show_phone') ?? true
+  const logoUrl =
+    get<string>(block, 'logo_url') ??
+    (ctx.site as { logo_url?: string }).logo_url ??
+    'https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/699c8efa75d8857518d34273/440596289_PrimaryLogo_CheckMyClaim.png'
   return (
-    <header
-      style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 50,
-        background: 'rgba(255,255,255,0.92)',
-        backdropFilter: 'blur(8px)',
-        borderBottom: '1px solid rgba(0,0,0,0.06)',
-      }}
-    >
-      <div
-        className="mx-auto px-6"
-        style={{
-          maxWidth: 1180,
-          height: 68,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 24,
-        }}
-      >
-        <Link href="/" style={{ fontWeight: 800, fontSize: 18, color: 'var(--site-primary)', textDecoration: 'none' }}>
-          {ctx.site.name ?? 'Home'}
-        </Link>
-        <nav style={{ display: 'flex', gap: 28, alignItems: 'center' }}>
+    <nav className="navbar">
+      <div className="navbar__inner">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={logoUrl} alt={ctx.site.name ?? 'Site logo'} className="navbar__logo" />
+        <div className="navbar__links">
           {links.map((l, i) => (
-            <Link key={i} href={l.href} style={{ fontSize: 14, color: 'var(--site-ink)', textDecoration: 'none' }}>
+            <a key={i} href={l.href} className="navbar__link">
               {l.label}
-            </Link>
-          ))}
-          {showPhone && ctx.phone.display ? (
-            <a
-              href={`tel:${ctx.phone.tel}`}
-              style={{ fontSize: 14, fontWeight: 700, color: 'var(--site-primary)', textDecoration: 'none' }}
-            >
-              {ctx.phone.display}
             </a>
-          ) : null}
-          {ctaLabel ? (
-            <Link
-              href={ctaHref}
-              style={{
-                background: 'var(--site-accent)',
-                color: 'var(--site-ink)',
-                fontWeight: 700,
-                fontSize: 14,
-                padding: '10px 18px',
-                borderRadius: 999,
-                textDecoration: 'none',
-              }}
-            >
-              {ctaLabel}
-            </Link>
-          ) : null}
-        </nav>
+          ))}
+        </div>
+        {ctaLabel ? (
+          <a href={ctaHref} className="btn-nav">{ctaLabel}</a>
+        ) : null}
       </div>
-    </header>
+    </nav>
   )
 }
 
@@ -215,102 +189,64 @@ function NavHeader({ block, ctx }: { block: Block; ctx: RenderContext }) {
 /*                                    Hero                                    */
 /* -------------------------------------------------------------------------- */
 
-function Hero({ block, ctx }: { block: Block; ctx: RenderContext }) {
-  const eyebrow = get<string>(block, 'eyebrow')
+function Hero({ block, ctx: _ctx }: { block: Block; ctx: RenderContext }) {
+  const eyebrow = get<string>(block, 'eyebrow') ?? '100% Free • No Win, No Fee • Fast Results'
   const heading = get<string>(block, 'heading') ?? ''
+  const headingGradient = get<string>(block, 'heading_gradient')
   const sub = get<string>(block, 'sub')
   const primaryLabel = get<string>(block, 'primary_cta_label')
   const primaryHref = get<string>(block, 'primary_cta_href') ?? '#'
-  const secondaryLabel = get<string>(block, 'secondary_cta_label')
-  const secondaryHref = get<string>(block, 'secondary_cta_href') ?? '#'
-  const imageUrl = get<string>(block, 'image_url')
+  const ctaSub = get<string>(block, 'cta_sub') ?? 'Takes less than 2 minutes'
+  const bgImage = get<string>(block, 'image_url') ?? DEFAULT_HERO_BG
+  const pills =
+    (get<Array<{ text: string }>>(block, 'pills') as Array<{ text: string }> | undefined) ??
+    [{ text: 'Vetted Attorneys Only' }, { text: 'No Upfront Fees' }, { text: 'Results in Minutes' }]
   return (
-    <section
-      style={{
-        background: `linear-gradient(180deg, var(--site-surface, #F7F5F0) 0%, rgba(255,255,255,0) 60%)`,
-        padding: '64px 0 48px',
-      }}
-    >
-      <Container>
-        <div style={{ display: 'grid', gridTemplateColumns: imageUrl ? '1.1fr 0.9fr' : '1fr', gap: 48, alignItems: 'center' }}>
-          <div>
-            {eyebrow ? (
-              <p
-                style={{
-                  display: 'inline-block',
-                  color: 'var(--site-primary)',
-                  fontSize: 13,
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: 1.5,
-                  background: 'rgba(0,0,0,0.04)',
-                  padding: '6px 14px',
-                  borderRadius: 999,
-                  marginBottom: 20,
-                }}
-              >
-                {eyebrow}
-              </p>
-            ) : null}
-            <h1 style={{ fontSize: 52, lineHeight: 1.05, fontWeight: 800, letterSpacing: '-0.02em', margin: 0, color: 'var(--site-ink)' }}>
-              {heading}
-            </h1>
-            {sub ? (
-              <p style={{ marginTop: 20, fontSize: 18, lineHeight: 1.55, color: 'var(--site-muted)', maxWidth: 560 }}>{sub}</p>
-            ) : null}
-            <div style={{ marginTop: 28, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              {primaryLabel ? (
-                <Link
-                  href={primaryHref}
-                  style={{
-                    background: 'var(--site-primary)',
-                    color: '#fff',
-                    fontWeight: 700,
-                    fontSize: 15,
-                    padding: '14px 24px',
-                    borderRadius: 999,
-                    textDecoration: 'none',
-                    display: 'inline-block',
-                  }}
-                >
-                  {primaryLabel}
-                </Link>
-              ) : null}
-              {secondaryLabel ? (
-                <Link
-                  href={secondaryHref}
-                  style={{
-                    color: 'var(--site-ink)',
-                    fontWeight: 700,
-                    fontSize: 15,
-                    padding: '14px 24px',
-                    borderRadius: 999,
-                    textDecoration: 'none',
-                    border: '1px solid rgba(0,0,0,0.18)',
-                    display: 'inline-block',
-                  }}
-                >
-                  {secondaryLabel}
-                </Link>
-              ) : null}
+    <section className="hero" id="home">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={bgImage} alt="" className="hero__bg-img" />
+      <div className="hero__overlay" />
+      <div className="hero__pattern" />
+      <div className="hero__content">
+        <div className="hero__inner">
+          {eyebrow ? (
+            <div className="hero__badge">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+              {eyebrow}
             </div>
-            {ctx.phone.display ? (
-              <p style={{ marginTop: 16, fontSize: 13, color: 'var(--site-muted)' }}>
-                Or speak with us now:{' '}
-                <a href={`tel:${ctx.phone.tel}`} style={{ color: 'var(--site-primary)', fontWeight: 700 }}>
-                  {ctx.phone.display}
-                </a>
-              </p>
+          ) : null}
+          <h1 className="hero__heading">
+            {heading}
+            {headingGradient ? (
+              <>
+                <br />
+                <span className="hero__heading-gradient">{headingGradient}</span>
+              </>
             ) : null}
-          </div>
-          {imageUrl ? (
-            <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 30px 60px rgba(0,0,0,0.15)' }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={imageUrl} alt="" style={{ width: '100%', height: 'auto', display: 'block' }} />
+          </h1>
+          {sub ? <p className="hero__sub">{sub}</p> : null}
+          {primaryLabel ? (
+            <div className="hero__cta-row">
+              <a href={primaryHref} className="btn-hero">{primaryLabel}</a>
+              <span className="hero__cta-sub">{ctaSub}</span>
+            </div>
+          ) : null}
+          {pills.length > 0 ? (
+            <div className="hero__pills">
+              {pills.map((p, i) => (
+                <div key={i} className="hero__pill">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 11l3 3L22 4" />
+                  </svg>
+                  <span className="hero__pill-text">{p.text}</span>
+                </div>
+              ))}
             </div>
           ) : null}
         </div>
-      </Container>
+      </div>
     </section>
   )
 }
@@ -320,33 +256,21 @@ function Hero({ block, ctx }: { block: Block; ctx: RenderContext }) {
 /* -------------------------------------------------------------------------- */
 
 function TrustStrip({ block }: { block: Block }) {
-  const items = (get<Array<{ value: string; label: string }>>(block, 'items') ?? []) as Array<{ value: string; label: string }>
+  const items = (get<Array<{ value?: string; label?: string }>>(block, 'items') ?? []) as Array<{ value?: string; label?: string }>
   if (items.length === 0) return null
+  // The bespoke trust banner shows the `value` field uppercased as the label
+  // — there's no two-line value+label split in the CMC design, just bold
+  // wordmarks separated by dots.
   return (
-    <section
-      style={{
-        background: 'var(--site-primary)',
-        color: '#fff',
-        padding: '28px 0',
-      }}
-    >
-      <Container>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(${Math.min(items.length, 4)}, minmax(0,1fr))`,
-            gap: 20,
-            textAlign: 'center',
-          }}
-        >
-          {items.map((it, i) => (
-            <div key={i}>
-              <p style={{ fontSize: 28, fontWeight: 800, margin: 0, color: 'var(--site-accent)' }}>{it.value}</p>
-              <p style={{ fontSize: 13, margin: '6px 0 0', opacity: 0.85 }}>{it.label}</p>
-            </div>
-          ))}
-        </div>
-      </Container>
+    <section className="trust-banner">
+      <div className="trust-banner__inner">
+        {items.map((it, i) => (
+          <div key={i} className="trust-banner__item">
+            <span className="trust-banner__label">{(it.value || it.label || '').toUpperCase()}</span>
+            {i < items.length - 1 ? <span className="trust-banner__dot" /> : null}
+          </div>
+        ))}
+      </div>
     </section>
   )
 }

@@ -11,14 +11,22 @@ const bodyBlocks: Field = {
     {
       slug: 'hero',
       fields: [
-        { name: 'eyebrow', type: 'text' },
-        { name: 'heading', type: 'text', required: true },
+        { name: 'eyebrow', type: 'text', admin: { description: 'Pill above the headline (e.g. "100% Free • No Win, No Fee").' } },
+        { name: 'heading', type: 'text', required: true, admin: { description: 'First line of the headline.' } },
+        { name: 'heading_gradient', type: 'text', admin: { description: 'Optional second line with a blue gradient. Shown on its own line below `heading`.' } },
         { name: 'sub', type: 'textarea' },
         { name: 'primary_cta_label', type: 'text' },
         { name: 'primary_cta_href', type: 'text' },
+        { name: 'cta_sub', type: 'text', admin: { description: 'Small grey text next to the CTA (e.g. "Takes less than 2 minutes").' } },
         { name: 'secondary_cta_label', type: 'text' },
         { name: 'secondary_cta_href', type: 'text' },
-        { name: 'image_url', type: 'text' },
+        { name: 'image_url', type: 'text', admin: { description: 'Full-bleed hero background image URL.' } },
+        {
+          name: 'pills',
+          type: 'array',
+          admin: { description: 'Three trust pills below the CTA row (e.g. "Vetted Attorneys Only").' },
+          fields: [{ name: 'text', type: 'text', required: true }],
+        },
       ],
     },
     {
