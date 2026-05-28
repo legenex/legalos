@@ -8,6 +8,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { invokeLLM } from '@/lib/ai/invoke'
 import { BlockSchema, normalizeAIBlocks } from '@/lib/builder/block-schemas'
 import { extractBlocksFromHtml } from '@/lib/builder/html-to-blocks'
+import { extractStructuredFromHtml } from '@/lib/builder/html-to-structured-blocks'
 
 // Import a Page from raw HTML (and optional CSS) the user has on disk.
 // Unlike the URL clone path this works for SPAs, paywalled / authenticated
@@ -88,7 +89,7 @@ export async function createPageFromHtml(args: {
   siteSlug: string
   slug: string
   status: string
-  mode: 'structured' | 'parse' | 'raw'
+  mode: 'structured-fields' | 'structured' | 'parse' | 'raw'
   htmlDataUrl: string
   cssDataUrl?: string
   htmlFilename?: string
@@ -129,7 +130,20 @@ export async function createPageFromHtml(args: {
   let metaDescription: string | null = null
   let bodyBlocks: Array<Record<string, unknown>> = []
 
-  if (args.mode === 'structured') {
+  if (args.mode === 'structured-fields') {
+    // DOM walks via cheerio AND maps each section to a structured block type
+    // (hero, faq, services_grid, etc.) so the right-side editor shows
+    // field-by-field inputs instead of raw HTML. Falls back to custom_html
+    // for sections that don't match any detector. No AI calls.
+    try {
+      const out = extractStructuredFromHtml(html, externalCss || undefined)
+      title = out.title || title
+      metaDescription = out.meta_description ?? null
+      bodyBlocks = out.blocks
+    } catch (err) {
+      return { ok: false, error: `Structured-fields import failed: ${err instanceof Error ? err.message : 'unknown error'}` }
+    }
+  } else if (args.mode === 'structured') {
     // DOM walks via cheerio, one custom_html block per top-level section.
     // No AI call, no schema validation surprises, pixel-perfect output.
     try {

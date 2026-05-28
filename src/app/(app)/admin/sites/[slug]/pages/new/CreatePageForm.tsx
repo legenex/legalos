@@ -9,7 +9,7 @@ import { createPageFromHtml } from './html-import-action'
 
 type Option = { label: string; value: string }
 type Mode = 'manual' | 'ai' | 'import'
-type ImportMode = 'structured' | 'parse' | 'raw'
+type ImportMode = 'structured-fields' | 'structured' | 'parse' | 'raw'
 
 const fileToDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -56,7 +56,7 @@ export function CreatePageForm({
   const [templateKey, setTemplateKey] = useState('custom')
   const [sourceUrl, setSourceUrl] = useState('')
   // Import-from-files mode state.
-  const [importMode, setImportMode] = useState<ImportMode>('structured')
+  const [importMode, setImportMode] = useState<ImportMode>('structured-fields')
   const [htmlFile, setHtmlFile] = useState<File | null>(null)
   const [cssFile, setCssFile] = useState<File | null>(null)
   const htmlRef = useRef<HTMLInputElement>(null)
@@ -192,6 +192,30 @@ export function CreatePageForm({
                 <div className="flex flex-col gap-2">
                   <label
                     className={`flex gap-3 items-start p-3 rounded-md border cursor-pointer ${
+                      importMode === 'structured-fields'
+                        ? 'border-[var(--color-border-strong)] bg-[var(--color-surface-2)]'
+                        : 'border-[var(--color-border)] bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-2)]/60'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="importMode"
+                      checked={importMode === 'structured-fields'}
+                      onChange={() => setImportMode('structured-fields')}
+                      disabled={pending}
+                      className="mt-0.5"
+                    />
+                    <span className="flex-1">
+                      <span className="block text-[13px] font-semibold text-white">Structured fields (recommended)</span>
+                      <span className="block text-[12px] text-[var(--color-ink-dim)] mt-1 leading-snug">
+                        DOM walks the HTML and maps each section to a structured block type (hero, faq, services grid, etc.) so the
+                        right-side editor shows text fields instead of raw HTML. Sections that don't match a known pattern stay as
+                        editable HTML. No AI calls, never fails.
+                      </span>
+                    </span>
+                  </label>
+                  <label
+                    className={`flex gap-3 items-start p-3 rounded-md border cursor-pointer ${
                       importMode === 'structured'
                         ? 'border-[var(--color-border-strong)] bg-[var(--color-surface-2)]'
                         : 'border-[var(--color-border)] bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-2)]/60'
@@ -206,10 +230,10 @@ export function CreatePageForm({
                       className="mt-0.5"
                     />
                     <span className="flex-1">
-                      <span className="block text-[13px] font-semibold text-white">Structured copy (recommended)</span>
+                      <span className="block text-[13px] font-semibold text-white">Structured copy (raw HTML per section)</span>
                       <span className="block text-[12px] text-[var(--color-ink-dim)] mt-1 leading-snug">
-                        DOM walks the HTML and turns every <code className="font-mono">&lt;nav&gt;</code> / <code className="font-mono">&lt;section&gt;</code> / <code className="font-mono">&lt;footer&gt;</code> into one editable
-                        <code className="font-mono"> custom_html</code> block. Pixel-perfect visual, section-by-section editable in the builder. No AI calls, never fails.
+                        Same DOM walk, but every section ships as a raw <code className="font-mono">custom_html</code> block —
+                        pixel-perfect visual, HTML editing only. Use this when you want the exact uploaded design preserved.
                       </span>
                     </span>
                   </label>
