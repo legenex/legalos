@@ -229,6 +229,191 @@ const ArrayEditor = ({ items, blank, render, onChange, addLabel = 'Add item' }) 
 }
 
 // ============================================================================
+// FORM FIELDS EDITOR — repeated editor for lead_form's custom field list. A
+// field is { name, label, placeholder, type, required, half_width, options? }.
+// The default empty list signals 'use the legacy first_name/last_name/email/
+// phone/state/zip set' to the public LeadForm renderer.
+// ============================================================================
+const FIELD_TYPES = [
+  { value: 'text', label: 'Text' },
+  { value: 'email', label: 'Email' },
+  { value: 'tel', label: 'Phone' },
+  { value: 'textarea', label: 'Textarea' },
+  { value: 'select', label: 'Select (dropdown)' },
+  { value: 'checkbox', label: 'Checkbox' },
+  { value: 'hidden', label: 'Hidden' },
+]
+
+const slugifyName = (s) =>
+  String(s || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+
+const FormFieldsEditor = ({ items, onChange }) => {
+  const update = (idx, patch) => {
+    const next = items.map((it, i) => (i === idx ? { ...it, ...patch } : it))
+    onChange(next)
+  }
+  const remove = (idx) => onChange(items.filter((_, i) => i !== idx))
+  const move = (idx, dir) => {
+    const next = [...items]
+    const swap = idx + dir
+    if (swap < 0 || swap >= next.length) return
+    ;[next[idx], next[swap]] = [next[swap], next[idx]]
+    onChange(next)
+  }
+  const addField = (type) =>
+    onChange([
+      ...items,
+      {
+        name: `field_${items.length + 1}`,
+        label: '',
+        placeholder: '',
+        type,
+        required: false,
+        half_width: false,
+        options: type === 'select' ? [{ value: '', label: '' }] : undefined,
+      },
+    ])
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {items.length === 0 ? (
+        <div style={{ padding: 12, background: T.bgElev, border: `1px dashed ${T.border}`, borderRadius: 7, fontSize: 12, color: T.textMute }}>
+          No custom fields. The public form will render: First name, Last name, Email, Phone, State, ZIP.
+        </div>
+      ) : (
+        items.map((it, idx) => (
+          <div key={idx} style={{ padding: 10, background: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 7 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+              <Pill color={T.textMute}>{idx + 1}</Pill>
+              <Pill color={T.primary}>{(FIELD_TYPES.find((t) => t.value === it.type) || {}).label || it.type}</Pill>
+              <div style={{ flex: 1 }} />
+              <IconBtn icon={MoveUp} onClick={() => move(idx, -1)} />
+              <IconBtn icon={MoveDown} onClick={() => move(idx, 1)} />
+              <IconBtn icon={Trash2} onClick={() => remove(idx)} style={{ color: T.danger }} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+              <div>
+                <Label>Name (key)</Label>
+                <Input
+                  mono
+                  value={it.name || ''}
+                  onChange={(e) => update(idx, { name: slugifyName(e.target.value) })}
+                  placeholder="first_name"
+                />
+              </div>
+              <div>
+                <Label>Type</Label>
+                <Select
+                  value={it.type || 'text'}
+                  onChange={(e) => {
+                    const t = e.target.value
+                    update(idx, {
+                      type: t,
+                      options: t === 'select' && !Array.isArray(it.options) ? [{ value: '', label: '' }] : it.options,
+                    })
+                  }}
+                >
+                  {FIELD_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+            {it.type !== 'hidden' ? (
+              <>
+                <Label>Label</Label>
+                <Input value={it.label || ''} onChange={(e) => update(idx, { label: e.target.value })} placeholder="First name" />
+                <Label>Placeholder</Label>
+                <Input value={it.placeholder || ''} onChange={(e) => update(idx, { placeholder: e.target.value })} />
+              </>
+            ) : (
+              <>
+                <Label>Default value</Label>
+                <Input mono value={it.value || ''} onChange={(e) => update(idx, { value: e.target.value })} placeholder="(constant)" />
+              </>
+            )}
+            {it.type === 'select' ? (
+              <div style={{ marginTop: 8 }}>
+                <Label>Options</Label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {(it.options || []).map((opt, j) => (
+                    <div key={j} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 6 }}>
+                      <Input
+                        mono
+                        value={opt.value || ''}
+                        onChange={(e) => {
+                          const next = [...(it.options || [])]
+                          next[j] = { ...next[j], value: e.target.value }
+                          update(idx, { options: next })
+                        }}
+                        placeholder="value"
+                      />
+                      <Input
+                        value={opt.label || ''}
+                        onChange={(e) => {
+                          const next = [...(it.options || [])]
+                          next[j] = { ...next[j], label: e.target.value }
+                          update(idx, { options: next })
+                        }}
+                        placeholder="Label shown to user"
+                      />
+                      <IconBtn
+                        icon={Trash2}
+                        onClick={() => update(idx, { options: (it.options || []).filter((_, k) => k !== j) })}
+                        style={{ color: T.danger }}
+                      />
+                    </div>
+                  ))}
+                  <Btn
+                    variant="secondary"
+                    size="xs"
+                    icon={Plus}
+                    onClick={() => update(idx, { options: [...(it.options || []), { value: '', label: '' }] })}
+                  >
+                    Add option
+                  </Btn>
+                </div>
+              </div>
+            ) : null}
+            <div style={{ display: 'flex', gap: 14, marginTop: 10, fontSize: 12 }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: T.text }}>
+                <input
+                  type="checkbox"
+                  checked={!!it.required}
+                  onChange={(e) => update(idx, { required: e.target.checked })}
+                />
+                Required
+              </label>
+              {it.type !== 'hidden' && it.type !== 'textarea' && it.type !== 'checkbox' ? (
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: T.text }}>
+                  <input
+                    type="checkbox"
+                    checked={!!it.half_width}
+                    onChange={(e) => update(idx, { half_width: e.target.checked })}
+                  />
+                  Half width (pair w/ next field)
+                </label>
+              ) : null}
+            </div>
+          </div>
+        ))
+      )}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {FIELD_TYPES.map((t) => (
+          <Btn key={t.value} variant="secondary" size="xs" icon={Plus} onClick={() => addField(t.value)}>
+            {t.label}
+          </Btn>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
 // PER-BLOCK EDITORS — each takes (block, set) where `set(patch)` shallow-merges
 // into the block. They render only the fields that block type owns.
 // ============================================================================
@@ -502,6 +687,21 @@ const Ed = {
       <Label>Submit label</Label><Input value={b.submit_label || ''} onChange={(e) => set({ submit_label: e.target.value })} />
       <Label>Consent markdown</Label><Textarea rows={4} value={b.consent_md || ''} onChange={(e) => set({ consent_md: e.target.value })} />
       <Label>Success slug</Label><Input mono value={b.success_slug || ''} onChange={(e) => set({ success_slug: e.target.value })} />
+
+      <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${T.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+          <Label style={{ marginBottom: 0 }}>Form fields</Label>
+          <span style={{ fontSize: 10.5, color: T.textLow }}>
+            {Array.isArray(b.form_fields) && b.form_fields.length > 0
+              ? `${b.form_fields.length} custom field${b.form_fields.length === 1 ? '' : 's'}`
+              : 'Using default: name / email / phone / state / zip'}
+          </span>
+        </div>
+        <FormFieldsEditor
+          items={Array.isArray(b.form_fields) ? b.form_fields : []}
+          onChange={(form_fields) => set({ form_fields })}
+        />
+      </div>
     </>
   ),
   custom_html: (b, set) => (

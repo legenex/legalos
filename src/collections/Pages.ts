@@ -260,6 +260,14 @@ const bodyBlocks: Field = {
         },
         { name: 'funnel_id', type: 'text', admin: { description: 'Optional quiz/LP id this form belongs to.' } },
         { name: 'success_slug', type: 'text', defaultValue: '/submitted' },
+        {
+          name: 'form_fields',
+          type: 'json',
+          admin: {
+            description:
+              'Custom form fields config. Leave empty to render the default name/email/phone/state/zip set. JSON array of { name, label, placeholder, type, required, half_width, options }.',
+          },
+        },
       ],
     },
   ],
