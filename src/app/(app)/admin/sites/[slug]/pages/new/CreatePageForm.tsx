@@ -2,10 +2,12 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Sparkles, FileText } from 'lucide-react'
 import { createPage } from '../actions'
+import { createPageFromUrl } from './ai-clone-action'
 
 type Option = { label: string; value: string }
+type Mode = 'manual' | 'ai'
 
 const slugify = (s: string): string =>
   s
@@ -36,11 +38,13 @@ export function CreatePageForm({
   templateOptions: Option[]
 }) {
   const router = useRouter()
+  const [mode, setMode] = useState<Mode>('manual')
   const [title, setTitle] = useState('')
   const [slug, setSlug] = useState('')
   const [slugTouched, setSlugTouched] = useState(false)
   const [status, setStatus] = useState('draft')
   const [templateKey, setTemplateKey] = useState('custom')
+  const [sourceUrl, setSourceUrl] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
 
@@ -56,6 +60,28 @@ export function CreatePageForm({
     e.preventDefault()
     setError(null)
     start(async () => {
+      if (mode === 'ai') {
+        if (!sourceUrl.trim()) {
+          setError('Source URL is required when cloning with AI.')
+          return
+        }
+        const res = await createPageFromUrl({
+          siteId,
+          siteSlug,
+          slug: previewSlug,
+          status,
+          sourceUrl: sourceUrl.trim(),
+        })
+        if (!res.ok) {
+          setError(res.error)
+          return
+        }
+        // Drop straight into the new page's editor so the user sees the
+        // AI-generated body_blocks rendering.
+        router.push(`/admin/sites/${siteSlug}/pages/${res.id}`)
+        router.refresh()
+        return
+      }
       const res = await createPage({
         siteId,
         siteSlug,
@@ -77,18 +103,39 @@ export function CreatePageForm({
     <form onSubmit={onSubmit}>
       <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-1)] card-edge overflow-hidden">
         <div className="px-6 py-5 space-y-4">
-          <Field label="Title">
-            <input
-              autoFocus
-              type="text"
-              value={title}
-              onChange={(e) => onTitleChange(e.target.value)}
-              placeholder="About Us"
-              required
-              disabled={pending}
-              className={inputClass}
-            />
-          </Field>
+          <ModeTabs mode={mode} onChange={setMode} disabled={pending} />
+
+          {mode === 'ai' ? (
+            <Field label="Source URL">
+              <input
+                autoFocus
+                type="url"
+                value={sourceUrl}
+                onChange={(e) => setSourceUrl(e.target.value)}
+                placeholder="https://example.com/landing-page"
+                required
+                disabled={pending}
+                className={`${inputClass} font-mono`}
+              />
+              <Help>
+                Claude fetches this URL, reads the page structure, and converts each visible section into the closest matching block type
+                (hero, services, testimonials, FAQ, footer, etc.). The page is created as a Draft so you can review before publishing.
+              </Help>
+            </Field>
+          ) : (
+            <Field label="Title">
+              <input
+                autoFocus
+                type="text"
+                value={title}
+                onChange={(e) => onTitleChange(e.target.value)}
+                placeholder="About Us"
+                required
+                disabled={pending}
+                className={inputClass}
+              />
+            </Field>
+          )}
 
           <Field label="Slug">
             <input
@@ -98,7 +145,7 @@ export function CreatePageForm({
                 setSlugTouched(true)
                 setSlug(e.target.value)
               }}
-              placeholder="/about-us"
+              placeholder={mode === 'ai' ? '/cloned-from-url' : '/about-us'}
               required
               disabled={pending}
               className={`${inputClass} font-mono`}
@@ -123,28 +170,46 @@ export function CreatePageForm({
               <Help>Drafts are visible in the admin but not on the live site.</Help>
             </Field>
 
-            <Field label="Template">
-              <select
-                value={templateKey}
-                onChange={(e) => setTemplateKey(e.target.value)}
-                disabled={pending}
-                className={inputClass}
-              >
-                {templateOptions.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              <Help>
-                {templateKey === 'custom'
-                  ? 'You will author body blocks yourself after creation.'
-                  : 'Renders the shared legal template with this Site’s variables substituted in.'}
-              </Help>
-            </Field>
+            {mode === 'ai' ? (
+              <Field label="Template">
+                <div
+                  className={`${inputClass} flex items-center text-[var(--color-ink-dim)] cursor-not-allowed`}
+                >
+                  Custom · authored by AI
+                </div>
+                <Help>AI-cloned pages always come in as Custom so the generated blocks are editable.</Help>
+              </Field>
+            ) : (
+              <Field label="Template">
+                <select
+                  value={templateKey}
+                  onChange={(e) => setTemplateKey(e.target.value)}
+                  disabled={pending}
+                  className={inputClass}
+                >
+                  {templateOptions.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <Help>
+                  {templateKey === 'custom'
+                    ? 'You will author body blocks yourself after creation.'
+                    : 'Renders the shared legal template with this Site’s variables substituted in.'}
+                </Help>
+              </Field>
+            )}
           </Grid2>
 
-          <PreviewCard title={title} previewUrl={previewUrl} status={status} templateKey={templateKey} />
+          <PreviewCard
+            mode={mode}
+            title={title}
+            sourceUrl={sourceUrl}
+            previewUrl={previewUrl}
+            status={status}
+            templateKey={templateKey}
+          />
 
           {error ? (
             <p className="text-[13px] text-[var(--color-neg)] bg-[var(--color-neg)]/10 border border-[var(--color-neg)]/30 rounded-md px-3 py-2">
@@ -164,15 +229,59 @@ export function CreatePageForm({
           </button>
           <button
             type="submit"
-            disabled={pending || !title.trim() || !slug.trim()}
+            disabled={
+              pending ||
+              !slug.trim() ||
+              (mode === 'manual' ? !title.trim() : !sourceUrl.trim())
+            }
             className="brand-gradient text-white font-semibold text-[14px] px-5 py-2.5 rounded-lg disabled:opacity-50 hover:opacity-90 inline-flex items-center gap-2 transition-opacity"
           >
             {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {pending ? 'Creating…' : 'Create Page'}
+            {pending
+              ? mode === 'ai'
+                ? 'Cloning with AI…'
+                : 'Creating…'
+              : mode === 'ai'
+                ? 'Clone with AI'
+                : 'Create Page'}
           </button>
         </footer>
       </div>
     </form>
+  )
+}
+
+function ModeTabs({ mode, onChange, disabled }: { mode: Mode; onChange: (m: Mode) => void; disabled: boolean }) {
+  const tabs: Array<{ id: Mode; label: string; icon: typeof FileText; desc: string }> = [
+    { id: 'manual', label: 'Blank page', icon: FileText, desc: 'Start with a blank page and author sections yourself.' },
+    { id: 'ai', label: 'Clone with AI', icon: Sparkles, desc: 'Paste a URL and Claude rebuilds it as editable blocks.' },
+  ]
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+      {tabs.map((t) => {
+        const Icon = t.icon
+        const active = mode === t.id
+        return (
+          <button
+            key={t.id}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(t.id)}
+            className={`text-left p-3 rounded-lg border transition-colors ${
+              active
+                ? 'border-[var(--color-border-strong)] bg-[var(--color-surface-2)]'
+                : 'border-[var(--color-border)] bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-2)]/60'
+            } disabled:opacity-50`}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <Icon className={`w-4 h-4 ${active ? 'text-[var(--color-info)]' : 'text-[var(--color-ink-muted)]'}`} />
+              <span className={`text-[13px] font-semibold ${active ? 'text-white' : 'text-[var(--color-ink)]'}`}>{t.label}</span>
+            </div>
+            <p className="text-[12px] text-[var(--color-ink-dim)] leading-snug">{t.desc}</p>
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -194,21 +303,23 @@ function Grid2({ children }: { children: React.ReactNode }) {
 }
 
 function PreviewCard({
+  mode,
   title,
+  sourceUrl,
   previewUrl,
   status,
   templateKey,
 }: {
+  mode: Mode
   title: string
+  sourceUrl: string
   previewUrl: string | null
   status: string
   templateKey: string
 }) {
   return (
     <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/50 p-4">
-      <p className="text-[11px] uppercase tracking-wider text-[var(--color-ink-muted)] font-semibold mb-2">
-        On create
-      </p>
+      <p className="text-[11px] uppercase tracking-wider text-[var(--color-ink-muted)] font-semibold mb-2">On create</p>
       <ul className="space-y-1.5 text-[13px] text-[var(--color-ink)]">
         <li>
           <span className="text-[var(--color-ink-muted)]">URL:</span>{' '}
@@ -218,10 +329,22 @@ function PreviewCard({
             <span className="text-[var(--color-ink-dim)]">—</span>
           )}
         </li>
-        <li>
-          <span className="text-[var(--color-ink-muted)]">Title:</span>{' '}
-          <span className="text-white">{title.trim() || <span className="text-[var(--color-ink-dim)]">—</span>}</span>
-        </li>
+        {mode === 'ai' ? (
+          <li>
+            <span className="text-[var(--color-ink-muted)]">Source:</span>{' '}
+            {sourceUrl.trim() ? (
+              <code className="text-[var(--color-info)] font-mono break-all">{sourceUrl.trim()}</code>
+            ) : (
+              <span className="text-[var(--color-ink-dim)]">—</span>
+            )}
+            <span className="text-[var(--color-ink-dim)]"> · AI will set the page title from the source</span>
+          </li>
+        ) : (
+          <li>
+            <span className="text-[var(--color-ink-muted)]">Title:</span>{' '}
+            <span className="text-white">{title.trim() || <span className="text-[var(--color-ink-dim)]">—</span>}</span>
+          </li>
+        )}
         <li>
           <span className="text-[var(--color-ink-muted)]">Status:</span>{' '}
           <span className="capitalize">{status}</span>
@@ -231,13 +354,15 @@ function PreviewCard({
         </li>
         <li>
           <span className="text-[var(--color-ink-muted)]">Template:</span>{' '}
-          {templateKey === 'custom' ? 'Custom' : `Shared: ${templateKey}`}
+          {mode === 'ai' ? 'Custom · authored by AI' : templateKey === 'custom' ? 'Custom' : `Shared: ${templateKey}`}
           <span className="text-[var(--color-ink-dim)]">
             {' '}
             ·{' '}
-            {templateKey === 'custom'
-              ? 'add body blocks after creation'
-              : 'Site variables substitute in automatically'}
+            {mode === 'ai'
+              ? 'AI returns editable body_blocks'
+              : templateKey === 'custom'
+                ? 'add body blocks after creation'
+                : 'Site variables substitute in automatically'}
           </span>
         </li>
       </ul>
