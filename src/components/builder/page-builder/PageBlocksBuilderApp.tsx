@@ -12,7 +12,7 @@
 // to the row; the iframe is refreshed via a cache-buster querystring so the
 // preview reflects the save without a manual reload.
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Plus, MoveUp, MoveDown, Trash2, ChevronLeft, ChevronRight, Eye, EyeOff, Save, X,
@@ -20,6 +20,7 @@ import {
   HelpCircle, Star, Award, Trophy, ListChecks, ListOrdered, Grid3x3, Shield,
   MousePointerClick, RotateCw, Sparkles, Check, Loader2, Copy, GripVertical,
   Smartphone, Tablet, Monitor, Video as VideoIcon, Images, Building2, Minus,
+  AlertTriangle, XCircle,
 } from 'lucide-react'
 import {
   T, Btn, Input, Textarea, Select, Label, Pill, IconBtn, ConfirmDialog, Toast,
@@ -32,6 +33,7 @@ import { GoogleSerpPreview, OgPreviewCards } from './PageSettingsPreviews'
 import { savePageBodyBlocks } from '@/app/(app)/admin/sites/[slug]/pages/[id]/blocks-actions'
 import { rewriteSection } from '@/app/(app)/admin/sites/[slug]/pages/[id]/ai-rewrite-action'
 import { saveAsSiteDefault } from '@/app/(app)/admin/sites/[slug]/pages/[id]/site-defaults-action'
+import { lintBlocks, judgeContrast } from '@/lib/builder/page-lint'
 
 const genId = () => `b_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 
@@ -608,6 +610,204 @@ const ViewportToggle = ({ viewport, onChange }) => (
     })}
   </div>
 )
+
+// ============================================================================
+// PAGE HEALTH CARD — accessibility + heading-hierarchy lint summary plus a
+// brand-color contrast check. Rendered in the page-settings panel above the
+// JSON-LD editor. Issues are listed with severity icon; clicking jumps to
+// the offending block in the section list. No state; pure derive-from-lint.
+// ============================================================================
+const PageHealthCard = ({ issues, errors, warnings, blocks, onJumpToBlock, siteBrand }) => {
+  const blockTitleFor = (id) => {
+    if (!id) return ''
+    const b = blocks.find((x) => x.id === id)
+    if (!b) return ''
+    return (b.heading || b.title || b.eyebrow || b.blockType || '').toString().slice(0, 40)
+  }
+  const contrasts = (() => {
+    if (!siteBrand) return []
+    const surface = siteBrand.surface || '#F7F5F0'
+    const ink = siteBrand.ink || '#0E1116'
+    const primary = siteBrand.primary || '#0B1F3A'
+    return [
+      { name: 'Ink on surface', fg: ink, bg: surface, ...judgeContrast(ink, surface) },
+      { name: 'Primary on surface', fg: primary, bg: surface, ...judgeContrast(primary, surface) },
+      { name: 'White on primary', fg: '#ffffff', bg: primary, ...judgeContrast('#ffffff', primary) },
+    ]
+  })()
+  return (
+    <div>
+      <Label>Page health</Label>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px 10px',
+          background: T.bgElev,
+          border: `1px solid ${T.border}`,
+          borderRadius: 7,
+        }}
+      >
+        {errors === 0 && warnings === 0 ? (
+          <>
+            <Check size={14} color={T.success} />
+            <span style={{ fontSize: 12, color: T.text }}>No accessibility or hierarchy issues.</span>
+          </>
+        ) : (
+          <>
+            {errors > 0 ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: T.danger, fontSize: 12 }}>
+                <XCircle size={13} />
+                {errors} error{errors === 1 ? '' : 's'}
+              </span>
+            ) : null}
+            {warnings > 0 ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: T.warning, fontSize: 12 }}>
+                <AlertTriangle size={13} />
+                {warnings} warning{warnings === 1 ? '' : 's'}
+              </span>
+            ) : null}
+          </>
+        )}
+      </div>
+
+      {issues.length > 0 ? (
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {issues.map((it, i) => {
+            const Icon = it.severity === 'error' ? XCircle : AlertTriangle
+            const color = it.severity === 'error' ? T.danger : T.warning
+            const where = it.blockId ? blockTitleFor(it.blockId) || it.blockId : ''
+            return (
+              <button
+                key={i}
+                onClick={() => it.blockId && onJumpToBlock(it.blockId)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 8,
+                  width: '100%',
+                  textAlign: 'left',
+                  background: 'transparent',
+                  border: `1px solid ${T.border}`,
+                  borderRadius: 6,
+                  padding: '8px 10px',
+                  color: T.text,
+                  cursor: it.blockId ? 'pointer' : 'default',
+                }}
+                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = T.bgElev)}
+                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
+              >
+                <Icon size={12} color={color} style={{ marginTop: 2, flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, color: T.text, lineHeight: 1.4 }}>{it.message}</div>
+                  {where ? (
+                    <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 3, fontFamily: '"JetBrains Mono", monospace' }}>
+                      {where}
+                    </div>
+                  ) : null}
+                </div>
+                <span
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 700,
+                    padding: '1px 5px',
+                    borderRadius: 3,
+                    background: `${T.textMute}30`,
+                    color: T.textMute,
+                    letterSpacing: '0.05em',
+                  }}
+                >
+                  {it.category.toUpperCase()}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+
+      <Label style={{ marginTop: 16 }}>Brand contrast (WCAG)</Label>
+      {contrasts.length === 0 ? (
+        <div style={{ fontSize: 11, color: T.textLow }}>
+          Configure brand colors on the Site to see contrast pass/fail.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {contrasts.map((c) => (
+            <div
+              key={c.name}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '6px 10px',
+                background: T.bgElev,
+                border: `1px solid ${T.border}`,
+                borderRadius: 6,
+              }}
+            >
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 16,
+                  height: 16,
+                  borderRadius: 3,
+                  background: c.bg,
+                  border: '1px solid rgba(0,0,0,0.15)',
+                  position: 'relative',
+                }}
+                aria-hidden
+              >
+                <span
+                  style={{
+                    position: 'absolute',
+                    inset: 2,
+                    background: c.fg,
+                    borderRadius: 2,
+                  }}
+                />
+              </span>
+              <span style={{ fontSize: 12, color: T.text, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {c.name}
+              </span>
+              <span style={{ fontSize: 11, fontFamily: '"JetBrains Mono", monospace', color: T.textMute }}>
+                {c.ratio == null ? '–' : `${c.ratio.toFixed(2)}:1`}
+              </span>
+              <span
+                title="WCAG AA — 4.5:1 normal text, 3:1 large only"
+                style={{
+                  fontSize: 9.5,
+                  fontWeight: 700,
+                  padding: '2px 6px',
+                  borderRadius: 3,
+                  background:
+                    c.AA === 'pass' ? `${T.success}25` : c.AA === 'large-only' ? `${T.warning}25` : `${T.danger}25`,
+                  color: c.AA === 'pass' ? T.success : c.AA === 'large-only' ? T.warning : T.danger,
+                }}
+              >
+                {c.AA === 'pass' ? 'AA' : c.AA === 'large-only' ? 'AA LRG' : 'AA ✗'}
+              </span>
+              <span
+                title="WCAG AAA — 7:1 normal text, 4.5:1 large only"
+                style={{
+                  fontSize: 9.5,
+                  fontWeight: 700,
+                  padding: '2px 6px',
+                  borderRadius: 3,
+                  background:
+                    c.AAA === 'pass' ? `${T.success}25` : c.AAA === 'large-only' ? `${T.warning}25` : `${T.danger}25`,
+                  color: c.AAA === 'pass' ? T.success : c.AAA === 'large-only' ? T.warning : T.danger,
+                }}
+              >
+                {c.AAA === 'pass' ? 'AAA' : c.AAA === 'large-only' ? 'AAA LRG' : 'AAA ✗'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ============================================================================
 // SAVE AS SITE DEFAULT — small row shown above the field editor when the
@@ -1432,7 +1632,7 @@ const AddBlockModal = ({ open, onPick, onClose }) => {
 // ============================================================================
 // MAIN APP
 // ============================================================================
-export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, sitePages = [], initial }) {
+export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, sitePages = [], siteBrand = null, initial }) {
   const router = useRouter()
   const [title, setTitle] = useState(initial.title || 'Untitled')
   const [slug, setSlug] = useState(initial.slug || '/')
@@ -1520,6 +1720,21 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, si
     setBlockMeta(nextMeta)
     bump({ blockMeta: nextMeta })
   }
+
+  // Lint runs on every blocks-state change. Pure + cheap, so we don't bother
+  // debouncing; the memo cache lets re-renders that don't change `blocks`
+  // skip the walk entirely.
+  const lintIssues = useMemo(() => lintBlocks(blocks), [blocks])
+  const lintByBlock = useMemo(() => {
+    const m = {}
+    for (const issue of lintIssues) {
+      if (!issue.blockId) continue
+      ;(m[issue.blockId] || (m[issue.blockId] = [])).push(issue)
+    }
+    return m
+  }, [lintIssues])
+  const lintErrorCount = lintIssues.filter((i) => i.severity === 'error').length
+  const lintWarnCount = lintIssues.filter((i) => i.severity === 'warning').length
 
   // Wrap setters so any update fires a debounced save.
   const setTitleX = (v) => { setTitle(v); bump({ title: v }) }
@@ -1807,6 +2022,21 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, si
                           HIDDEN
                         </span>
                       ) : null}
+                      {(() => {
+                        const issues = lintByBlock[b.id] || []
+                        if (issues.length === 0) return null
+                        const hasError = issues.some((i) => i.severity === 'error')
+                        const Icon = hasError ? XCircle : AlertTriangle
+                        const color = hasError ? T.danger : T.warning
+                        return (
+                          <span
+                            title={issues.map((i) => `[${i.severity.toUpperCase()}] ${i.message}`).join('\n\n')}
+                            style={{ display: 'inline-flex', alignItems: 'center', color }}
+                          >
+                            <Icon size={11} />
+                          </span>
+                        )
+                      })()}
                     </div>
                     {summary && (
                       <div style={{ fontSize: 10.5, color: T.textMute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary}</div>
@@ -1998,6 +2228,17 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, si
                   metaDescription={metaDescription}
                   ogImageUrl={ogImageUrl}
                   pageTitle={title}
+                />
+              </div>
+
+              <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${T.border}` }}>
+                <PageHealthCard
+                  issues={lintIssues}
+                  errors={lintErrorCount}
+                  warnings={lintWarnCount}
+                  blocks={blocks}
+                  onJumpToBlock={(id) => setSelectedId(id)}
+                  siteBrand={siteBrand}
                 />
               </div>
 

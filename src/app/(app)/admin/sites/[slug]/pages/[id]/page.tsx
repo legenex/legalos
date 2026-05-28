@@ -98,6 +98,7 @@ export default async function EditPageRoute({ params }: Props) {
       siteId={site.id as number}
       primaryHost={primaryHost}
       sitePages={sitePages}
+      siteBrand={(site.brand as Record<string, string> | null) ?? null}
       initial={{
         title: (page.title as string) || '',
         slug: (page.slug as string) || '/',
