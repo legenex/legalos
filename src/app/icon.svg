@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <g transform="rotate(-135 50 50)" fill="#EF4858">
-    <!-- Tail / fletching (top, becomes upper-right after rotation) -->
-    <path d="M 38 8 L 62 8 L 62 36 L 50 28 L 38 36 Z" />
-    <!-- Arrowhead (bottom, becomes lower-left after rotation) -->
-    <path d="M 50 50 L 82 92 L 18 92 Z" />
-  </g>
-</svg>
