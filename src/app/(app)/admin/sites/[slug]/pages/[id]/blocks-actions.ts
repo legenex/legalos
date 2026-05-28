@@ -24,6 +24,7 @@ export async function savePageBodyBlocks(args: {
   og_image_url?: string | null
   body_blocks: Block[]
   hidden_blocks?: string[]
+  block_meta?: Record<string, { hide_mobile?: boolean; hide_desktop?: boolean }>
 }): Promise<Result> {
   const user = await getCurrentUser()
   if (!user) return { ok: false, error: 'unauthenticated' }
@@ -80,6 +81,8 @@ export async function savePageBodyBlocks(args: {
         og_image_url: args.og_image_url?.trim() || null,
         body_blocks: Array.isArray(args.body_blocks) ? args.body_blocks : [],
         hidden_blocks: Array.isArray(args.hidden_blocks) ? args.hidden_blocks : [],
+        block_meta:
+          args.block_meta && typeof args.block_meta === 'object' ? args.block_meta : {},
       } as never,
       user: user as never,
       overrideAccess: false,

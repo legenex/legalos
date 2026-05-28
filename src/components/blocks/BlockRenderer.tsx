@@ -4,7 +4,7 @@
  *
  * All block data is assumed to be already site-var-substituted upstream (in the catch-all route).
  */
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import Link from 'next/link'
 import { LeadForm } from './LeadForm'
 import { BESPOKE_CSS } from './bespoke-css'
@@ -40,7 +40,26 @@ export type RenderContext = {
   isPreview?: boolean
 }
 
-export function BlockRenderer({ blocks, ctx }: { blocks: Block[] | null | undefined; ctx: RenderContext }) {
+// Per-block metadata for responsive visibility. Server renders every block
+// (so SEO + crawlers see everything); CSS hides the wrappers at the
+// configured breakpoint via .legalos-hide-mobile and .legalos-hide-desktop
+// (defined in RESPONSIVE_CSS).
+type BlockMeta = Record<string, { hide_mobile?: boolean; hide_desktop?: boolean } | undefined>
+
+const RESPONSIVE_CSS = `
+@media (max-width: 640px) { .legalos-hide-mobile { display: none !important; } }
+@media (min-width: 1024px) { .legalos-hide-desktop { display: none !important; } }
+`
+
+export function BlockRenderer({
+  blocks,
+  ctx,
+  blockMeta,
+}: {
+  blocks: Block[] | null | undefined
+  ctx: RenderContext
+  blockMeta?: BlockMeta
+}) {
   if (!blocks || blocks.length === 0) return <FallbackEmpty />
   return (
     <>
@@ -48,9 +67,21 @@ export function BlockRenderer({ blocks, ctx }: { blocks: Block[] | null | undefi
           block components below. Safe to ship twice in the same DOM (a page
           + the admin builder canvas) — duplicate rules are idempotent. */}
       <style dangerouslySetInnerHTML={{ __html: BESPOKE_CSS }} />
-      {blocks.map((block, idx) => (
-        <BlockDispatch key={block.id ?? `${block.blockType}-${idx}`} block={block} ctx={ctx} />
-      ))}
+      <style dangerouslySetInnerHTML={{ __html: RESPONSIVE_CSS }} />
+      {blocks.map((block, idx) => {
+        const meta = block.id ? blockMeta?.[block.id] : undefined
+        const classes: string[] = []
+        if (meta?.hide_mobile) classes.push('legalos-hide-mobile')
+        if (meta?.hide_desktop) classes.push('legalos-hide-desktop')
+        const key = block.id ?? `${block.blockType}-${idx}`
+        const child = <BlockDispatch block={block} ctx={ctx} />
+        if (classes.length === 0) return <Fragment key={key}>{child}</Fragment>
+        return (
+          <div key={key} className={classes.join(' ')}>
+            {child}
+          </div>
+        )
+      })}
     </>
   )
 }

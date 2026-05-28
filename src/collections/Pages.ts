@@ -363,6 +363,14 @@ export const Pages: CollectionConfig = {
       },
     },
     {
+      name: 'block_meta',
+      type: 'json',
+      admin: {
+        description:
+          'Per-block metadata keyed by body_blocks id. Currently stores responsive-visibility flags like { [blockId]: { hide_mobile?: true, hide_desktop?: true } } so the public site can hide a section at a breakpoint via CSS.',
+      },
+    },
+    {
       name: 'slug_redirects',
       type: 'array',
       admin: { description: 'Old slugs that 301 to current. Auto-populated when you change a published slug.' },

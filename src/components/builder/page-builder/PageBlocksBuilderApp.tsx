@@ -19,6 +19,7 @@ import {
   Layers, Rocket, Image as ImageIcon, Megaphone, List, FileText, Code2, Quote,
   HelpCircle, Star, Award, Trophy, ListChecks, ListOrdered, Grid3x3, Shield,
   MousePointerClick, RotateCw, Sparkles, Check, Loader2, Copy, GripVertical,
+  Smartphone, Tablet, Monitor,
 } from 'lucide-react'
 import {
   T, Btn, Input, Textarea, Select, Label, Pill, IconBtn, ConfirmDialog, Toast,
@@ -415,6 +416,105 @@ const AIRewritePanel = ({ block, onAccept }) => {
     </div>
   )
 }
+
+// ============================================================================
+// VIEWPORT TOGGLE — three buttons in the top bar that constrain the canvas
+// max-width to a rough desktop / tablet / mobile width. This is an
+// *approximate* preview — the underlying CSS @media queries still fire based
+// on the real browser viewport — but it lets the user inspect layout reflow
+// without manually resizing the window. Per-block hide_mobile / hide_desktop
+// flags shipped alongside this control still take effect at the public site's
+// real viewport breakpoints.
+// ============================================================================
+const VIEWPORTS = [
+  { id: 'desktop', label: 'Desktop', icon: Monitor, width: '100%' },
+  { id: 'tablet', label: 'Tablet', icon: Tablet, width: 768 },
+  { id: 'mobile', label: 'Mobile', icon: Smartphone, width: 380 },
+]
+
+const ViewportToggle = ({ viewport, onChange }) => (
+  <div
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 2,
+      padding: 2,
+      background: T.bgElev,
+      border: `1px solid ${T.border}`,
+      borderRadius: 7,
+    }}
+  >
+    {VIEWPORTS.map((v) => {
+      const Icon = v.icon
+      const active = viewport === v.id
+      return (
+        <button
+          key={v.id}
+          onClick={() => onChange(v.id)}
+          title={v.label}
+          aria-label={v.label}
+          aria-pressed={active}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 28,
+            height: 24,
+            background: active ? T.primary : 'transparent',
+            color: active ? '#fff' : T.textMute,
+            border: 'none',
+            borderRadius: 5,
+            cursor: 'pointer',
+            transition: 'background 0.12s ease',
+          }}
+        >
+          <Icon size={13} />
+        </button>
+      )
+    })}
+  </div>
+)
+
+// ============================================================================
+// VISIBILITY ROW — per-section responsive visibility checkboxes shown in the
+// section editor right under the AI rewrite panel. Sets hide_mobile /
+// hide_desktop flags on the page's block_meta[blockId] map; the public
+// BlockRenderer adds .legalos-hide-mobile / .legalos-hide-desktop wrapper
+// classes whose @media rules drop the block at the matching breakpoint.
+// ============================================================================
+const VisibilityRow = ({ blockId, meta, onPatch }) => (
+  <div
+    style={{
+      marginBottom: 12,
+      padding: 10,
+      background: T.bgElev,
+      border: `1px solid ${T.border}`,
+      borderRadius: 7,
+    }}
+  >
+    <div style={{ fontSize: 11, color: T.textMute, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>
+      Visibility
+    </div>
+    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: T.text, fontSize: 12 }}>
+        <input
+          type="checkbox"
+          checked={!!meta.hide_mobile}
+          onChange={(e) => onPatch({ hide_mobile: e.target.checked })}
+        />
+        Hide on mobile (≤640px)
+      </label>
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: T.text, fontSize: 12 }}>
+        <input
+          type="checkbox"
+          checked={!!meta.hide_desktop}
+          onChange={(e) => onPatch({ hide_desktop: e.target.checked })}
+        />
+        Hide on desktop (≥1024px)
+      </label>
+    </div>
+  </div>
+)
 
 // ============================================================================
 // FORM FIELDS EDITOR — repeated editor for lead_form's custom field list. A
@@ -1018,12 +1118,18 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
   const [hiddenBlocks, setHiddenBlocks] = useState(() =>
     Array.isArray(initial.hidden_blocks) ? initial.hidden_blocks : [],
   )
+  const [blockMeta, setBlockMeta] = useState(() =>
+    initial.block_meta && typeof initial.block_meta === 'object' ? initial.block_meta : {},
+  )
   const [selectedId, setSelectedId] = useState(blocks[0]?.id || null)
   const [addOpen, setAddOpen] = useState(false)
   const [toast, setToast] = useState(null)
   const [saving, setSaving] = useState(false)
   const [dragId, setDragId] = useState(null)
   const [dragOverId, setDragOverId] = useState(null)
+  // 'desktop' | 'tablet' | 'mobile' — drives the canvas max-width so the
+  // user can see roughly how a page will look at each breakpoint.
+  const [viewport, setViewport] = useState('desktop')
   const saveTimer = useRef(null)
 
   const selected = blocks.find((b) => b.id === selectedId)
@@ -1046,6 +1152,7 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
         og_image_url: next.ogImageUrl,
         body_blocks: next.blocks.map(({ id, ...rest }) => ({ id, ...rest })),
         hidden_blocks: next.hiddenBlocks,
+        block_meta: next.blockMeta,
       })
       setSaving(false)
       if (!res.ok) setToast({ message: res.error || 'Save failed', type: 'error' })
@@ -1054,9 +1161,26 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
 
   const bump = (patch = {}) => {
     persist({
-      title, slug, status, metaTitle, metaDescription, ogImageUrl, blocks, hiddenBlocks,
+      title, slug, status, metaTitle, metaDescription, ogImageUrl,
+      blocks, hiddenBlocks, blockMeta,
       ...patch,
     })
+  }
+
+  // Per-block meta helper: merge new flags into block_meta[blockId].
+  const setBlockMetaFor = (id, patch) => {
+    const current = (blockMeta[id] || {}) as Record<string, unknown>
+    const merged = { ...current, ...patch }
+    // Drop falsy keys so the map stays compact.
+    const cleaned = {}
+    for (const k of Object.keys(merged)) {
+      if (merged[k]) cleaned[k] = merged[k]
+    }
+    const nextMeta = { ...blockMeta }
+    if (Object.keys(cleaned).length === 0) delete nextMeta[id]
+    else nextMeta[id] = cleaned
+    setBlockMeta(nextMeta)
+    bump({ blockMeta: nextMeta })
   }
 
   // Wrap setters so any update fires a debounced save.
@@ -1204,6 +1328,7 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
         onPublish={handlePublishToggle}
         actions={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <ViewportToggle viewport={viewport} onChange={setViewport} />
             {saving && <Pill color={T.warning}>SAVING…</Pill>}
           </div>
         }
@@ -1315,16 +1440,34 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
             <div style={{ flex: 1 }} />
             <span>Click any section to edit ›</span>
           </div>
-          <div style={{ flex: 1, overflowY: 'auto', background: '#fff' }}>
+          <div style={{ flex: 1, overflowY: 'auto', background: viewport === 'desktop' ? '#fff' : '#0c1118', padding: viewport === 'desktop' ? 0 : '24px 0' }}>
             {blocks.length === 0 ? (
               <div style={{ padding: '120px 40px', textAlign: 'center', color: '#94a3b8', fontSize: 14, fontFamily: '"Inter", system-ui, sans-serif' }}>
                 No sections yet. Click <strong>Add</strong> in the left panel to insert one.
               </div>
             ) : (
-              <div className="legalos-builder-canvas">
+              <div
+                className="legalos-builder-canvas"
+                style={
+                  viewport === 'desktop'
+                    ? undefined
+                    : {
+                        maxWidth: (VIEWPORTS.find((v) => v.id === viewport) || VIEWPORTS[0]).width,
+                        margin: '0 auto',
+                        background: '#fff',
+                        borderRadius: 12,
+                        overflow: 'hidden',
+                        boxShadow: '0 30px 60px rgba(0,0,0,0.35)',
+                      }
+                }
+              >
                 {blocks.map((b) => {
                   const active = b.id === selectedId
                   const hidden = hiddenBlocks.includes(b.id)
+                  const meta = blockMeta[b.id] || {}
+                  const dimmedByViewport =
+                    (viewport === 'mobile' && meta.hide_mobile) ||
+                    (viewport === 'desktop' && meta.hide_desktop)
                   return (
                     <div
                       key={b.id}
@@ -1334,8 +1477,8 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
                         outline: active ? `2px solid ${T.primary}` : '2px solid transparent',
                         outlineOffset: -2,
                         cursor: 'pointer',
-                        opacity: hidden ? 0.4 : 1,
-                        filter: hidden ? 'grayscale(0.6)' : 'none',
+                        opacity: hidden ? 0.4 : dimmedByViewport ? 0.5 : 1,
+                        filter: hidden || dimmedByViewport ? 'grayscale(0.6)' : 'none',
                       }}
                       onMouseEnter={(e) => {
                         if (!active) (e.currentTarget as HTMLElement).style.outline = `2px dashed ${T.primary}80`
@@ -1347,6 +1490,10 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
                       {hidden ? (
                         <div style={{ position: 'absolute', top: 6, left: 6, zIndex: 20, padding: '4px 10px', background: '#000a', color: '#fff', fontSize: 10.5, fontFamily: '"JetBrains Mono", monospace', borderRadius: 4, fontWeight: 600, letterSpacing: '0.05em' }}>
                           HIDDEN ON PUBLIC SITE
+                        </div>
+                      ) : dimmedByViewport ? (
+                        <div style={{ position: 'absolute', top: 6, left: 6, zIndex: 20, padding: '4px 10px', background: '#000a', color: '#fff', fontSize: 10.5, fontFamily: '"JetBrains Mono", monospace', borderRadius: 4, fontWeight: 600, letterSpacing: '0.05em' }}>
+                          {viewport === 'mobile' ? 'HIDDEN ON MOBILE' : 'HIDDEN ON DESKTOP'}
                         </div>
                       ) : null}
                       {active && (
@@ -1375,6 +1522,11 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, in
               <AIRewritePanel
                 block={selected}
                 onAccept={(next) => updateBlock(selected.id, { ...next, id: selected.id })}
+              />
+              <VisibilityRow
+                blockId={selected.id}
+                meta={blockMeta[selected.id] || {}}
+                onPatch={(patch) => setBlockMetaFor(selected.id, patch)}
               />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <BlockEditor block={selected} onChange={(next) => updateBlock(selected.id, next)} ctx={{ siteSlug, siteId }} />

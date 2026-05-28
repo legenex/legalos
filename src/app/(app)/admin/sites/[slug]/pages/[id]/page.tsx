@@ -91,6 +91,10 @@ export default async function EditPageRoute({ params }: Props) {
         hidden_blocks: Array.isArray(page.hidden_blocks)
           ? (page.hidden_blocks as string[])
           : [],
+        block_meta:
+          page.block_meta && typeof page.block_meta === 'object'
+            ? (page.block_meta as Record<string, { hide_mobile?: boolean; hide_desktop?: boolean }>)
+            : {},
       }}
     />
   )

@@ -281,6 +281,7 @@ type RenderPageDoc = {
   title: string
   body_blocks?: unknown[]
   hidden_blocks?: string[] | null
+  block_meta?: Record<string, { hide_mobile?: boolean; hide_desktop?: boolean }> | null
 }
 
 async function RenderPage({
@@ -326,6 +327,7 @@ async function RenderPage({
       <SiteScripts tc={tc} hasForm={hasLeadFormBlock(renderedBlocks)} />
       <BlockRenderer
         blocks={renderedBlocks}
+        blockMeta={page.block_meta ?? undefined}
         ctx={{
           site: site as SiteForRender,
           phone: { display: phone.display, tel: phone.tel },
