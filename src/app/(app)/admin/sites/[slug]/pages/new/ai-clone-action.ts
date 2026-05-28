@@ -6,7 +6,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getCurrentUser } from '@/lib/auth'
 import { invokeLLM } from '@/lib/ai/invoke'
-import { BlockSchema } from '@/lib/builder/block-schemas'
+import { BlockSchema, normalizeAIBlocks } from '@/lib/builder/block-schemas'
 
 // Clone a public URL into a new Page. We fetch the source HTML, hand it to
 // the model with the full Pages body_blocks schema, and the model returns
@@ -170,7 +170,7 @@ export async function createPageFromUrl(args: {
         uses_shared_template: false,
         meta_title: cloned.meta_title || null,
         meta_description: cloned.meta_description || null,
-        body_blocks: cloned.body_blocks,
+        body_blocks: normalizeAIBlocks(cloned.body_blocks as Array<Record<string, unknown>>),
       } as never,
       user: user as never,
       overrideAccess: false,

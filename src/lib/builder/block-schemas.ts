@@ -33,7 +33,11 @@ export const TrustStripSchema = z.object({
 
 export const ProseSchema = z.object({
   blockType: z.literal('prose'),
-  markdown: z.string(),
+  // markdown is required by the Pages collection but the model often omits
+  // it for sections that don't fit the other block types. Default to '' here
+  // so the discriminated union accepts the response; the action drops empty
+  // prose blocks before persisting.
+  markdown: z.string().default(''),
 })
 
 export const CtaSchema = z.object({
@@ -114,7 +118,11 @@ export const SiteFooterSchema = z.object({
   columns: z
     .array(
       z.object({
-        heading: z.string(),
+        // Models routinely emit unlabelled footer columns (just a links
+        // list). Default to '' here; the action below promotes a missing
+        // heading to the first link's label so the footer still renders
+        // sensibly.
+        heading: z.string().default(''),
         links: z.array(z.object({ label: z.string(), href: z.string() })).optional(),
       }),
     )
@@ -158,6 +166,40 @@ export const SCHEMA_FOR_BLOCK: Record<string, z.ZodTypeAny> = {
   recent_wins: RecentWinsSchema,
   final_cta: FinalCtaSchema,
   site_footer: SiteFooterSchema,
+}
+
+// Post-validation cleanup for AI-emitted body_blocks. The model routinely
+// returns prose blocks with empty markdown (after the schema default kicks
+// in) and site_footer columns with no heading. Drop the empty prose blocks
+// outright and synthesise a column heading from its first link's label so
+// the page renders sensibly. Other block types pass through unchanged.
+export function normalizeAIBlocks(
+  blocks: Array<Record<string, unknown>>,
+): Array<Record<string, unknown>> {
+  const out: Array<Record<string, unknown>> = []
+  for (const b of blocks) {
+    if (!b || typeof b !== 'object') continue
+    const t = b.blockType as string
+    if (t === 'prose') {
+      const md = String((b as { markdown?: string }).markdown ?? '').trim()
+      if (!md) continue
+      out.push({ ...b, markdown: md })
+      continue
+    }
+    if (t === 'site_footer') {
+      const cols = ((b as { columns?: Array<Record<string, unknown>> }).columns ?? []).map((c) => {
+        const heading = String((c as { heading?: string }).heading ?? '').trim()
+        if (heading) return c
+        const links = (c.links as Array<{ label?: string }> | undefined) ?? []
+        const fallback = links[0]?.label?.trim() || 'Links'
+        return { ...c, heading: fallback }
+      })
+      out.push({ ...b, columns: cols })
+      continue
+    }
+    out.push(b)
+  }
+  return out
 }
 
 // One-line human-readable description per block type. Used to brief the model

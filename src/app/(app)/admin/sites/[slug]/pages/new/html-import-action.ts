@@ -6,7 +6,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getCurrentUser } from '@/lib/auth'
 import { invokeLLM } from '@/lib/ai/invoke'
-import { BlockSchema } from '@/lib/builder/block-schemas'
+import { BlockSchema, normalizeAIBlocks } from '@/lib/builder/block-schemas'
 
 // Import a Page from raw HTML (and optional CSS) the user has on disk.
 // Unlike the URL clone path this works for SPAs, paywalled / authenticated
@@ -65,6 +65,7 @@ const IMPORT_SCHEMA = z.object({
   meta_description: z.string().optional(),
   body_blocks: z.array(BlockSchema).describe('Page sections, top to bottom, mapped to the closest matching block type.'),
 })
+
 
 type Result =
   | { ok: true; id: string | number }
@@ -171,7 +172,7 @@ export async function createPageFromHtml(args: {
       title = cloned.title || title
       metaTitle = cloned.meta_title || null
       metaDescription = cloned.meta_description || null
-      bodyBlocks = cloned.body_blocks
+      bodyBlocks = normalizeAIBlocks(cloned.body_blocks as Array<Record<string, unknown>>)
       // Prepend a custom_html style block so the page still LOOKS like the
       // import. Public custom_html renderer keeps <style>; sanitises <script>.
       if (allCss) {
