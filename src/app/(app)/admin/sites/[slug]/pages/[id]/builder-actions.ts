@@ -54,6 +54,14 @@ export async function savePageFromBuilder(args: {
     })
     if (dup.docs.length > 0) return { ok: false, error: `Another page on this site already uses slug "${slug}".` }
 
+    // visual_template lives inside shared_template_overrides JSON to avoid a
+    // schema migration. Merge it in so we don't clobber other keys.
+    const existingOverrides =
+      (src.shared_template_overrides as Record<string, unknown> | null) || {}
+    const mergedOverrides = {
+      ...existingOverrides,
+      visual_template: args.visual_template || 'bold_modern',
+    }
     await payload.update({
       collection: 'pages',
       id: args.pageId,
@@ -65,7 +73,7 @@ export async function savePageFromBuilder(args: {
         // The builder is only used for custom pages, so uses_shared_template is
         // always off when saving through it.
         uses_shared_template: false,
-        visual_template: args.visual_template || 'bold_modern',
+        shared_template_overrides: mergedOverrides,
         meta_title: args.meta_title?.trim() || null,
         meta_description: args.meta_description?.trim() || null,
         og_image_url: args.og_image_url?.trim() || null,

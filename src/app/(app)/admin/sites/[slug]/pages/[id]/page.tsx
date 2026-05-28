@@ -53,6 +53,11 @@ export default async function EditPageRoute({ params }: Props) {
   // simpler metadata form (they don't author body_blocks).
   const usesBuilder = (page.template_key as string) === 'custom' && !page.uses_shared_template
   if (usesBuilder) {
+    // visual_template lives inside the existing shared_template_overrides JSON
+    // column to avoid a schema migration. Custom pages never use that field
+    // for its original purpose, so we co-opt it as a builder-state stash.
+    const overrides = (page.shared_template_overrides as Record<string, unknown> | null) || {}
+    const visualTemplate = (overrides.visual_template as string) || 'bold_modern'
     return (
       <PageBuilderApp
         pageId={page.id as number}
@@ -63,7 +68,7 @@ export default async function EditPageRoute({ params }: Props) {
           slug: (page.slug as string) || '',
           status: (page.status as string) || 'draft',
           template_key: (page.template_key as string) || 'custom',
-          visual_template: (page.visual_template as string) || 'bold_modern',
+          visual_template: visualTemplate,
           uses_shared_template: Boolean(page.uses_shared_template),
           meta_title: (page.meta_title as string | null) || '',
           meta_description: (page.meta_description as string | null) || '',
