@@ -71,7 +71,7 @@ export default async function SitePagesPage({ params, searchParams }: Props) {
           <p className="text-[var(--color-ink-muted)] text-[15px] mt-1">{site.name} site pages</p>
         </div>
         <Link
-          href={`/cms/collections/pages/create?site=${site.id}`}
+          href={`/admin/sites/${slug}/pages/new`}
           className="brand-gradient text-white font-medium text-[14px] px-4 py-2.5 rounded-lg inline-flex items-center gap-1.5 hover:opacity-90"
         >
           <Plus className="w-4 h-4" /> New Page

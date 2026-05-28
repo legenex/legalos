@@ -62,6 +62,55 @@ export async function duplicatePage(args: { pageId: number | string; siteSlug: s
   }
 }
 
+// Create a new page from the branded /admin/ Create Page form. Keeps users out
+// of the unstyled /cms admin for the most common authoring task.
+export async function createPage(args: {
+  siteId: number | string
+  siteSlug: string
+  title: string
+  slug: string
+  status: string
+  template_key: string
+}): Promise<{ ok: true; id: string | number } | { ok: false; error: string }> {
+  const user = await getCurrentUser()
+  if (!user) return { ok: false, error: 'unauthenticated' }
+
+  const title = (args.title || '').trim()
+  let slug = (args.slug || '').trim()
+  if (!title) return { ok: false, error: 'Title is required' }
+  if (!slug) return { ok: false, error: 'Slug is required' }
+  if (slug !== '/' && !slug.startsWith('/')) slug = '/' + slug
+
+  const payload = await getPayload({ config })
+  try {
+    const dup = await payload.find({
+      collection: 'pages',
+      where: { and: [{ site: { equals: args.siteId } }, { slug: { equals: slug } }] },
+      limit: 1,
+      overrideAccess: true,
+    })
+    if (dup.docs.length > 0) return { ok: false, error: `A page with slug "${slug}" already exists on this site.` }
+
+    const created = await payload.create({
+      collection: 'pages',
+      data: {
+        site: args.siteId,
+        title,
+        slug,
+        status: args.status || 'draft',
+        template_key: args.template_key || 'custom',
+        uses_shared_template: (args.template_key || 'custom') !== 'custom',
+      } as never,
+      user: user as never,
+      overrideAccess: false,
+    })
+    revalidatePath(`/admin/sites/${args.siteSlug}/pages`)
+    return { ok: true, id: created.id }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'create failed' }
+  }
+}
+
 export async function deletePage(args: { pageId: number | string; siteSlug: string }): Promise<Result> {
   const user = await getCurrentUser()
   if (!user) return { ok: false, error: 'unauthenticated' }
