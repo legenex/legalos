@@ -9,6 +9,7 @@ import * as migration_20260529_000000_pages_block_meta from './20260529_000000_p
 import * as migration_20260529_020000_pages_scheduled_publish from './20260529_020000_pages_scheduled_publish';
 import * as migration_20260529_040000_new_block_types from './20260529_040000_new_block_types';
 import * as migration_20260529_060000_sites_global_blocks from './20260529_060000_sites_global_blocks';
+import * as migration_20260530_000000_locked_documents_media_rel from './20260530_000000_locked_documents_media_rel';
 
 export const migrations = [
   {
@@ -65,5 +66,10 @@ export const migrations = [
     up: migration_20260529_060000_sites_global_blocks.up,
     down: migration_20260529_060000_sites_global_blocks.down,
     name: '20260529_060000_sites_global_blocks',
+  },
+  {
+    up: migration_20260530_000000_locked_documents_media_rel.up,
+    down: migration_20260530_000000_locked_documents_media_rel.down,
+    name: '20260530_000000_locked_documents_media_rel',
   },
 ];

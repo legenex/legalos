@@ -57,22 +57,55 @@ export async function createPageFromUrl(args: {
   if (!slug) return { ok: false, error: 'Slug is required' }
   if (slug !== '/' && !slug.startsWith('/')) slug = '/' + slug
 
-  let html: string
-  try {
-    const res = await fetch(sourceUrl, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (compatible; LegalOSPageCloner/1.0; +https://os.legenex.com)',
-      },
-      redirect: 'follow',
-    })
-    if (!res.ok) return { ok: false, error: `Source URL returned ${res.status} ${res.statusText}` }
-    html = await res.text()
-  } catch (err) {
-    return { ok: false, error: `Could not fetch source URL: ${err instanceof Error ? err.message : 'network error'}` }
+  // Try a regular browser-ish UA first; some sites short-circuit unknown
+  // bots with a minimal SEO snapshot. If the body looks too thin (SPA, paywall,
+  // anti-bot), retry as Googlebot — many sites pre-render specifically for
+  // crawlers. Two attempts is enough to be useful without becoming abusive.
+  const UAS = [
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+  ]
+  let html = ''
+  let lastError: string | null = null
+  for (const ua of UAS) {
+    try {
+      const res = await fetch(sourceUrl, {
+        headers: { 'User-Agent': ua, Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' },
+        redirect: 'follow',
+      })
+      if (!res.ok) {
+        lastError = `Source URL returned ${res.status} ${res.statusText}`
+        continue
+      }
+      const body = await res.text()
+      if (body && body.length > html.length) html = body
+      // Anything over ~30 KB is plenty to extract real content from; stop early.
+      if (html.length > 30_000) break
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : 'network error'
+    }
+  }
+  if (!html) {
+    return { ok: false, error: lastError ? `Could not fetch source URL: ${lastError}` : 'Could not fetch source URL.' }
   }
 
   const cleaned = stripHtml(html)
+
+  // Heuristic SPA / paywall guard: if the stripped HTML is unusable, bail
+  // BEFORE spending an LLM call and BEFORE creating a near-empty page that
+  // the user has to clean up. We also count visible-text tokens (very rough)
+  // so a 60 KB single-page-app shell with mostly script tags is caught even
+  // after stripping.
+  const textOnly = cleaned.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  if (cleaned.length < 1000 || textOnly.length < 400) {
+    return {
+      ok: false,
+      error:
+        `${sourceUrl} returned only a minimal HTML shell (${textOnly.length} chars of visible text). ` +
+        `This usually means the page is client-side rendered (single-page app) or behind a paywall / bot wall. ` +
+        `Try a server-rendered URL (often /sitemap.xml lists them), or build the page manually.`,
+    }
+  }
 
   let cloned: z.infer<typeof CLONE_SCHEMA>
   try {
@@ -99,7 +132,7 @@ export async function createPageFromUrl(args: {
         '- Site footer with multiple link columns + legal text -> site_footer.',
         '',
         'Preserve the source copy verbatim where possible. If the source uses banned vocabulary (em-dashes, "vibes", "leverage", "synergy", "in today\'s world"), rewrite to remove them. Do NOT invent statistics, settlement amounts, or testimonials that are not in the source.',
-        'If the source is paywalled, behind auth, or returns no meaningful content, emit a single prose block with markdown that says "Could not extract content from <url>" and nothing else.',
+        'If you genuinely cannot identify any usable section from the input, prefer fewer high-quality blocks over filler. Do NOT emit a single prose block whose body is an apology like "Could not extract content" — the caller handles that case separately.',
       ].join('\n'),
       user: [
         `Source URL: ${sourceUrl}`,
