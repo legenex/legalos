@@ -9,7 +9,7 @@ import { createPageFromHtml } from './html-import-action'
 
 type Option = { label: string; value: string }
 type Mode = 'manual' | 'ai' | 'import'
-type ImportMode = 'parse' | 'raw'
+type ImportMode = 'structured' | 'parse' | 'raw'
 
 const fileToDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -56,7 +56,7 @@ export function CreatePageForm({
   const [templateKey, setTemplateKey] = useState('custom')
   const [sourceUrl, setSourceUrl] = useState('')
   // Import-from-files mode state.
-  const [importMode, setImportMode] = useState<ImportMode>('parse')
+  const [importMode, setImportMode] = useState<ImportMode>('structured')
   const [htmlFile, setHtmlFile] = useState<File | null>(null)
   const [cssFile, setCssFile] = useState<File | null>(null)
   const htmlRef = useRef<HTMLInputElement>(null)
@@ -192,6 +192,29 @@ export function CreatePageForm({
                 <div className="flex flex-col gap-2">
                   <label
                     className={`flex gap-3 items-start p-3 rounded-md border cursor-pointer ${
+                      importMode === 'structured'
+                        ? 'border-[var(--color-border-strong)] bg-[var(--color-surface-2)]'
+                        : 'border-[var(--color-border)] bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-2)]/60'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="importMode"
+                      checked={importMode === 'structured'}
+                      onChange={() => setImportMode('structured')}
+                      disabled={pending}
+                      className="mt-0.5"
+                    />
+                    <span className="flex-1">
+                      <span className="block text-[13px] font-semibold text-white">Structured copy (recommended)</span>
+                      <span className="block text-[12px] text-[var(--color-ink-dim)] mt-1 leading-snug">
+                        DOM walks the HTML and turns every <code className="font-mono">&lt;nav&gt;</code> / <code className="font-mono">&lt;section&gt;</code> / <code className="font-mono">&lt;footer&gt;</code> into one editable
+                        <code className="font-mono"> custom_html</code> block. Pixel-perfect visual, section-by-section editable in the builder. No AI calls, never fails.
+                      </span>
+                    </span>
+                  </label>
+                  <label
+                    className={`flex gap-3 items-start p-3 rounded-md border cursor-pointer ${
                       importMode === 'parse'
                         ? 'border-[var(--color-border-strong)] bg-[var(--color-surface-2)]'
                         : 'border-[var(--color-border)] bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-2)]/60'
@@ -206,10 +229,10 @@ export function CreatePageForm({
                       className="mt-0.5"
                     />
                     <span className="flex-1">
-                      <span className="block text-[13px] font-semibold text-white">Parse into editable sections (recommended)</span>
+                      <span className="block text-[13px] font-semibold text-white">Parse with AI (full block mapping)</span>
                       <span className="block text-[12px] text-[var(--color-ink-dim)] mt-1 leading-snug">
-                        Claude reads the HTML and maps each section to the closest body_blocks type (hero, services, FAQ, etc.). Editable
-                        section-by-section after import. The CSS is preserved in a style block so the page still looks like the source.
+                        Claude maps each section to a structured block type (hero, services, FAQ, etc.) with field-by-field editing.
+                        Best when you want to rebrand the design later — but the structured copy above is more reliable for an exact import.
                       </span>
                     </span>
                   </label>
@@ -229,10 +252,10 @@ export function CreatePageForm({
                       className="mt-0.5"
                     />
                     <span className="flex-1">
-                      <span className="block text-[13px] font-semibold text-white">Keep as-is (pixel-perfect, single block)</span>
+                      <span className="block text-[13px] font-semibold text-white">Keep as-is (single block, everything together)</span>
                       <span className="block text-[12px] text-[var(--color-ink-dim)] mt-1 leading-snug">
-                        The entire HTML + CSS ships as one <code className="font-mono">custom_html</code> block. Exact visual fidelity,
-                        but only editable as raw HTML. Best for legacy pages you don't plan to restructure.
+                        The entire HTML + CSS ships as one <code className="font-mono">custom_html</code> block. Same fidelity as Structured,
+                        but the whole page is one editable chunk instead of section-by-section.
                       </span>
                     </span>
                   </label>
@@ -364,7 +387,9 @@ export function CreatePageForm({
                 : mode === 'import'
                   ? importMode === 'parse'
                     ? 'Parsing with AI…'
-                    : 'Importing…'
+                    : importMode === 'structured'
+                      ? 'Importing…'
+                      : 'Importing…'
                   : 'Creating…'
               : mode === 'ai'
                 ? 'Clone with AI'

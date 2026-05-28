@@ -1964,6 +1964,7 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, si
                 b.heading ||
                 b.title ||
                 b.eyebrow ||
+                b.note ||
                 (typeof b.markdown === 'string' ? b.markdown.slice(0, 40) : '') ||
                 ''
               return (

@@ -7,6 +7,7 @@ import config from '@payload-config'
 import { getCurrentUser } from '@/lib/auth'
 import { invokeLLM } from '@/lib/ai/invoke'
 import { BlockSchema, normalizeAIBlocks } from '@/lib/builder/block-schemas'
+import { extractBlocksFromHtml } from '@/lib/builder/html-to-blocks'
 
 // Import a Page from raw HTML (and optional CSS) the user has on disk.
 // Unlike the URL clone path this works for SPAs, paywalled / authenticated
@@ -87,7 +88,7 @@ export async function createPageFromHtml(args: {
   siteSlug: string
   slug: string
   status: string
-  mode: 'parse' | 'raw'
+  mode: 'structured' | 'parse' | 'raw'
   htmlDataUrl: string
   cssDataUrl?: string
   htmlFilename?: string
@@ -128,7 +129,18 @@ export async function createPageFromHtml(args: {
   let metaDescription: string | null = null
   let bodyBlocks: Array<Record<string, unknown>> = []
 
-  if (args.mode === 'raw') {
+  if (args.mode === 'structured') {
+    // DOM walks via cheerio, one custom_html block per top-level section.
+    // No AI call, no schema validation surprises, pixel-perfect output.
+    try {
+      const out = extractBlocksFromHtml(html, externalCss || undefined)
+      title = out.title || title
+      metaDescription = out.meta_description ?? null
+      bodyBlocks = out.blocks as Array<Record<string, unknown>>
+    } catch (err) {
+      return { ok: false, error: `Structured import failed: ${err instanceof Error ? err.message : 'unknown error'}` }
+    }
+  } else if (args.mode === 'raw') {
     // Whole document goes in one block. We wrap the CSS in a style tag so the
     // public BlockRenderer's custom_html sanitiser leaves it intact (the
     // sanitiser strips <script> and on*= handlers but leaves style/CSS).
@@ -141,8 +153,7 @@ export async function createPageFromHtml(args: {
       /<meta\s+[^>]*content=["']([^"']*)["'][^>]*name=["']description["']/i.exec(html)
     if (descMatch) metaDescription = String(descMatch[1]).trim().slice(0, 200) || null
     bodyBlocks = [{ blockType: 'custom_html', html: combined }]
-  } else {
-    // mode === 'parse'
+  } else if (args.mode === 'parse') {
     const cleaned = stripForLLM(htmlWithoutStyles)
     try {
       // Haiku is 5-10x faster than Sonnet for structured-extraction work
