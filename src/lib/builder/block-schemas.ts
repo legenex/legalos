@@ -9,7 +9,7 @@ import { z } from 'zod'
 export const HeroSchema = z.object({
   blockType: z.literal('hero'),
   eyebrow: z.string().optional(),
-  heading: z.string(),
+  heading: z.string().default(''),
   sub: z.string().optional(),
   primary_cta_label: z.string().optional(),
   primary_cta_href: z.string().optional(),
@@ -26,9 +26,17 @@ export const NavHeaderSchema = z.object({
   show_phone: z.boolean().optional(),
 })
 
+// trust_strip items: accept either a {value, label?} object OR a bare string
+// (the model often returns a flat string list for short badge text). The
+// preprocess step normalises strings into the canonical {value} shape so the
+// rest of the system always sees objects.
+const trustStripItem = z.preprocess(
+  (v) => (typeof v === 'string' ? { value: v } : v),
+  z.object({ value: z.string().default(''), label: z.string().optional() }),
+)
 export const TrustStripSchema = z.object({
   blockType: z.literal('trust_strip'),
-  items: z.array(z.object({ value: z.string(), label: z.string().optional() })),
+  items: z.array(trustStripItem),
 })
 
 export const ProseSchema = z.object({
@@ -42,71 +50,121 @@ export const ProseSchema = z.object({
 
 export const CtaSchema = z.object({
   blockType: z.literal('cta'),
-  heading: z.string(),
+  heading: z.string().default(''),
   sub: z.string().optional(),
-  label: z.string(),
-  href: z.string(),
+  label: z.string().default(''),
+  href: z.string().default('#'),
 })
 
+// Bullet items: accept {item} OR a bare string. Same coerce pattern as
+// trust_strip — keeps the model honest while letting the natural string-list
+// shape land cleanly.
+const bulletItem = z.preprocess(
+  (v) => (typeof v === 'string' ? { item: v } : v),
+  z.object({ item: z.string().default('') }),
+)
 export const BulletListSchema = z.object({
   blockType: z.literal('bullet_list'),
   heading: z.string().optional(),
-  items: z.array(z.object({ item: z.string() })),
+  items: z.array(bulletItem),
 })
 
+// Every per-item canonical string field defaults to '' instead of being
+// hard-required; normalizeAIBlocks() below drops items where the canonical
+// text content is empty so the renderer doesn't have to handle them. The
+// alternative — failing the whole AI call — was deleting the user's import.
 export const CardsSchema = z.object({
   blockType: z.literal('cards'),
   heading: z.string().optional(),
-  items: z.array(z.object({ title: z.string(), body: z.string().optional(), icon: z.string().optional() })),
+  items: z.array(
+    z.object({
+      title: z.string().default(''),
+      body: z.string().optional(),
+      icon: z.string().optional(),
+    }),
+  ),
 })
 
 export const StatsSchema = z.object({
   blockType: z.literal('stats'),
   heading: z.string().optional(),
-  items: z.array(z.object({ value: z.string(), label: z.string() })),
+  items: z.array(
+    z.object({
+      value: z.string().default(''),
+      label: z.string().default(''),
+    }),
+  ),
 })
 
 export const TestimonialsSchema = z.object({
   blockType: z.literal('testimonials'),
   heading: z.string().optional(),
-  items: z.array(z.object({ quote: z.string(), attribution: z.string().optional(), avatar_url: z.string().optional() })),
+  items: z.array(
+    z.object({
+      quote: z.string().default(''),
+      attribution: z.string().optional(),
+      avatar_url: z.string().optional(),
+    }),
+  ),
 })
 
 export const FaqSchema = z.object({
   blockType: z.literal('faq'),
   heading: z.string().optional(),
-  items: z.array(z.object({ question: z.string(), answer: z.string() })),
+  items: z.array(
+    z.object({
+      question: z.string().default(''),
+      answer: z.string().default(''),
+    }),
+  ),
 })
 
 export const ServicesGridSchema = z.object({
   blockType: z.literal('services_grid'),
   eyebrow: z.string().optional(),
-  heading: z.string(),
+  heading: z.string().default(''),
   sub: z.string().optional(),
-  items: z.array(z.object({ title: z.string(), description: z.string().optional(), icon: z.string().optional() })),
+  items: z.array(
+    z.object({
+      title: z.string().default(''),
+      description: z.string().optional(),
+      icon: z.string().optional(),
+    }),
+  ),
 })
 
 export const HowItWorksSchema = z.object({
   blockType: z.literal('how_it_works'),
   eyebrow: z.string().optional(),
-  heading: z.string(),
+  heading: z.string().default(''),
   sub: z.string().optional(),
-  steps: z.array(z.object({ title: z.string(), description: z.string().optional() })),
+  steps: z.array(
+    z.object({
+      title: z.string().default(''),
+      description: z.string().optional(),
+    }),
+  ),
 })
 
 export const RecentWinsSchema = z.object({
   blockType: z.literal('recent_wins'),
   eyebrow: z.string().optional(),
-  heading: z.string(),
+  heading: z.string().default(''),
   sub: z.string().optional(),
-  items: z.array(z.object({ amount: z.string(), case_type: z.string(), description: z.string().optional() })),
+  items: z.array(
+    z.object({
+      amount: z.string().default(''),
+      case_type: z.string().default(''),
+      description: z.string().optional(),
+    }),
+  ),
   disclaimer: z.string().optional(),
 })
 
 export const FinalCtaSchema = z.object({
   blockType: z.literal('final_cta'),
   eyebrow: z.string().optional(),
-  heading: z.string(),
+  heading: z.string().default(''),
   sub: z.string().optional(),
   primary_cta_label: z.string().optional(),
   primary_cta_href: z.string().optional(),
@@ -168,15 +226,30 @@ export const SCHEMA_FOR_BLOCK: Record<string, z.ZodTypeAny> = {
   site_footer: SiteFooterSchema,
 }
 
-// Post-validation cleanup for AI-emitted body_blocks. The model routinely
-// returns prose blocks with empty markdown (after the schema default kicks
-// in) and site_footer columns with no heading. Drop the empty prose blocks
-// outright and synthesise a column heading from its first link's label so
-// the page renders sensibly. Other block types pass through unchanged.
+// Post-validation cleanup for AI-emitted body_blocks. The schemas above
+// default every previously-required text field to '' so Zod doesn't reject
+// the model's output mid-import. This pass turns those soft passes into
+// rendered-quality data:
+//
+//  - prose with empty markdown -> drop
+//  - site_footer columns with no heading -> synthesise from first link
+//  - items / steps with empty canonical text -> drop
+//  - blocks that end up with zero usable items after the drop -> drop
+//
+// The renderer then never has to defend against the empty cases.
+const dropIfEmpty = <T extends Record<string, unknown>>(
+  items: T[] | undefined,
+  keyFor: (it: T) => string,
+): T[] => (items ?? []).filter((it) => keyFor(it).trim() !== '')
+
 export function normalizeAIBlocks(
   blocks: Array<Record<string, unknown>>,
 ): Array<Record<string, unknown>> {
   const out: Array<Record<string, unknown>> = []
+  const dropEmptyItemsBlock = (b: Record<string, unknown>, items: unknown[]) => {
+    if (items.length === 0) return // drop the whole block
+    out.push({ ...b, ...(b.steps !== undefined ? { steps: items } : { items }) })
+  }
   for (const b of blocks) {
     if (!b || typeof b !== 'object') continue
     const t = b.blockType as string
@@ -195,6 +268,68 @@ export function normalizeAIBlocks(
         return { ...c, heading: fallback }
       })
       out.push({ ...b, columns: cols })
+      continue
+    }
+    if (t === 'trust_strip') {
+      dropEmptyItemsBlock(b, dropIfEmpty(b.items as Array<{ value?: string }> | undefined, (it) => String(it.value ?? '')))
+      continue
+    }
+    if (t === 'bullet_list') {
+      dropEmptyItemsBlock(b, dropIfEmpty(b.items as Array<{ item?: string }> | undefined, (it) => String(it.item ?? '')))
+      continue
+    }
+    if (t === 'testimonials') {
+      dropEmptyItemsBlock(b, dropIfEmpty(b.items as Array<{ quote?: string }> | undefined, (it) => String(it.quote ?? '')))
+      continue
+    }
+    if (t === 'faq') {
+      dropEmptyItemsBlock(
+        b,
+        dropIfEmpty(
+          b.items as Array<{ question?: string; answer?: string }> | undefined,
+          (it) => `${it.question ?? ''}${it.answer ?? ''}`,
+        ),
+      )
+      continue
+    }
+    if (t === 'cards' || t === 'services_grid') {
+      dropEmptyItemsBlock(
+        b,
+        dropIfEmpty(
+          b.items as Array<{ title?: string }> | undefined,
+          (it) => String(it.title ?? ''),
+        ),
+      )
+      continue
+    }
+    if (t === 'how_it_works') {
+      dropEmptyItemsBlock(
+        b,
+        dropIfEmpty(
+          b.steps as Array<{ title?: string }> | undefined,
+          (it) => String(it.title ?? ''),
+        ),
+      )
+      continue
+    }
+    if (t === 'recent_wins') {
+      dropEmptyItemsBlock(
+        b,
+        dropIfEmpty(
+          b.items as Array<{ amount?: string; case_type?: string }> | undefined,
+          (it) => `${it.amount ?? ''}${it.case_type ?? ''}`,
+        ),
+      )
+      continue
+    }
+    if (t === 'stats') {
+      dropEmptyItemsBlock(
+        b,
+        dropIfEmpty(
+          b.items as Array<{ value?: string; label?: string }> | undefined,
+          (it) => `${it.value ?? ''}${it.label ?? ''}`,
+        ),
+      )
       continue
     }
     out.push(b)
