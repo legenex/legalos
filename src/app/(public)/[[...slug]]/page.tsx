@@ -169,24 +169,7 @@ export default async function PublicCatchAll({ params }: Props) {
     return <PausedSite name={site.name ?? 'This site'} />
   }
 
-  // 0. Brand-specific custom renderers (handled before the Page lookup so
-  // brands can ship fully custom UI without needing seed Page records).
-  // SKIPPED for authenticated admin previews so the builder's Preview
-  // button shows the Page row the user is editing, not the legacy
-  // hardcoded component.
   const siteSlug = (site as { slug?: string }).slug
-  if (siteSlug === 'check-my-claim' && !isAuthedAdminPreview) {
-    const CmcComponent = CMC_PAGES[path.toLowerCase()]
-    if (CmcComponent) {
-      const tc = await loadTrackingConfig(site.id)
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-          <SiteScripts tc={tc} hasForm={false} />
-          <CmcComponent />
-        </div>
-      )
-    }
-  }
 
   // Pages are visible publicly if status='published', OR if status='scheduled'
   // and publish_at has already passed. Captured once so the Pages + redirect
@@ -225,6 +208,24 @@ export default async function PublicCatchAll({ params }: Props) {
 
   if (explicit.docs[0]) {
     return <RenderPage page={explicit.docs[0] as unknown as RenderPageDoc} site={site} path={path} />
+  }
+
+  // 1b. Brand-specific hardcoded fallback. Authored Pages above always win,
+  // so this only ever fires for CMC paths the author hasn't written a Page
+  // for yet. Skipped entirely under any preview (?site= or ?preview=1) so
+  // the builder never accidentally shows a hardcoded component instead of
+  // the author's draft.
+  if (siteSlug === 'check-my-claim' && !isAdminPreview) {
+    const CmcComponent = CMC_PAGES[path.toLowerCase()]
+    if (CmcComponent) {
+      const tc = await loadTrackingConfig(site.id)
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+          <SiteScripts tc={tc} hasForm={false} />
+          <CmcComponent />
+        </div>
+      )
+    }
   }
 
   // 2. Check slug_redirects on Pages collection for this Site.

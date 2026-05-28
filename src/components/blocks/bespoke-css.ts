@@ -20,19 +20,21 @@ html.site-shell .footer .footer__link:hover, .legalos-builder-canvas .footer .fo
 :root {
   /* Brand cascade: these inherit from the per-Site --site-* tokens emitted by
      the public layout (and the admin builder canvas wrapper). When a Site
-     has no brand override, the CMC palette is the fallback — so existing
-     pages render identically and authors who configure brand colors get an
-     instant cascade into nav / hero / trust-strip / buttons / footer. */
-  --color-navy: var(--site-ink, #111E30);
-  --color-navy-dark: #0C2D5B;
-  --color-blue: var(--site-primary, #0285E9);
-  --color-blue-start: var(--site-primary, #4ba8ee);
-  --color-blue-end: var(--site-primary, #0486e9);
-  --color-muted: var(--site-muted, #595E64);
-  --color-bg-light: #F9F9FB;
+     has NO brand override the fallback is a NEUTRAL palette (dark navy
+     ink + medium gray accents) instead of CMC blue — so a brand-unaware
+     Site doesn't accidentally inherit Check My Claim's identity. CMC
+     itself has its brand colors configured so the cascade picks them up
+     correctly via --site-primary. */
+  --color-navy: var(--site-ink, #1B2737);
+  --color-navy-dark: var(--site-ink, #0F1722);
+  --color-blue: var(--site-primary, #6B7280);
+  --color-blue-start: var(--site-primary, #6B7280);
+  --color-blue-end: var(--site-primary, #4B5563);
+  --color-muted: var(--site-muted, #6B7280);
+  --color-bg-light: var(--site-surface, #F9F9FB);
   --color-border: #e5e7eb;
-  --grad-blue: linear-gradient(90deg, var(--site-primary, #4ba8ee), var(--site-primary, #0486e9));
-  --grad-blue-135: linear-gradient(135deg, var(--site-primary, #4ba8ee), var(--site-primary, #0486e9));
+  --grad-blue: linear-gradient(90deg, var(--site-primary, #6B7280), var(--site-primary, #4B5563));
+  --grad-blue-135: linear-gradient(135deg, var(--site-primary, #6B7280), var(--site-primary, #4B5563));
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
