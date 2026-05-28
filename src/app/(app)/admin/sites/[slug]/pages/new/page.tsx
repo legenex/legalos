@@ -13,6 +13,7 @@ type Props = { params: Promise<{ slug: string }> }
 export default async function NewSitePage({ params }: Props) {
   const { slug } = await params
   const payload = await getPayload({ config })
+
   const siteRes = await payload.find({
     collection: 'sites',
     where: { slug: { equals: slug } },
@@ -22,30 +23,40 @@ export default async function NewSitePage({ params }: Props) {
   const site = siteRes.docs[0]
   if (!site) notFound()
 
+  // Primary domain (for the live-URL preview in the form).
+  const dom = await payload.find({
+    collection: 'domains',
+    where: { and: [{ site: { equals: site.id } }, { primary: { equals: true } }] },
+    limit: 1,
+    overrideAccess: true,
+  })
+  const primaryHost = (dom.docs[0]?.host as string | undefined) || `${slug}.preview.legenex.com`
+
   const templateOptions = [
-    { label: 'Custom', value: 'custom' },
+    { label: 'Custom (author your own blocks)', value: 'custom' },
     ...TEMPLATE_KEYS.map((k) => ({ label: `Shared: ${k}`, value: k })),
   ]
 
   return (
-    <div className="p-10 max-w-[820px]">
+    <div className="px-10 py-8 max-w-[820px]">
       <Link
         href={`/admin/sites/${slug}/pages`}
-        className="inline-flex items-center gap-1.5 text-[13px] text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] mb-4"
+        className="inline-flex items-center gap-1.5 text-[12.5px] text-[var(--color-ink-muted)] hover:text-white transition-colors mb-5"
       >
-        <ChevronLeft className="w-4 h-4" /> Back to Pages
+        <ChevronLeft className="w-3.5 h-3.5" /> Back to Pages
       </Link>
 
       <header className="mb-6">
-        <h1 className="text-[28px] font-semibold tracking-tight text-white">New Page</h1>
-        <p className="text-[var(--color-ink-muted)] text-[15px] mt-1">
-          Creating a page on <span className="text-[var(--color-ink)]">{site.name}</span>
+        <h1 className="text-[26px] font-semibold tracking-tight text-white">New Page</h1>
+        <p className="text-[var(--color-ink-muted)] text-[14px] mt-1">
+          Creating a page on <span className="text-white font-medium">{site.name as string}</span>
         </p>
       </header>
 
       <CreatePageForm
         siteId={site.id as number}
         siteSlug={slug}
+        primaryHost={primaryHost}
         templateOptions={templateOptions}
       />
     </div>
