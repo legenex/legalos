@@ -196,10 +196,10 @@ const detectHero: Detector = ($, $el, tag) => {
 const detectTrustStrip: Detector = ($, $el) => {
   const cls = $el.attr('class') ?? ''
   if (!/\b(trust-?(banner|strip)|wordmarks|features?-?bar)\b/i.test(cls)) return null
-  const items: Array<{ value: string; label?: string }> = []
+  const items: Array<{ value: string; label: string }> = []
   $el.find('.trust-item, .badge, .pill, span').each((_, span) => {
     const text = cleanText($(span).text())
-    if (text && text.length < 60) items.push({ value: text })
+    if (text && text.length < 60) items.push({ value: text, label: text })
   })
   if (items.length < 2) return null
   return {

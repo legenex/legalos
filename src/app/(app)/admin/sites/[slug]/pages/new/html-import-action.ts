@@ -139,7 +139,11 @@ export async function createPageFromHtml(args: {
       const out = extractStructuredFromHtml(html, externalCss || undefined)
       title = out.title || title
       metaDescription = out.meta_description ?? null
-      bodyBlocks = out.blocks
+      // Same post-process as the AI pipeline: drops empty array items,
+      // synthesises footer column headings from their first link, etc. —
+      // belt-and-braces against Payload's per-field required validation
+      // tripping on detector edge cases.
+      bodyBlocks = normalizeAIBlocks(out.blocks)
     } catch (err) {
       return { ok: false, error: `Structured-fields import failed: ${err instanceof Error ? err.message : 'unknown error'}` }
     }

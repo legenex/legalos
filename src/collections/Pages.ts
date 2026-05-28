@@ -159,7 +159,12 @@ const bodyBlocks: Field = {
           type: 'array',
           fields: [
             { name: 'value', type: 'text', required: true },
-            { name: 'label', type: 'text', required: true },
+            // label is supplementary — the CMC bespoke render shows value as
+            // the wordmark and ignores label, and the upload pipeline (DOM
+            // extractor) often gets only one piece of text per badge. Keep
+            // the column writable but stop the validation layer from
+            // rejecting saves that omit it.
+            { name: 'label', type: 'text' },
           ],
         },
       ],
