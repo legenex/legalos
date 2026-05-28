@@ -33,6 +33,7 @@ import { GoogleSerpPreview, OgPreviewCards } from './PageSettingsPreviews'
 import { savePageBodyBlocks } from '@/app/(app)/admin/sites/[slug]/pages/[id]/blocks-actions'
 import { rewriteSection } from '@/app/(app)/admin/sites/[slug]/pages/[id]/ai-rewrite-action'
 import { saveAsSiteDefault } from '@/app/(app)/admin/sites/[slug]/pages/[id]/site-defaults-action'
+import { detectStructuredFromHtml } from '@/app/(app)/admin/sites/[slug]/pages/[id]/convert-action'
 import { lintBlocks, judgeContrast } from '@/lib/builder/page-lint'
 
 const genId = () => `b_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
@@ -865,6 +866,116 @@ const SaveAsSiteDefaultRow = ({ block, siteSlug, siteId, onToast }) => {
       <Btn variant="primary" size="sm" icon={busy ? Loader2 : Save} onClick={run} disabled={busy}>
         {busy ? 'Saving…' : 'Save'}
       </Btn>
+    </div>
+  )
+}
+
+// ============================================================================
+// CONVERT CUSTOM HTML — when the selected block is a custom_html (most likely
+// from a 'Structured copy (raw HTML per section)' import), offer to run the
+// detector chain on its HTML and convert in-place to a structured block
+// (hero, faq, services_grid, etc.) so the right-side editor shows proper
+// fields. Two-step UI: 'Detect' shows the detector's best guess, 'Convert'
+// commits — so the author can verify before swapping the block out.
+// ============================================================================
+const ConvertCustomHtmlPanel = ({ block, onConvert, onToast }) => {
+  const [busy, setBusy] = useState(false)
+  const [detected, setDetected] = useState(null)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    // Clear preview state if the user clicks to a different block before
+    // committing the conversion.
+    setDetected(null)
+    setError(null)
+    setBusy(false)
+  }, [block?.id])
+
+  const run = async () => {
+    setBusy(true)
+    setError(null)
+    setDetected(null)
+    const res = await detectStructuredFromHtml({ html: String(block.html ?? '') })
+    setBusy(false)
+    if (!res.ok) {
+      setError(res.error)
+      return
+    }
+    setDetected({ type: res.detected, block: res.block })
+  }
+
+  const commit = () => {
+    if (!detected?.block) return
+    // Strip id from the detected block — caller re-applies the original
+    // block.id so the section keeps its position in the list.
+    const { id: _unusedId, ...rest } = detected.block
+    onConvert(rest)
+    onToast({ message: `Converted to ${detected.type}.`, type: 'success' })
+    setDetected(null)
+  }
+
+  return (
+    <div
+      style={{
+        marginBottom: 12,
+        padding: 10,
+        background: T.bgElev,
+        border: `1px solid ${T.primary}40`,
+        borderRadius: 7,
+      }}
+    >
+      <div style={{ fontSize: 11, color: T.textMute, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>
+        Convert to structured block
+      </div>
+      {!detected ? (
+        <>
+          <div style={{ fontSize: 12, color: T.text, marginBottom: 8, lineHeight: 1.45 }}>
+            This is currently a raw HTML block. Detect tries to recognise the
+            section as a known structured type (hero / faq / services_grid /
+            etc.) so you can edit it field-by-field instead of as HTML.
+          </div>
+          <Btn variant="primary" size="sm" icon={busy ? Loader2 : Sparkles} onClick={run} disabled={busy}>
+            {busy ? 'Detecting…' : 'Detect type'}
+          </Btn>
+        </>
+      ) : (
+        <>
+          <div style={{ fontSize: 12, color: T.text, marginBottom: 8 }}>
+            Detected:{' '}
+            <Pill color={T.success}>{detected.type}</Pill>
+          </div>
+          <div style={{ fontSize: 11, color: T.textMute, marginBottom: 10, lineHeight: 1.45 }}>
+            Conversion replaces this raw HTML block with a structured one. The
+            position in the section list and any responsive-hide flags carry
+            over. You can revert by undoing in the browser (Cmd+Z) or by
+            re-importing.
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Btn variant="primary" size="sm" icon={Check} onClick={commit}>
+              Convert
+            </Btn>
+            <Btn variant="ghost" size="sm" onClick={() => setDetected(null)}>
+              Keep as HTML
+            </Btn>
+          </div>
+        </>
+      )}
+      {error ? (
+        <div
+          style={{
+            marginTop: 10,
+            padding: 8,
+            background: `${T.danger}15`,
+            border: `1px solid ${T.danger}40`,
+            borderRadius: 6,
+            color: T.danger,
+            fontSize: 12,
+            lineHeight: 1.45,
+          }}
+        >
+          {error}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -2173,6 +2284,13 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, si
                   block={selected}
                   siteSlug={siteSlug}
                   siteId={siteId}
+                  onToast={(t) => setToast(t)}
+                />
+              ) : null}
+              {selected.blockType === 'custom_html' ? (
+                <ConvertCustomHtmlPanel
+                  block={selected}
+                  onConvert={(next) => updateBlock(selected.id, { ...next, id: selected.id })}
                   onToast={(t) => setToast(t)}
                 />
               ) : null}

@@ -417,6 +417,39 @@ export type ImportResult = {
   blocks: Array<Record<string, unknown>>
 }
 
+// Run the full detector chain on a single chunk of HTML (e.g. the contents
+// of one custom_html block) and return the best structured match. Used by
+// the in-editor 'Convert this custom_html to a structured block' action so
+// authors can ship a pixel-perfect import and progressively convert
+// sections to field-editable blocks as they need them.
+export function detectBlockFromSectionHtml(html: string): {
+  detected: string | null
+  block: Record<string, unknown> | null
+} {
+  if (!html || typeof html !== 'string') return { detected: null, block: null }
+  // Wrap the section html in a body so we have a proper DOM root, then walk
+  // for the first structural element. If the section is itself a body-direct
+  // <section>/<nav>/<footer>, take that as the target; otherwise fall back to
+  // the wrapping <body> so detectors that walk down still see the markup.
+  const $ = load(`<body>${html}</body>`, { decodeEntities: false })
+  // Strip script tags up front so detectors don't accidentally match against
+  // their content. Style tags are kept — they don't affect detector logic
+  // and removing them would mutate the original markup.
+  $('script').remove()
+
+  const candidates = $('body > nav, body > section, body > footer, body > header').toArray()
+  const target = (candidates[0] as Element | undefined) ?? ($('body').get(0) as Element | undefined)
+  if (!target) return { detected: null, block: null }
+  const $target = $(target)
+  const tag = (target as Element).tagName
+
+  for (const det of DETECTORS) {
+    const result = det($, $target, tag)
+    if (result) return { detected: result.blockType, block: result as Record<string, unknown> }
+  }
+  return { detected: null, block: null }
+}
+
 export function extractStructuredFromHtml(html: string, externalCss?: string): ImportResult {
   const $ = load(html, { decodeEntities: false })
 
