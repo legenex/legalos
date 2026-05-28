@@ -21,6 +21,7 @@
 
 import { load, type Cheerio, type CheerioAPI } from 'cheerio'
 import type { Element } from 'domhandler'
+import { extractBrandFromCss, buildBrandOverrideCss } from './extract-brand-tokens'
 
 type Block = Record<string, unknown> & { blockType: string; note?: string }
 
@@ -438,6 +439,25 @@ export function extractStructuredFromHtml(html: string, externalCss?: string): I
   const css = [externalCss?.trim(), inlineStyles.join('\n\n').trim()].filter(Boolean).join('\n\n')
 
   const blocks: Array<Record<string, unknown>> = []
+
+  // Extract the brand palette / fonts from the imported CSS and emit them as
+  // a per-page :root override BEFORE the user's full stylesheet. The LegalOS
+  // bespoke renderer reads --site-primary / --site-accent / --site-ink etc.
+  // via the brand cascade — feeding it the imported tokens means nav / hero
+  // / trust strip / CTAs / footer render in the original palette without
+  // touching the Site row. The user's full CSS is still shipped as a second
+  // style block, so any class-specific styling (.btn-gold, .hero, etc.)
+  // continues to apply too.
+  const brand = extractBrandFromCss(css)
+  const overrideCss = buildBrandOverrideCss(brand)
+  if (overrideCss) {
+    blocks.push({
+      blockType: 'custom_html',
+      note: 'Imported brand palette',
+      html: `<style>${overrideCss}</style>`,
+    })
+  }
+
   if (css) {
     blocks.push({
       blockType: 'custom_html',
