@@ -588,7 +588,7 @@ const AINewLPWizard = ({ open, onClose, onCreate }) => {
 // ============================================================================
 // LANDING PAGE BUILDER (3-pane)
 // ============================================================================
-const LandingPageBuilder = ({ landingPage, brands, quizDeployments, quizzes, onBack, onUpdate, onTogglePublish, onSetTemplate, onPreview }) => {
+export const LandingPageBuilder = ({ landingPage, brands, quizDeployments, quizzes, onBack, onUpdate, onTogglePublish, onSetTemplate, onPreview }) => {
   const [editingSectionId, setEditingSectionId] = useState(null)
   const [addOpen, setAddOpen] = useState(false)
   const [galleryOpen, setGalleryOpen] = useState(false)
