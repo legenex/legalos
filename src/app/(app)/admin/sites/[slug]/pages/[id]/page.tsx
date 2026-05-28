@@ -78,6 +78,7 @@ export default async function EditPageRoute({ params }: Props) {
     <PageBlocksBuilderApp
       pageId={page.id as number}
       siteSlug={slug}
+      siteId={site.id as number}
       primaryHost={primaryHost}
       initial={{
         title: (page.title as string) || '',

@@ -25,6 +25,7 @@ import {
   TopBar,
 } from '../ui'
 import { BlockRenderer } from '@/components/blocks/BlockRenderer'
+import { ImagePickerField } from './ImagePicker'
 import { savePageBodyBlocks } from '@/app/(app)/admin/sites/[slug]/pages/[id]/blocks-actions'
 
 const genId = () => `b_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
@@ -257,7 +258,7 @@ const Ed = {
       </div>
     </>
   ),
-  hero: (b, set) => (
+  hero: (b, set, ctx) => (
     <>
       <Label>Eyebrow (badge)</Label><Input value={b.eyebrow || ''} onChange={(e) => set({ eyebrow: e.target.value })} />
       <Label>Heading</Label><Input value={b.heading || ''} onChange={(e) => set({ heading: e.target.value })} />
@@ -268,7 +269,13 @@ const Ed = {
         <div><Label>Secondary CTA label</Label><Input value={b.secondary_cta_label || ''} onChange={(e) => set({ secondary_cta_label: e.target.value })} /></div>
         <div><Label>Secondary CTA href</Label><Input mono value={b.secondary_cta_href || ''} onChange={(e) => set({ secondary_cta_href: e.target.value })} /></div>
       </div>
-      <Label>Background image URL</Label><Input mono value={b.image_url || ''} onChange={(e) => set({ image_url: e.target.value })} />
+      <ImagePickerField
+        label="Background image"
+        value={b.image_url || ''}
+        onChange={(url) => set({ image_url: url })}
+        siteSlug={ctx.siteSlug}
+        siteId={ctx.siteId}
+      />
     </>
   ),
   trust_strip: (b, set) => (
@@ -429,9 +436,15 @@ const Ed = {
       <Textarea rows={12} value={b.markdown || ''} onChange={(e) => set({ markdown: e.target.value })} />
     </>
   ),
-  image: (b, set) => (
+  image: (b, set, ctx) => (
     <>
-      <Label>URL</Label><Input mono value={b.url || ''} onChange={(e) => set({ url: e.target.value })} />
+      <ImagePickerField
+        label="Image"
+        value={b.url || ''}
+        onChange={(url) => set({ url })}
+        siteSlug={ctx.siteSlug}
+        siteId={ctx.siteId}
+      />
       <Label>Alt</Label><Input value={b.alt || ''} onChange={(e) => set({ alt: e.target.value })} />
       <Label>Caption</Label><Input value={b.caption || ''} onChange={(e) => set({ caption: e.target.value })} />
     </>
@@ -538,7 +551,7 @@ const Ed = {
   ),
 }
 
-const BlockEditor = ({ block, onChange }) => {
+const BlockEditor = ({ block, onChange, ctx }) => {
   if (!block) return null
   const Editor = Ed[block.blockType]
   if (!Editor) {
@@ -557,7 +570,7 @@ const BlockEditor = ({ block, onChange }) => {
       </div>
     )
   }
-  return Editor(block, (patch) => onChange({ ...block, ...patch }))
+  return Editor(block, (patch) => onChange({ ...block, ...patch }), ctx)
 }
 
 // ============================================================================
@@ -600,7 +613,7 @@ const AddBlockModal = ({ open, onPick, onClose }) => {
 // ============================================================================
 // MAIN APP
 // ============================================================================
-export function PageBlocksBuilderApp({ pageId, siteSlug, primaryHost, initial }) {
+export function PageBlocksBuilderApp({ pageId, siteSlug, siteId, primaryHost, initial }) {
   const router = useRouter()
   const [title, setTitle] = useState(initial.title || 'Untitled')
   const [slug, setSlug] = useState(initial.slug || '/')
@@ -845,7 +858,7 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, primaryHost, initial })
                 <Btn variant="ghost" size="xs" onClick={() => setSelectedId(null)}>Page settings ›</Btn>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <BlockEditor block={selected} onChange={(next) => updateBlock(selected.id, next)} />
+                <BlockEditor block={selected} onChange={(next) => updateBlock(selected.id, next)} ctx={{ siteSlug, siteId }} />
               </div>
             </>
           ) : (
@@ -867,7 +880,15 @@ export function PageBlocksBuilderApp({ pageId, siteSlug, primaryHost, initial })
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div><Label>Meta title</Label><Input value={metaTitle} onChange={(e) => setMetaTitleX(e.target.value)} /></div>
                 <div><Label>Meta description</Label><Textarea rows={3} value={metaDescription} onChange={(e) => setMetaDescX(e.target.value)} /></div>
-                <div><Label>OG image URL</Label><Input mono value={ogImageUrl} onChange={(e) => setOgUrlX(e.target.value)} /></div>
+                <div>
+                  <ImagePickerField
+                    label="OG image"
+                    value={ogImageUrl}
+                    onChange={(url) => setOgUrlX(url)}
+                    siteSlug={siteSlug}
+                    siteId={siteId}
+                  />
+                </div>
               </div>
             </>
           )}
