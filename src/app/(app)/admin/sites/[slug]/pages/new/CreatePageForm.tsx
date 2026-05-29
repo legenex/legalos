@@ -9,7 +9,7 @@ import { createPageFromHtml } from './html-import-action'
 
 type Option = { label: string; value: string }
 type Mode = 'manual' | 'ai' | 'import'
-type ImportMode = 'structured-fields' | 'structured' | 'parse' | 'raw'
+type ImportMode = 'structured-fields' | 'structured'
 
 const fileToDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -237,52 +237,6 @@ export function CreatePageForm({
                       </span>
                     </span>
                   </label>
-                  <label
-                    className={`flex gap-3 items-start p-3 rounded-md border cursor-pointer ${
-                      importMode === 'parse'
-                        ? 'border-[var(--color-border-strong)] bg-[var(--color-surface-2)]'
-                        : 'border-[var(--color-border)] bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-2)]/60'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="importMode"
-                      checked={importMode === 'parse'}
-                      onChange={() => setImportMode('parse')}
-                      disabled={pending}
-                      className="mt-0.5"
-                    />
-                    <span className="flex-1">
-                      <span className="block text-[13px] font-semibold text-white">Parse with AI (full block mapping)</span>
-                      <span className="block text-[12px] text-[var(--color-ink-dim)] mt-1 leading-snug">
-                        Claude maps each section to a structured block type (hero, services, FAQ, etc.) with field-by-field editing.
-                        Best when you want to rebrand the design later — but the structured copy above is more reliable for an exact import.
-                      </span>
-                    </span>
-                  </label>
-                  <label
-                    className={`flex gap-3 items-start p-3 rounded-md border cursor-pointer ${
-                      importMode === 'raw'
-                        ? 'border-[var(--color-border-strong)] bg-[var(--color-surface-2)]'
-                        : 'border-[var(--color-border)] bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-2)]/60'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="importMode"
-                      checked={importMode === 'raw'}
-                      onChange={() => setImportMode('raw')}
-                      disabled={pending}
-                      className="mt-0.5"
-                    />
-                    <span className="flex-1">
-                      <span className="block text-[13px] font-semibold text-white">Keep as-is (single block, everything together)</span>
-                      <span className="block text-[12px] text-[var(--color-ink-dim)] mt-1 leading-snug">
-                        The entire HTML + CSS ships as one <code className="font-mono">custom_html</code> block. Same fidelity as Structured,
-                        but the whole page is one editable chunk instead of section-by-section.
-                      </span>
-                    </span>
-                  </label>
                 </div>
               </Field>
             </>
@@ -409,11 +363,7 @@ export function CreatePageForm({
               ? mode === 'ai'
                 ? 'Cloning with AI…'
                 : mode === 'import'
-                  ? importMode === 'parse'
-                    ? 'Parsing with AI…'
-                    : importMode === 'structured'
-                      ? 'Importing…'
-                      : 'Importing…'
+                  ? 'Importing…'
                   : 'Creating…'
               : mode === 'ai'
                 ? 'Clone with AI'
