@@ -871,6 +871,205 @@ const SaveAsSiteDefaultRow = ({ block, siteSlug, siteId, onToast }) => {
 }
 
 // ============================================================================
+// CUSTOM HTML QUICK EDIT — parses the block's HTML with the browser's
+// DOMParser, surfaces the editable spots (headings / paragraphs / images /
+// links) as labelled fields, and writes edits back into the same HTML by
+// querying the same tag at the same index. The raw HTML textarea below
+// still works for full-control editing — the two are kept in sync via the
+// shared block.html state. No new persisted fields and no server calls.
+// ============================================================================
+const QE_TEXT_SPECS = [
+  { tag: 'h1', label: 'Heading (H1)' },
+  { tag: 'h2', label: 'Subheading (H2)' },
+  { tag: 'h3', label: 'Section title (H3)' },
+  { tag: 'p', label: 'Paragraph', minLen: 10 },
+] as const
+
+const summary = (s: string, n = 36) => {
+  const c = s.replace(/\s+/g, ' ').trim()
+  return c.length > n ? c.slice(0, n) + '…' : c
+}
+
+const escapeHtmlText = (s: string): string =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+type QuickField =
+  | { kind: 'text'; tag: string; index: number; label: string; value: string }
+  | { kind: 'image'; index: number; label: string; src: string; alt: string }
+  | { kind: 'link'; index: number; label: string; href: string; text: string }
+
+const parseQuickFields = (html: string): QuickField[] => {
+  if (!html || typeof window === 'undefined') return []
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html')
+  const fields: QuickField[] = []
+  for (const spec of QE_TEXT_SPECS) {
+    const nodes = Array.from(doc.querySelectorAll(spec.tag))
+    nodes.forEach((el, idx) => {
+      const value = (el.textContent ?? '').replace(/\s+/g, ' ').trim()
+      if (!value) return
+      const minLen = (spec as { minLen?: number }).minLen ?? 0
+      if (value.length < minLen) return
+      fields.push({ kind: 'text', tag: spec.tag, index: idx, label: spec.label, value })
+    })
+  }
+  Array.from(doc.querySelectorAll('img')).forEach((el, idx) => {
+    const src = el.getAttribute('src') ?? ''
+    if (!src) return
+    fields.push({ kind: 'image', index: idx, label: 'Image', src, alt: el.getAttribute('alt') ?? '' })
+  })
+  Array.from(doc.querySelectorAll('a')).forEach((el, idx) => {
+    const href = el.getAttribute('href') ?? ''
+    const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim()
+    if (!href && !text) return
+    fields.push({ kind: 'link', index: idx, label: 'Link', href, text })
+  })
+  return fields
+}
+
+// Apply a field-level edit back into the HTML string. We re-parse on every
+// edit so the field list and the HTML stay aligned — re-parsing a typical
+// section (a few KB) is cheap and avoids stale-cache bugs when the user
+// switches between the textarea and quick-edit fields.
+const applyQuickEdit = (
+  html: string,
+  patch:
+    | { kind: 'text'; tag: string; index: number; value: string }
+    | { kind: 'image'; index: number; src?: string; alt?: string }
+    | { kind: 'link'; index: number; href?: string; text?: string },
+): string => {
+  if (!html || typeof window === 'undefined') return html
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html')
+  if (patch.kind === 'text') {
+    const el = doc.querySelectorAll(patch.tag)[patch.index] as HTMLElement | undefined
+    if (!el) return html
+    el.textContent = patch.value
+  } else if (patch.kind === 'image') {
+    const el = doc.querySelectorAll('img')[patch.index] as HTMLImageElement | undefined
+    if (!el) return html
+    if (patch.src !== undefined) el.setAttribute('src', patch.src)
+    if (patch.alt !== undefined) el.setAttribute('alt', patch.alt)
+  } else if (patch.kind === 'link') {
+    const el = doc.querySelectorAll('a')[patch.index] as HTMLAnchorElement | undefined
+    if (!el) return html
+    if (patch.href !== undefined) el.setAttribute('href', patch.href)
+    if (patch.text !== undefined) el.textContent = patch.text
+  }
+  return doc.body.innerHTML
+}
+
+const CustomHtmlQuickEdit = ({ html, onChange, ctx }) => {
+  const [open, setOpen] = useState(true)
+  // Re-derive on every html change — cheap, keeps the field list current
+  // even when the user edits the raw HTML textarea.
+  const fields = useMemo(() => parseQuickFields(html), [html])
+  if (fields.length === 0) {
+    return (
+      <div style={{ marginBottom: 12, padding: 10, background: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 7, color: T.textMute, fontSize: 12 }}>
+        <div style={{ fontSize: 11, color: T.textMute, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
+          Quick edit
+        </div>
+        No headings / paragraphs / images / links found in this block. Edit the raw HTML below.
+      </div>
+    )
+  }
+  return (
+    <div style={{ marginBottom: 12, background: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 7, overflow: 'hidden' }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '8px 10px',
+          background: 'transparent',
+          border: 'none',
+          color: T.text,
+          cursor: 'pointer',
+        }}
+      >
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 11, color: T.textMute, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+            Quick edit
+          </span>
+          <Pill color={T.primary}>{fields.length} fields</Pill>
+        </span>
+        <span style={{ fontSize: 10, color: T.textMute }}>{open ? '▾ Hide' : '▸ Show'}</span>
+      </button>
+      {open ? (
+        <div style={{ padding: 10, borderTop: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {fields.map((f, i) => {
+            const key = `${f.kind}-${f.kind === 'text' ? f.tag : ''}-${f.kind === 'text' ? f.index : f.index}-${i}`
+            if (f.kind === 'text') {
+              const Comp = f.tag === 'p' ? Textarea : Input
+              return (
+                <div key={key}>
+                  <Label>
+                    {f.label}
+                    <span style={{ color: T.textLow, fontWeight: 400, marginLeft: 6 }}>· {summary(f.value)}</span>
+                  </Label>
+                  <Comp
+                    rows={f.tag === 'p' ? 3 : undefined}
+                    value={f.value}
+                    onChange={(e) =>
+                      onChange(applyQuickEdit(html, { kind: 'text', tag: f.tag, index: f.index, value: e.target.value }))
+                    }
+                  />
+                </div>
+              )
+            }
+            if (f.kind === 'image') {
+              return (
+                <div key={key}>
+                  <ImagePickerField
+                    label={`${f.label} ${f.index + 1}`}
+                    value={f.src}
+                    onChange={(src) => onChange(applyQuickEdit(html, { kind: 'image', index: f.index, src }))}
+                    siteSlug={ctx?.siteSlug}
+                    siteId={ctx?.siteId}
+                  />
+                  <div style={{ marginTop: 6 }}>
+                    <Label>Alt text</Label>
+                    <Input
+                      value={f.alt}
+                      onChange={(e) => onChange(applyQuickEdit(html, { kind: 'image', index: f.index, alt: e.target.value }))}
+                      placeholder="Short description for screen readers"
+                    />
+                  </div>
+                </div>
+              )
+            }
+            // link
+            return (
+              <div key={key}>
+                <Label>
+                  {f.label}
+                  <span style={{ color: T.textLow, fontWeight: 400, marginLeft: 6 }}>· {summary(f.text || f.href)}</span>
+                </Label>
+                <Input
+                  value={f.text}
+                  onChange={(e) => onChange(applyQuickEdit(html, { kind: 'link', index: f.index, text: e.target.value }))}
+                  placeholder="Link text"
+                />
+                <div style={{ marginTop: 6 }}>
+                  <LinkPickerField
+                    label="Href"
+                    value={f.href}
+                    onChange={(href) => onChange(applyQuickEdit(html, { kind: 'link', index: f.index, href }))}
+                    sitePages={ctx?.sitePages}
+                  />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+// ============================================================================
 // CONVERT CUSTOM HTML — when the selected block is a custom_html (most likely
 // from a 'Structured copy (raw HTML per section)' import), offer to run the
 // detector chain on its HTML and convert in-place to a structured block
@@ -1674,8 +1873,9 @@ const Ed = {
       </div>
     </>
   ),
-  custom_html: (b, set) => (
+  custom_html: (b, set, ctx) => (
     <>
+      <CustomHtmlQuickEdit html={b.html || ''} onChange={(html) => set({ html })} ctx={ctx} />
       <Label>HTML</Label>
       <Textarea rows={12} value={b.html || ''} onChange={(e) => set({ html: e.target.value })} style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 12 }} />
     </>
