@@ -115,9 +115,17 @@ export default async function PublicCatchAll({ params }: Props) {
   const { slug } = await params
   const path = normalizePath(slug)
   const h = await headers()
-  const previewSiteSlug = h.get('x-legalos-preview-site')
+  const rawPreviewSiteSlug = h.get('x-legalos-preview-site')
   const previewMode = h.get('x-legalos-preview') === '1'
   const host = h.get('x-legalos-host') ?? h.get('host')
+
+  // Both preview channels (?site=<slug> and ?preview=1) are admin-only. Resolve
+  // the user once, up front, so an anonymous visitor can never use a preview
+  // header to view another Site or its draft / paused content. An unauthenticated
+  // ?site= is ignored entirely and falls back to normal host resolution.
+  const wantsPreview = previewMode || Boolean(rawPreviewSiteSlug)
+  const authedUser = wantsPreview ? await getCurrentUser() : null
+  const previewSiteSlug = authedUser ? rawPreviewSiteSlug : null
 
   if (!previewSiteSlug && (!host || isFallbackHost(host))) {
     return <LegalOSMarketing />
@@ -153,15 +161,11 @@ export default async function PublicCatchAll({ params }: Props) {
     status?: string
   }
 
-  // Admin preview is gated on (a) the middleware-set x-legalos-preview header
-  // AND (b) the request actually being authenticated as a user. Without (b)
-  // anyone could append ?preview=1 to a URL and read draft / scheduled pages.
-  const authedUser = previewMode ? await getCurrentUser() : null
+  // Admin preview is gated on the request being authenticated as a user (the
+  // user was resolved up front). ?preview=1 additionally bypasses the status
+  // filter to render draft / scheduled content; ?site=<slug> (already proven
+  // authenticated above) selects which Site to preview.
   const isAuthedAdminPreview = previewMode && Boolean(authedUser)
-  // The original ?site=<slug> path (no auth check) keeps working for
-  // intra-admin previews where the request already came from /admin/*; the
-  // new ?preview=1 path additionally bypasses the status filter when
-  // authenticated.
   const isAdminPreview = Boolean(previewSiteSlug) || isAuthedAdminPreview
   if (site.status === 'archived') notFound()
   if (site.status === 'draft' && !isAdminPreview) notFound()

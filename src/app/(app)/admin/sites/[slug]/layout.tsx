@@ -4,7 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { SiteSidebar } from '@/components/app/SiteSidebar'
 import { SiteContextProvider } from './SiteContext'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUser, isBoundToSite } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +26,12 @@ export default async function SiteLayout({
   const site = res.docs[0]
   if (!site) notFound()
 
+  // Authorization: every page under /admin/sites/[slug] reads that Site's data
+  // with overrideAccess, so the per-Site guard lives here. Without it any
+  // authenticated user could read any tenant's leads/pages/credentials by URL.
+  const user = await getCurrentUser()
+  if (!user || !isBoundToSite(user, site.id)) notFound()
+
   const primaryDomain = await payload.find({
     collection: 'domains',
     where: { and: [{ site: { equals: site.id } }, { primary: { equals: true } }] },
@@ -35,7 +41,6 @@ export default async function SiteLayout({
   const primaryHost = primaryDomain.docs[0]?.host ?? null
   const primaryStatus = primaryDomain.docs[0]?.status ?? null
   const livePreviewUrl = primaryHost ? `https://${primaryHost}` : `/?site=${site.slug}`
-  const user = await getCurrentUser()
 
   return (
     <>

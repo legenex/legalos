@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { runLeadPipeline } from '@/lib/lead-pipeline/run'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUser, isBoundToSite } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,6 +59,13 @@ export async function POST(req: NextRequest) {
   })
   const site = siteRes.docs[0]
   if (!site) return NextResponse.json({ ok: false, error: 'site not found' }, { status: 404 })
+
+  // Only run a test capture against a Site the caller is actually bound to,
+  // otherwise an editor of one tenant could inject test leads (firing CAPI /
+  // webhooks, polluting data) into any other tenant.
+  if (!isBoundToSite(user, site.id)) {
+    return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+  }
 
   const primaryRes = await payload.find({
     collection: 'domains',

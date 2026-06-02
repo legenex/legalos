@@ -1,5 +1,5 @@
 import type { CollectionConfig } from 'payload'
-import { isSuperAdmin, isSuperAdminField, isAuthenticated } from '../access'
+import { isSuperAdmin, isSuperAdminField } from '../access'
 import { auditAfterChange, auditAfterDelete } from '../hooks/audit'
 
 export const Users: CollectionConfig = {
@@ -14,7 +14,15 @@ export const Users: CollectionConfig = {
     group: 'LegalOS',
   },
   access: {
-    read: isAuthenticated,
+    // Non-super-admins may only read their own user row. Without this any
+    // authenticated user could enumerate every operator's email + site
+    // bindings across all tenants via /api/users or /cms. Login is unaffected
+    // (payload.login bypasses read access).
+    read: ({ req }) => {
+      if (!req.user) return false
+      if ((req.user as { super_admin?: boolean }).super_admin) return true
+      return { id: { equals: req.user.id } }
+    },
     create: isSuperAdmin,
     update: ({ req, id }) => {
       if (!req.user) return false
@@ -56,6 +64,13 @@ export const Users: CollectionConfig = {
       name: 'siteBindings',
       type: 'array',
       label: 'Site role bindings',
+      // Read stays open so getCurrentUser()/site-scoped access helpers can see a
+      // user's own bindings, but only a super admin may write them — otherwise a
+      // user could PATCH their own record to grant themselves admin on any Site.
+      access: {
+        create: isSuperAdminField,
+        update: isSuperAdminField,
+      },
       admin: {
         description: 'Per-Site role assignments. Super admins do not need bindings.',
       },

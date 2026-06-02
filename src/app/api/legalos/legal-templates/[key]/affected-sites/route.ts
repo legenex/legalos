@@ -4,15 +4,16 @@
 import { NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { headers } from 'next/headers'
+import { getCurrentUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(_req: Request, ctx: { params: Promise<{ key: string }> }) {
   const { key } = await ctx.params
-  const h = await headers()
-  const cookie = h.get('cookie') ?? ''
-  if (!cookie) return new NextResponse('unauthorized', { status: 401 })
+  // A real session check — the previous "any cookie present" gate let any
+  // request carrying any cookie read the cross-tenant list of affected sites.
+  const user = await getCurrentUser()
+  if (!user) return new NextResponse('unauthorized', { status: 401 })
 
   const payload = await getPayload({ config })
   const pages = await payload.find({

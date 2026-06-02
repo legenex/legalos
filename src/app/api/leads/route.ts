@@ -5,13 +5,18 @@ import config from '@payload-config'
 import { runLeadPipeline } from '@/lib/lead-pipeline/run'
 import { resolveSiteByHost } from '@/lib/site-resolver'
 import { pickAttributionFromObject } from '@/lib/lead-pipeline/attribution'
+import { getCurrentUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
 const ContactSchema = z.object({
   first_name: z.string().optional(),
   last_name: z.string().optional(),
-  email: z.string().optional(),
+  // Loose-but-valid: an empty string is allowed (optional contact), but a
+  // non-empty value must be a real email. The Leads collection's `email` field
+  // format-validates on create, so a malformed value here would otherwise throw
+  // inside payload.create and silently drop the whole lead.
+  email: z.string().email().optional().or(z.literal('')),
   phone: z.string().optional(),
   state: z.string().optional(),
   zip: z.string().optional(),
@@ -60,27 +65,32 @@ export async function POST(req: NextRequest) {
   let siteName = ''
   let primaryHost: string | null = null
 
-  if (data.site_slug) {
-    const res = await payload.find({
-      collection: 'sites',
-      where: { slug: { equals: data.site_slug } },
-      limit: 1,
-      overrideAccess: true,
-    })
-    const s = res.docs[0]
-    if (s) {
-      siteId = Number(s.id)
-      siteSlug = s.slug
-      siteName = s.name
-    }
-  } else {
-    const resolved = await resolveSiteByHost(host)
-    if (resolved) {
-      const s = await payload.findByID({ collection: 'sites', id: resolved.siteId, overrideAccess: true })
-      siteId = Number(s.id)
-      siteSlug = s.slug
-      siteName = s.name
-      primaryHost = resolved.primaryHost
+  // Resolve by host first — that's the trustworthy signal for a public submit,
+  // and the public form already renders on the resolved host. A body-supplied
+  // `site_slug` is only honored as a fallback for AUTHENTICATED callers (admin
+  // preview / test), so an anonymous request can't target an arbitrary tenant.
+  const resolved = await resolveSiteByHost(host)
+  if (resolved) {
+    const s = await payload.findByID({ collection: 'sites', id: resolved.siteId, overrideAccess: true })
+    siteId = Number(s.id)
+    siteSlug = s.slug
+    siteName = s.name
+    primaryHost = resolved.primaryHost
+  } else if (data.site_slug) {
+    const user = await getCurrentUser()
+    if (user) {
+      const res = await payload.find({
+        collection: 'sites',
+        where: { slug: { equals: data.site_slug } },
+        limit: 1,
+        overrideAccess: true,
+      })
+      const s = res.docs[0]
+      if (s) {
+        siteId = Number(s.id)
+        siteSlug = s.slug
+        siteName = s.name
+      }
     }
   }
 
@@ -104,7 +114,7 @@ export async function POST(req: NextRequest) {
     funnel_path: data.funnel_path,
     source_entity_id: data.source_entity_id,
     test_capture: data.test_capture,
-    contact: data.contact,
+    contact: { ...data.contact, email: data.contact.email || undefined },
     quiz_answers: data.quiz_answers,
     attribution,
     trustedform_cert_url: data.trustedform_cert_url,
