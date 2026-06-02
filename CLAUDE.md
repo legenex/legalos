@@ -84,7 +84,7 @@ All `src/` changes require the rebuild + restart from "Standard operations" abov
 
 ## Stack
 
-Payload CMS 3 on Next.js 15 (App Router, React 19), PostgreSQL 16, Redis 7, Anthropic SDK, deployed via Docker on a Plesk host. Package manager is `pnpm@9.15.0`, Node `>=20.9`.
+Payload CMS 3 on Next.js 15 (App Router, React 19), PostgreSQL 16, Redis 7, Anthropic SDK. Served in production by the `legalos-dev` systemd unit (`next start` against a prebuilt `.next/`) on a Plesk host — **not** Docker (the `app` service in `docker-compose.yml` is retained but stopped; only `postgres`/`redis` are used locally). See "Deploy model". Package manager is `pnpm@9.15.0`, Node `>=20.9`.
 
 ## Common commands
 
@@ -130,6 +130,26 @@ This is the single most load-bearing concept. **Everything is scoped to a `Site`
 - `Users.siteBindings[]` assigns users to Sites with role `admin` / `editor` / `analyst`. `super_admin: true` bypasses scoping. The helpers in `src/access/index.ts` (`siteScopedRead`, `siteScopedWrite`, `siteScopedAdmin`, `isSuperAdmin`) return either `true` or a `{ site: { in: ids } }` filter — use them on collection access rules, don't reimplement.
 - `SharedLegalTemplates` is the one collection that is NOT site-scoped — it's the global library of legal page bodies (privacy, terms, TCPA, etc.) with `{{site.*}}` variables substituted at render via `renderTemplateVars()` in `src/lib/template-vars.ts`. Sites can override on a per-template basis.
 
+## Funnel Builder (brandless content + per-brand deployment)
+
+A second content model, ported from the standalone funnel-builder artifact, lives alongside the site-scoped collections. It splits **authoring** from **brand binding** so one piece of content can run under many brands:
+
+- **Authoring collections** (`Funnel Builder` admin group) are **brandless** — `FunnelAdvertorials`, `FunnelLandingPages`, `FunnelQuizzes`. Their bodies are brand-agnostic; header/colors/phone/CTA/disclaimer are resolved per brand only at render.
+- **Deployment collections** — `FunnelAdvertorialDeployments`, `FunnelLpDeployments`, `FunnelQuizDeployments` — bind a brandless doc to a Site (brand) + Domain + path, and carry CTA-mode / UTM / pixel config. Cross-references between funnel docs are stored as **text ids** (e.g. `quiz_deployment_id`), not Payload relationships, mirroring the artifact.
+- Access on these collections is plain `isAuthenticated` (NOT the `siteScoped*` helpers used elsewhere) — they are not yet wired into the per-Site scoping model. Audit hooks are attached.
+- `src/lib/brand-map.ts` maps a production `Site` (+ its Domains) into the artifact's `brand` object shape; `Site.brand_identity` (JSON) is the source of truth when present. `src/lib/funnel-samples.ts` auto-seeds real, editable sample funnel records the first time a builder is opened (no manual `pnpm seed`).
+- The funnel-* slugs are **not yet in committed `payload-types.ts`** — some modules carry `// @ts-nocheck` with a note to run `pnpm generate:types` on the server. When you touch these, regenerate types there.
+
+## Page builder (block-based pages)
+
+`Pages` / `LandingPages` bodies are arrays of typed **blocks** (`hero`, `nav_header`, `trust_strip`, `prose`, `cta`, `cards`, `stats`, `testimonials`, `faq`, `services_grid`, `how_it_works`, `final_cta`, `site_footer`, …). Three artifacts must stay in lock-step when a block gains a field:
+
+1. `src/lib/builder/block-schemas.ts` — Zod schemas that define the AI/model contract for `body_blocks`.
+2. `src/collections/Pages.ts` — the Payload field definitions.
+3. `src/components/blocks/BlockRenderer.tsx` — the renderer that reads the fields.
+
+Other `src/lib/builder/` pieces: `html-to-blocks.ts` / `html-to-structured-blocks.ts` (import raw HTML → blocks), `extract-brand-tokens.ts` (pull brand colors/fonts from a page), `page-lint.ts` (pure, cheap a11y/seo/hierarchy/contrast checks that re-run on every blocks-state change to drive the builder's "Page health" card). Builder server actions live under `src/app/(app)/admin/sites/[slug]/pages/` (`ai-clone-action.ts`, `html-import-action.ts`, `ai-rewrite-action.ts`, `convert-action.ts`) and go through `invokeLLM` (see AI usage).
+
 ## Hard rules enforced in code
 
 These aren't style preferences — violating them creates correctness bugs or compliance risk:
@@ -160,7 +180,7 @@ Connecting a custom domain to a Site goes through Plesk's REST API (`src/lib/ple
 
 ## Lead capture pipeline
 
-Public lead submissions (`POST /api/legalos/leads` and the test harness `POST /api/legalos/test-capture`) funnel into one orchestrator: `runLeadPipeline()` in `src/lib/lead-pipeline/run.ts`. It runs **synchronously inside the request** — there is no background worker. Despite `bullmq` being a declared dependency, no queue/worker is wired up; the only runtime use of Redis is a health-check ping in `src/lib/system-health/checks.ts`. Don't assume lead work is async.
+Public lead submissions (`POST /api/leads`, at `src/app/api/leads/route.ts`) and the test harness (`POST /api/legalos/test-capture`) funnel into one orchestrator: `runLeadPipeline()` in `src/lib/lead-pipeline/run.ts`. It runs **synchronously inside the request** — there is no background worker. Despite `bullmq` being a declared dependency, no queue/worker is wired up; the only runtime use of Redis is a health-check ping in `src/lib/system-health/checks.ts`. Don't assume lead work is async.
 
 The orchestrator's steps (each returns a `PipelineStep` for the result trace): derive attribution / `fbc` (`attribution.ts`) → mint the shared `event_id` (`event-id.ts`) → claim the TrustedForm cert and verify the Jornaya lead (`src/lib/integrations/`) → enrich the phone via HLR → persist the `Leads` row → fire Meta CAPI + TrueCall → dispatch outbound webhooks (`dispatch-webhooks.ts`) → Slack notify (`slack.ts`). All integration calls and credentials are server-side only.
 
