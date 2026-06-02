@@ -1,6 +1,7 @@
 import type { CollectionConfig } from 'payload'
 import { siteScopedRead, siteScopedAdmin } from '../access'
 import { auditAfterChange, auditAfterDelete } from '../hooks/audit'
+import { invalidateHostCache } from '../lib/site-resolver'
 
 export const Domains: CollectionConfig = {
   slug: 'domains',
@@ -16,8 +17,23 @@ export const Domains: CollectionConfig = {
     delete: siteScopedAdmin,
   },
   hooks: {
-    afterChange: [auditAfterChange],
-    afterDelete: [auditAfterDelete],
+    // Invalidate the host→Site cache on ANY Domain mutation (custom admin, raw
+    // /cms, REST/local API, seeds, migrations) so re-pointed or renamed hosts
+    // don't keep serving the wrong Site for up to the 60s TTL. The custom admin
+    // actions also call invalidateHostCache, which is now redundant but harmless.
+    afterChange: [
+      auditAfterChange,
+      ({ doc, previousDoc }) => {
+        if (doc?.host) invalidateHostCache(doc.host)
+        if (previousDoc?.host && previousDoc.host !== doc?.host) invalidateHostCache(previousDoc.host)
+      },
+    ],
+    afterDelete: [
+      auditAfterDelete,
+      ({ doc }) => {
+        if (doc?.host) invalidateHostCache(doc.host)
+      },
+    ],
     beforeValidate: [
       async ({ data, req, operation, originalDoc }) => {
         if (!data?.host) return data

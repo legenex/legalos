@@ -420,7 +420,11 @@ export const runLeadPipeline = async (input: LeadCaptureInput): Promise<LeadPipe
     }
   })()
 
-  await Promise.all([tfTask, jorTask, metaTask, tiktokTask, ga4Task, truecallTask, webhookTask, slackTask])
+  // allSettled, not all: the Lead row is already persisted, so a single
+  // integration task throwing must never abort the run (which would skip the
+  // delivery-log update below and 500 the request without returning event_id,
+  // so the client pixel would never fire). Each task also logs its own outcome.
+  await Promise.allSettled([tfTask, jorTask, metaTask, tiktokTask, ga4Task, truecallTask, webhookTask, slackTask])
 
   // ---------- 4. Persist delivery log + integration patches on the Lead row ----------
   try {

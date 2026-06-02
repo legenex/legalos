@@ -7,8 +7,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { invalidateHostCache } from '@/lib/site-resolver'
 import { checkDomainDns } from '@/lib/dns-check'
 import { pollDomainSslStatus } from '@/lib/ssl-poll'
-import { provisionDomainInPlesk, unprovisionDomainInPlesk } from '@/lib/plesk/provision-domain'
-import { pleskIsConfigured } from '@/lib/plesk/client'
+import { provisionDomainInPlesk, unprovisionDomainInPlesk, pleskIsConfigured } from '@/lib/plesk/provision-domain'
 
 /* --------------------------------- Verify -------------------------------------- */
 
@@ -41,7 +40,11 @@ export async function verifyAndPromoteDomain(args: {
   if (!domain.site) return { ok: false, error: 'domain is unassigned — attach to a brand before verifying' }
   if (domain.kind !== 'custom') return { ok: false, error: 'preview domains do not require verification' }
 
-  const skipAllowed = (process.env.LEGALOS_DEV_SKIP_DNS ?? 'false').toLowerCase() === 'true'
+  // Dev-only escape hatch. Hard-gated on NODE_ENV so a stray LEGALOS_DEV_SKIP_DNS
+  // in a production .env can never bypass DNS or optimistically mark a domain.
+  const skipAllowed =
+    process.env.NODE_ENV !== 'production' &&
+    (process.env.LEGALOS_DEV_SKIP_DNS ?? 'false').toLowerCase() === 'true'
   let dnsResult: Awaited<ReturnType<typeof checkDomainDns>>
 
   if (args.skipDns && skipAllowed) {
@@ -124,7 +127,11 @@ export async function verifyAndPromoteDomain(args: {
   const siteId = typeof domain.site === 'object' ? domain.site.id : domain.site
   const localDevShortcut = !pleskIsConfigured() && skipAllowed
   const finalStatus = localDevShortcut ? 'active' : pleskOk ? 'provisioning' : 'error'
-  const finalSslStatus = localDevShortcut ? 'active' : 'pending'
+  // Never assume SSL. `ssl_status='active'` is reserved for the poller after a
+  // real HTTPS handshake (CLAUDE.md hard rule). The dev shortcut has no public
+  // app to handshake against and runs no poller, so it stays 'unknown'; the real
+  // provisioning path is 'pending' until the poller confirms.
+  const finalSslStatus = localDevShortcut ? 'unknown' : 'pending'
   await payload.update({
     collection: 'domains',
     id: args.domainId,
@@ -204,6 +211,15 @@ export async function recheckDomainDns(args: {
       last_checked_at: reloaded.last_checked_at ?? new Date().toISOString(),
       dns: result.dns,
     }
+  }
+
+  if (currentStatus === 'provisioning' && domain.site) {
+    // The SSL self-check poller is a detached promise that dies on every server
+    // restart/deploy, which would otherwise leave the row stuck in
+    // 'provisioning' forever (recheck previously only re-drove pending|error).
+    // Re-launch it so a manual re-check drives the row to 'active'.
+    const siteId = typeof domain.site === 'object' ? domain.site.id : domain.site
+    void pollDomainSslStatus({ domainId: args.domainId, host: domain.host, siteId }).catch(() => {})
   }
 
   const now = new Date().toISOString()

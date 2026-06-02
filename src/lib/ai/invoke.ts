@@ -95,7 +95,9 @@ export const invokeLLM = async <TSchema extends z.ZodTypeAny>(
 }
 
 // Minimal Zod -> JSON Schema converter for Anthropic tool_use input_schema.
-// Handles the subset we use: object, string, number, boolean, array, enum, nullable, optional.
+// Handles the subset we use: object, string, number, boolean, array, enum,
+// nullable, optional, default, effects (preprocess/refine), record, and both
+// plain and discriminated unions. Anything unrecognised falls through to {}.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const zodToJsonSchema = (schema: z.ZodTypeAny): any => {
   const def = schema._def
@@ -122,8 +124,19 @@ const zodToJsonSchema = (schema: z.ZodTypeAny): any => {
       return { type: 'array', items: zodToJsonSchema(def.type) }
     case 'ZodOptional':
       return zodToJsonSchema(def.innerType)
+    case 'ZodDefault':
+      // Unwrap to the inner type; the default is applied by Zod at parse time.
+      return zodToJsonSchema(def.innerType)
+    case 'ZodEffects':
+      // z.preprocess / .refine / .transform — describe the underlying schema.
+      return zodToJsonSchema(def.schema)
     case 'ZodNullable':
       return { anyOf: [zodToJsonSchema(def.innerType), { type: 'null' }] }
+    case 'ZodRecord':
+      return { type: 'object', additionalProperties: def.valueType ? zodToJsonSchema(def.valueType) : true }
+    case 'ZodAny':
+    case 'ZodUnknown':
+      return {}
     case 'ZodObject': {
       const shape = def.shape() as Record<string, z.ZodTypeAny>
       const required: string[] = []
@@ -136,6 +149,11 @@ const zodToJsonSchema = (schema: z.ZodTypeAny): any => {
     }
     case 'ZodUnion':
       return { anyOf: def.options.map((o: z.ZodTypeAny) => zodToJsonSchema(o)) }
+    case 'ZodDiscriminatedUnion': {
+      // _def.options is an array in some Zod versions and a Map in others.
+      const opts = Array.isArray(def.options) ? def.options : Array.from(def.options.values())
+      return { anyOf: (opts as z.ZodTypeAny[]).map((o) => zodToJsonSchema(o)) }
+    }
     default:
       return {}
   }
