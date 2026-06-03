@@ -7,6 +7,7 @@ import config from '@payload-config'
 import { getCurrentUser } from '@/lib/auth'
 import { invalidateHostCache } from '@/lib/site-resolver'
 import { invokeLLM } from '@/lib/ai/invoke'
+import { homeBlocksForVertical, starterQuizSteps, starterLandingPage } from '@/lib/starter-content'
 
 const VERTICAL = z.enum([
   'mass-tort',
@@ -218,9 +219,15 @@ export async function createSite(rawInput: unknown): Promise<SuccessResult | Fai
   })
   invalidateHostCache()
 
-  // 3. Create the default Pages
+  // 3. Create the default Pages. For a fresh (non-duplicated) Site we seed the
+  // home page with a real, vertical-appropriate starter block layout so a new
+  // site is never empty ("This page has no content blocks yet"). Duplicated
+  // sites keep their cloned blocks.
+  const isFreshSite = pagesToClone.length === 0
+  const starterHome = isFreshSite ? homeBlocksForVertical(input.vertical) : null
   const pages = pagesToClone.length > 0 ? pagesToClone : (DEFAULT_PAGES as unknown as typeof pagesToClone)
   for (const page of pages) {
+    const body_blocks = page.slug === '/' && starterHome ? starterHome : page.body_blocks
     await payload.create({
       collection: 'pages',
       data: {
@@ -230,7 +237,7 @@ export async function createSite(rawInput: unknown): Promise<SuccessResult | Fai
         status: 'published' as const,
         template_key: page.template_key,
         uses_shared_template: page.uses_shared_template,
-        body_blocks: page.body_blocks,
+        body_blocks,
         published_at: new Date().toISOString(),
       } as never,
       overrideAccess: true,
@@ -243,6 +250,52 @@ export async function createSite(rawInput: unknown): Promise<SuccessResult | Fai
     data: { site: siteId } as never,
     overrideAccess: true,
   })
+
+  // 5. Seed a starter Quiz + Landing Page for fresh sites so the funnel is
+  // ready to edit, not blank. (Duplicated sites are left to their cloned set.)
+  if (isFreshSite) {
+    let quizId: number | null = null
+    try {
+      const quiz = (await payload.create({
+        collection: 'quizzes',
+        data: {
+          site: siteId,
+          name: `${input.name} Intake`,
+          slug: '/quiz',
+          status: 'published' as const,
+          description: 'Starter qualifying quiz. Edit the steps to match your intake.',
+          steps: starterQuizSteps(),
+          dq_destination_slug: '/thanks',
+          submitted_destination_slug: '/submitted',
+        } as never,
+        overrideAccess: true,
+      })) as { id: number }
+      quizId = Number(quiz.id)
+    } catch (err) {
+      console.warn('[createSite] starter quiz creation failed:', err instanceof Error ? err.message : err)
+    }
+
+    try {
+      const lp = starterLandingPage()
+      await payload.create({
+        collection: 'landing-pages',
+        data: {
+          site: siteId,
+          name: `${input.name} Landing Page`,
+          slug: '/lp',
+          status: 'published' as const,
+          ...(quizId ? { quiz: quizId } : {}),
+          hero: lp.hero,
+          body_sections: lp.body_sections,
+          social_proof: lp.social_proof,
+          meta_title: `${input.name} — Free case review`,
+        } as never,
+        overrideAccess: true,
+      })
+    } catch (err) {
+      console.warn('[createSite] starter landing page creation failed:', err instanceof Error ? err.message : err)
+    }
+  }
 
   revalidatePath('/admin/sites')
   return {
