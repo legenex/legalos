@@ -1,6 +1,7 @@
 import type { CollectionConfig } from 'payload'
 import { isSuperAdmin } from '../access'
 import { auditAfterChange, auditAfterDelete } from '../hooks/audit'
+import { cascadeDeleteSiteChildren } from '../hooks/site-cascade'
 
 export const Sites: CollectionConfig = {
   slug: 'sites',
@@ -32,6 +33,7 @@ export const Sites: CollectionConfig = {
   hooks: {
     afterChange: [auditAfterChange],
     afterDelete: [auditAfterDelete],
+    beforeDelete: [cascadeDeleteSiteChildren],
     beforeChange: [
       async ({ data, originalDoc, operation }) => {
         if (operation !== 'update' || !originalDoc) return data

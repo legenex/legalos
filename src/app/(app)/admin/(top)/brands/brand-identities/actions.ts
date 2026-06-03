@@ -127,9 +127,11 @@ export async function deleteBrandSite(args: { siteId: number }): Promise<{ ok: t
   if (!user) return { ok: false, error: 'unauthenticated' }
   const payload = await getPayload({ config })
   try {
+    // The Sites beforeDelete hook cascade-removes child rows (pages, leads,
+    // domains, etc.) first, so this no longer trips the SET NULL / NOT NULL FK.
     await payload.delete({ collection: 'sites', id: args.siteId, user: user as never, overrideAccess: false })
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : 'delete failed (super-admin only)' }
+    return { ok: false, error: err instanceof Error ? err.message : 'delete failed' }
   }
   revalidatePath('/admin/brands/brand-identities')
   return { ok: true }
