@@ -80,6 +80,22 @@ export function GeneralForm({ site }: { site: Site }) {
       </Card>
 
       <Card title="Brand">
+        <p className="text-[12px] text-[var(--color-ink-muted)] mb-4 -mt-2 leading-relaxed">
+          This Site&apos;s brand is the single source of truth across the platform. Changes here cascade to{' '}
+          <span className="text-white font-medium">Site Pages</span>, the{' '}
+          <span className="text-white font-medium">Quiz builder</span>, the{' '}
+          <span className="text-white font-medium">Landing Page builder</span>, and the{' '}
+          <span className="text-white font-medium">Advertorial builder</span> automatically. For the full set of
+          brand controls (logos, all colours, typography, contact CTAs, legal copy) use the centralised{' '}
+          <a
+            href="/admin/brands/brand-identities"
+            className="text-[var(--color-info)] hover:underline font-medium"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Brand Identities editor →
+          </a>
+        </p>
         <Grid2>
           <Field label="Logo">
             <div className="flex items-center gap-3">
