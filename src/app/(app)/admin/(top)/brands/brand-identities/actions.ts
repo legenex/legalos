@@ -8,6 +8,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { invokeLLM } from '@/lib/ai/invoke'
 import { extractBrandFromCss, type ExtractedBrand } from '@/lib/builder/extract-brand-tokens'
 import { createSite } from '../../sites/actions'
+import { seedStarterFunnelsForBrand } from '@/lib/funnel-samples'
 
 // In production a "brand" is a Site. The funnel builder's brand object (the
 // artifact shape) is stored verbatim on Site.brand_identity (JSON). These
@@ -150,7 +151,21 @@ export async function createBrandSite(args: {
     return { ok: false, error: err instanceof Error ? err.message : 'attach brand failed' }
   }
 
+  // Auto-seed a starter Landing Page deployment + Quiz deployment for the
+  // new brand so the funnel builders surface working content from day one.
+  // Idempotent + never-throwing — if seeding fails we still return success
+  // for the brand itself (it's already created) and surface a warning.
+  const seeded = await seedStarterFunnelsForBrand(payload, Number(created.site.id))
+  if (!seeded.ok) {
+    // eslint-disable-next-line no-console
+    console.warn('[brand-identities] starter funnels not seeded for new brand:', seeded.error)
+  }
+
+  // Funnel pages cache the LP / Quiz / Deployments lists at request time —
+  // bust those caches so the new deployments show up immediately.
   revalidatePath('/admin/brands/brand-identities')
+  revalidatePath('/admin/landing-pages')
+  revalidatePath('/admin/quizzes')
   return { ok: true, siteId: created.site.id, slug: created.site.slug, previewHost: created.preview_host }
 }
 

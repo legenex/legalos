@@ -223,6 +223,196 @@ const seedOnce = async (payload: Payload): Promise<void> => {
   samplesEnsured = true
 }
 
+// -----------------------------------------------------------------------------
+// Per-brand starter content. Called by createBrandSite right after the Site
+// row + brand attach so EVERY new brand lands with a working LP deployment
+// and Quiz deployment from day one — no manual 'now go to the LP builder
+// and create a deployment for this brand' step.
+// -----------------------------------------------------------------------------
+const ensureMvaLandingPageId = async (payload: Payload): Promise<number | null> => {
+  // The "MVA Pain First" brandless LP is the canonical starter. If for some
+  // reason it doesn't exist yet, seed it on the fly.
+  const slug = 'mva-pain-first'
+  const existing = await payload.find({
+    collection: 'funnel-landing-pages',
+    where: { slug: { equals: slug } },
+    limit: 1,
+    overrideAccess: true,
+  })
+  if (existing.docs[0]) return Number(existing.docs[0].id)
+  const spec = SAMPLE_LANDING_PAGES.find((p) => p.slug === slug) ?? SAMPLE_LANDING_PAGES[0]
+  const created = await payload.create({
+    collection: 'funnel-landing-pages',
+    data: {
+      name: spec.name,
+      slug: spec.slug,
+      template_id: spec.template_id,
+      angle: spec.angle,
+      is_published: spec.is_published,
+      sections: buildSeedSections(),
+    },
+    overrideAccess: true,
+  })
+  return Number(created.id)
+}
+
+const ensureMvaQuizId = async (payload: Payload): Promise<number | null> => {
+  const existing = await payload.find({
+    collection: 'funnel-quizzes',
+    where: { slug: { equals: 'mva' } },
+    limit: 1,
+    overrideAccess: true,
+  })
+  if (existing.docs[0]) return Number(existing.docs[0].id)
+  const q = buildSeedQuiz()
+  const created = await payload.create({
+    collection: 'funnel-quizzes',
+    data: {
+      name: q.name,
+      slug: q.slug,
+      is_published: q.isPublished,
+      tiers: q.tiers,
+      steps: q.steps,
+      nodes: q.nodes,
+      custom_fields: q.customFields,
+    },
+    overrideAccess: true,
+  })
+  return Number(created.id)
+}
+
+/**
+ * Seed a starter Landing Page deployment + Quiz deployment for a freshly
+ * created brand Site so the builders surface working content immediately.
+ *
+ * Idempotent: if a deployment already exists at the target path for this
+ * Site, the create is skipped — so calling this twice on the same brand
+ * is safe.
+ *
+ * Never throws: errors are logged and the function returns. createBrandSite
+ * already succeeded by the time we hit this code; failing to seed the
+ * starters shouldn't roll the whole brand back.
+ */
+export const seedStarterFunnelsForBrand = async (
+  payload: Payload,
+  siteId: number,
+): Promise<{ ok: true; quizDeploymentId: string | null; lpDeploymentId: string | null } | { ok: false; error: string }> => {
+  try {
+    const domainId = await primaryDomainId(payload, siteId)
+    const quizId = await ensureMvaQuizId(payload)
+    const lpId = await ensureMvaLandingPageId(payload)
+
+    // 1) Quiz deployment first — the LP deployment links to it.
+    let quizDeploymentId: string | null = null
+    if (quizId != null) {
+      const quizPath = '/s/mva'
+      const existingQuiz = await payload.find({
+        collection: 'funnel-quiz-deployments',
+        where: { and: [{ site: { equals: siteId } }, { path: { equals: quizPath } }] },
+        limit: 1,
+        overrideAccess: true,
+      })
+      if (existingQuiz.docs[0]) {
+        quizDeploymentId = String(existingQuiz.docs[0].id)
+      } else {
+        const dep = await payload.create({
+          collection: 'funnel-quiz-deployments',
+          data: {
+            name: 'MVA Tiered Quiz',
+            quiz: quizId,
+            site: siteId,
+            domain: domainId,
+            path: quizPath,
+            render_mode: 'standalone',
+            template_id: 'default',
+            status: 'live',
+            header_config: { logoEnabled: true, ctaButton: { enabled: true, text: 'CLICK HERE TO CALL', url: 'tel:', fontSize: 11 } },
+            footer_config: { logoEnabled: true, logoSize: 32, showCopyright: true, fontSize: 12 },
+            body_section_overrides: null,
+            embed_preview_bg: '#0a1a3a',
+            utm: {},
+            pixels: {},
+          },
+          overrideAccess: true,
+        })
+        quizDeploymentId = String(dep.id)
+      }
+    }
+
+    // 2) LP deployment, wired to the quiz deployment if we have one.
+    let lpDeploymentId: string | null = null
+    if (lpId != null) {
+      const lpPath = '/c/pain'
+      const existingLp = await payload.find({
+        collection: 'funnel-lp-deployments',
+        where: { and: [{ site: { equals: siteId } }, { path: { equals: lpPath } }] },
+        limit: 1,
+        overrideAccess: true,
+      })
+      if (existingLp.docs[0]) {
+        lpDeploymentId = String(existingLp.docs[0].id)
+      } else {
+        const dep = await payload.create({
+          collection: 'funnel-lp-deployments',
+          data: {
+            name: 'MVA Pain First · sample',
+            landing_page: lpId,
+            site: siteId,
+            domain: domainId,
+            path: lpPath,
+            status: 'live',
+            quiz_deployment_id: quizDeploymentId ?? '',
+          },
+          overrideAccess: true,
+        })
+        lpDeploymentId = String(dep.id)
+      }
+    }
+
+    return { ok: true, quizDeploymentId, lpDeploymentId }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[funnel-samples] seedStarterFunnelsForBrand failed:', err)
+    return { ok: false, error: err instanceof Error ? err.message : 'starter seed failed' }
+  }
+}
+
+/**
+ * Backfill helper: walk every Site and run seedStarterFunnelsForBrand on
+ * any that don't yet have a Quiz deployment OR an LP deployment. Per-Site
+ * idempotency in the seeder makes this safe to run repeatedly — Sites that
+ * already have starters are skipped per-deployment.
+ *
+ * Called by the funnel admin pages so existing brands created before the
+ * auto-seed feature shipped get their starter content next time someone
+ * opens the Quiz / LP builder.
+ */
+const brandsBackfilled = new Set<number>()
+export const ensureStarterFunnelsForAllBrands = async (payload: Payload): Promise<void> => {
+  try {
+    const sitesRes = await payload.find({ collection: 'sites', limit: 500, overrideAccess: true })
+    for (const s of sitesRes.docs) {
+      const siteId = Number(s.id)
+      if (brandsBackfilled.has(siteId)) continue
+      const [qd, lpd] = await Promise.all([
+        payload.find({ collection: 'funnel-quiz-deployments', where: { site: { equals: siteId } }, limit: 1, overrideAccess: true }),
+        payload.find({ collection: 'funnel-lp-deployments', where: { site: { equals: siteId } }, limit: 1, overrideAccess: true }),
+      ])
+      const hasQuiz = qd.docs.length > 0
+      const hasLp = lpd.docs.length > 0
+      if (hasQuiz && hasLp) {
+        brandsBackfilled.add(siteId)
+        continue
+      }
+      await seedStarterFunnelsForBrand(payload, siteId)
+      brandsBackfilled.add(siteId)
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[funnel-samples] backfill failed:', err)
+  }
+}
+
 /**
  * Ensure the sample funnel content exists (runs at most once, ever).
  * Never throws: on error it logs and returns so the calling page still renders.

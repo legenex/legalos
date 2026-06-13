@@ -8,6 +8,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { invalidateHostCache } from '@/lib/site-resolver'
 import { invokeLLM } from '@/lib/ai/invoke'
 import { homeBlocksForVertical, starterQuizSteps, starterLandingPage } from '@/lib/starter-content'
+import { seedStarterFunnelsForBrand } from '@/lib/funnel-samples'
 
 const VERTICAL = z.enum([
   'mass-tort',
@@ -297,7 +298,23 @@ export async function createSite(rawInput: unknown): Promise<SuccessResult | Fai
     }
   }
 
+  // Auto-seed a starter Funnel Landing Page deployment + Quiz deployment on
+  // the new Site. Every brand should land with working funnel content from
+  // day one, whether it was created via Brand Identities or directly under
+  // Sites. Idempotent + never-throwing — seeding failure shouldn't roll the
+  // Site creation back.
+  try {
+    const seeded = await seedStarterFunnelsForBrand(payload, siteId)
+    if (!seeded.ok) {
+      console.warn('[createSite] starter funnels not seeded:', seeded.error)
+    }
+  } catch (err) {
+    console.warn('[createSite] starter funnels not seeded:', err instanceof Error ? err.message : err)
+  }
+
   revalidatePath('/admin/sites')
+  revalidatePath('/admin/landing-pages')
+  revalidatePath('/admin/quizzes')
   return {
     ok: true,
     site: { id: siteId, slug: input.slug, name: input.name },
