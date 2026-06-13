@@ -302,10 +302,23 @@ export const seedStarterFunnelsForBrand = async (
     const quizId = await ensureMvaQuizId(payload)
     const lpId = await ensureMvaLandingPageId(payload)
 
+    // Pull the brand's slug + display name so deployment paths and names
+    // identify which brand they belong to. Falls back to the bare site id
+    // if for any reason these aren't on the row (defensive — shouldn't
+    // happen because createSite requires both).
+    const site = (await payload.findByID({ collection: 'sites', id: siteId, overrideAccess: true })) as
+      | { slug?: string; name?: string; brand?: { display_name?: string } }
+      | null
+    const brandSlug = (site?.slug || `site-${siteId}`).toString().toLowerCase().replace(/[^a-z0-9-]/g, '-')
+    const displayName = site?.brand?.display_name || site?.name || `Brand ${siteId}`
+
     // 1) Quiz deployment first — the LP deployment links to it.
+    // Path is /s/<brand-slug> so a multi-brand admin list shows
+    // /s/claim-checker, /s/check-my-claim, /s/<next-brand> etc. instead of
+    // every brand sharing /s/mva.
     let quizDeploymentId: string | null = null
     if (quizId != null) {
-      const quizPath = '/s/mva'
+      const quizPath = `/s/${brandSlug}`
       const existingQuiz = await payload.find({
         collection: 'funnel-quiz-deployments',
         where: { and: [{ site: { equals: siteId } }, { path: { equals: quizPath } }] },
@@ -318,7 +331,7 @@ export const seedStarterFunnelsForBrand = async (
         const dep = await payload.create({
           collection: 'funnel-quiz-deployments',
           data: {
-            name: 'MVA Tiered Quiz',
+            name: `${displayName} · MVA Tiered Quiz`,
             quiz: quizId,
             site: siteId,
             domain: domainId,
@@ -340,9 +353,10 @@ export const seedStarterFunnelsForBrand = async (
     }
 
     // 2) LP deployment, wired to the quiz deployment if we have one.
+    // Path is /c/<brand-slug> — same brand-identifying pattern.
     let lpDeploymentId: string | null = null
     if (lpId != null) {
-      const lpPath = '/c/pain'
+      const lpPath = `/c/${brandSlug}`
       const existingLp = await payload.find({
         collection: 'funnel-lp-deployments',
         where: { and: [{ site: { equals: siteId } }, { path: { equals: lpPath } }] },
@@ -355,7 +369,7 @@ export const seedStarterFunnelsForBrand = async (
         const dep = await payload.create({
           collection: 'funnel-lp-deployments',
           data: {
-            name: 'MVA Pain First · sample',
+            name: `${displayName} · MVA Pain First`,
             landing_page: lpId,
             site: siteId,
             domain: domainId,
