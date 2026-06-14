@@ -4,6 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## ⭐ ENGINEERING STANDARD: exceptional, complete, best-of-the-best — always
+
+**The owner's standing bar for this codebase: exceptional and as close to perfect as possible. No half-working systems. No "good enough." Every shipped feature is a fully functioning, well-built, complete path — the best of the best.**
+
+What this means in practice, on every task:
+
+- **Complete, not partial.** Finish the whole path: schema → migration → server action → renderer → builder UI → public render → edge cases. No stubs, no TODOs left in shipped code, no "wire this up later" in a feature that's meant to work now. (See the existing "No placeholders in any working config" rule — this generalizes it to all code.)
+- **Correct first, then polished.** Verify behavior, not just compile. Where the local codespace can't build, reason it through and verify on the server; never ship on hope. Handle the failure modes (empty/missing data, hostile input, light/dark, mobile, multi-tenant scoping).
+- **Robust over clever.** Make wrong states structurally impossible where you can (e.g. derive-and-verify rather than assume). Prefer designs where the bad outcome can't happen over designs that merely avoid it today.
+- **Detail-oriented.** Match surrounding style, name things well, leave the code clearer than you found it. Accuracy and thoroughness over speed.
+- **Earn the bar with rigor, not vibes.** For substantive work, design it properly (independent approaches, adversarial review, verification against real/adversarial inputs) before declaring done. Surface what's not covered instead of letting it read as finished.
+- **Report faithfully.** If something is incomplete, say so plainly with what's left. "Done" means built, verified, and complete.
+
+This is a durable preference — apply it without being re-asked.
+
+---
+
 ## ⛔ READ-THIS-FIRST: Every push needs a manual server deploy
 
 **The user has explicitly asked to be reminded every single time.** Whenever you `git push` changes that touch `src/`, `package.json`, `next.config.mjs`, `tailwind.config.*`, `payload.config.ts`, `src/migrations/`, or anything that ends up in `.next/`, the **last block of your reply MUST be the SSH deploy commands** the user copy-pastes — starting with `git pull` and ending with `systemctl status`. The change is NOT live without it. Don't say "deploy to see it" without the block. Don't shorten the block. Don't omit it even if the previous reply already showed it. See the "MANDATORY" section below for the exact commands.
