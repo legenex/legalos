@@ -645,7 +645,22 @@ export function BrandIdentitiesApp({ initialBrands }) {
         setBrands((arr) => arr.map((x) => (x.id === b.id ? { ...b, id: newId, siteId: res.siteId, siteSlug: res.slug, primaryDomain: res.previewHost } : x)))
         setEditingBrandId((cur) => (cur === b.id ? newId : cur))
         setEditingBrandIsDraft(false)
-        setToast({ message: 'Brand created.', type: 'success' })
+        // Tell the author what we created so they don't have to hunt
+        // through the Quiz / LP builders to see the new deployments.
+        const sf = res.starterFunnels
+        if (sf && sf.warnings.length === 0 && sf.quizPath && sf.lpPath) {
+          setToast({
+            message: `Brand created. Quiz at ${sf.quizPath}, landing page at ${sf.lpPath}.`,
+            type: 'success',
+          })
+        } else if (sf && sf.warnings.length > 0) {
+          setToast({
+            message: `Brand created, but starter funnels had issues: ${sf.warnings.join('; ')}`,
+            type: 'error',
+          })
+        } else {
+          setToast({ message: 'Brand created.', type: 'success' })
+        }
       } else {
         const res = await saveBrandIdentity({ siteId: b.siteId, brand: b })
         if (!res.ok) { setToast({ message: res.error, type: 'error' }); return }

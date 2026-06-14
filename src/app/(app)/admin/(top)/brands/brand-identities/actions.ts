@@ -122,7 +122,22 @@ export async function saveBrandIdentity(args: {
 /** Create a new Site for a brand and attach the brand-identity JSON. */
 export async function createBrandSite(args: {
   brand: Record<string, unknown>
-}): Promise<{ ok: true; siteId: number; slug: string; previewHost: string } | { ok: false; error: string }> {
+}): Promise<
+  | {
+      ok: true
+      siteId: number
+      slug: string
+      previewHost: string
+      starterFunnels?: {
+        quizDeploymentId: string | null
+        quizPath: string | null
+        lpDeploymentId: string | null
+        lpPath: string | null
+        warnings: string[]
+      } | null
+    }
+  | { ok: false; error: string }
+> {
   const user = await getCurrentUser()
   if (!user) return { ok: false, error: 'unauthenticated' }
 
@@ -153,20 +168,31 @@ export async function createBrandSite(args: {
 
   // Auto-seed a starter Landing Page deployment + Quiz deployment for the
   // new brand so the funnel builders surface working content from day one.
-  // Idempotent + never-throwing — if seeding fails we still return success
-  // for the brand itself (it's already created) and surface a warning.
+  // Per-step error reporting (warnings[]) lets the UI surface partial
+  // failures — the brand is still created either way.
   const seeded = await seedStarterFunnelsForBrand(payload, Number(created.site.id))
-  if (!seeded.ok) {
-    // eslint-disable-next-line no-console
-    console.warn('[brand-identities] starter funnels not seeded for new brand:', seeded.error)
-  }
 
   // Funnel pages cache the LP / Quiz / Deployments lists at request time —
   // bust those caches so the new deployments show up immediately.
   revalidatePath('/admin/brands/brand-identities')
   revalidatePath('/admin/landing-pages')
   revalidatePath('/admin/quizzes')
-  return { ok: true, siteId: created.site.id, slug: created.site.slug, previewHost: created.preview_host }
+
+  return {
+    ok: true,
+    siteId: created.site.id,
+    slug: created.site.slug,
+    previewHost: created.preview_host,
+    starterFunnels: seeded.ok
+      ? {
+          quizDeploymentId: seeded.quizDeploymentId,
+          quizPath: seeded.quizPath,
+          lpDeploymentId: seeded.lpDeploymentId,
+          lpPath: seeded.lpPath,
+          warnings: seeded.warnings,
+        }
+      : null,
+  }
 }
 
 /** Delete the Site backing a brand. Super-admin only (enforced by Sites access). */

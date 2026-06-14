@@ -293,32 +293,79 @@ const ensureMvaQuizId = async (payload: Payload): Promise<number | null> => {
  * already succeeded by the time we hit this code; failing to seed the
  * starters shouldn't roll the whole brand back.
  */
+export type StarterFunnelsResult = {
+  ok: true
+  quizDeploymentId: string | null
+  quizPath: string | null
+  lpDeploymentId: string | null
+  lpPath: string | null
+  warnings: string[]
+}
+
+// Quick error log: prefix every line so the user can grep journalctl for
+// '[funnel-samples]' and see exactly which step failed for which brand.
+const logStep = (siteId: number, step: string, err: unknown): string => {
+  const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+  // eslint-disable-next-line no-console
+  console.error(`[funnel-samples] site=${siteId} step=${step} failed:`, msg)
+  return `${step}: ${msg}`
+}
+
 export const seedStarterFunnelsForBrand = async (
   payload: Payload,
   siteId: number,
-): Promise<{ ok: true; quizDeploymentId: string | null; lpDeploymentId: string | null } | { ok: false; error: string }> => {
-  try {
-    const domainId = await primaryDomainId(payload, siteId)
-    const quizId = await ensureMvaQuizId(payload)
-    const lpId = await ensureMvaLandingPageId(payload)
+): Promise<StarterFunnelsResult | { ok: false; error: string }> => {
+  const warnings: string[] = []
 
-    // Pull the brand's slug + display name so deployment paths and names
-    // identify which brand they belong to. Falls back to the bare site id
-    // if for any reason these aren't on the row (defensive — shouldn't
-    // happen because createSite requires both).
+  // Per-step try/catch so one failure (e.g. clashing brandless-quiz slug,
+  // missing domain) doesn't take down the rest. The function still returns
+  // ok: true so the brand stays usable; per-step warnings are bubbled up
+  // for the UI to surface.
+
+  let domainId: number | null = null
+  try {
+    domainId = await primaryDomainId(payload, siteId)
+  } catch (err) {
+    warnings.push(logStep(siteId, 'primaryDomainId', err))
+  }
+
+  let quizId: number | null = null
+  try {
+    quizId = await ensureMvaQuizId(payload)
+  } catch (err) {
+    warnings.push(logStep(siteId, 'ensureMvaQuizId', err))
+  }
+
+  let lpId: number | null = null
+  try {
+    lpId = await ensureMvaLandingPageId(payload)
+  } catch (err) {
+    warnings.push(logStep(siteId, 'ensureMvaLandingPageId', err))
+  }
+
+  // Pull the brand's slug + display name so deployment paths and names
+  // identify which brand they belong to. Falls back to the bare site id
+  // if for any reason these aren't on the row.
+  let brandSlug = `site-${siteId}`
+  let displayName = `Brand ${siteId}`
+  try {
     const site = (await payload.findByID({ collection: 'sites', id: siteId, overrideAccess: true })) as
       | { slug?: string; name?: string; brand?: { display_name?: string } }
       | null
-    const brandSlug = (site?.slug || `site-${siteId}`).toString().toLowerCase().replace(/[^a-z0-9-]/g, '-')
-    const displayName = site?.brand?.display_name || site?.name || `Brand ${siteId}`
+    brandSlug = (site?.slug || `site-${siteId}`).toString().toLowerCase().replace(/[^a-z0-9-]/g, '-')
+    displayName = site?.brand?.display_name || site?.name || `Brand ${siteId}`
+  } catch (err) {
+    warnings.push(logStep(siteId, 'site lookup', err))
+  }
 
-    // 1) Quiz deployment first — the LP deployment links to it.
-    // Path is /s/<brand-slug> so a multi-brand admin list shows
-    // /s/claim-checker, /s/check-my-claim, /s/<next-brand> etc. instead of
-    // every brand sharing /s/mva.
-    let quizDeploymentId: string | null = null
-    if (quizId != null) {
-      const quizPath = `/s/${brandSlug}`
+  // 1) Quiz deployment first — the LP deployment links to it. Path is
+  // /s/<brand-slug> so a multi-brand admin list shows /s/claim-checker,
+  // /s/check-my-claim, etc. instead of every brand sharing /s/mva.
+  let quizDeploymentId: string | null = null
+  let quizPath: string | null = null
+  if (quizId != null) {
+    quizPath = `/s/${brandSlug}`
+    try {
       const existingQuiz = await payload.find({
         collection: 'funnel-quiz-deployments',
         where: { and: [{ site: { equals: siteId } }, { path: { equals: quizPath } }] },
@@ -350,13 +397,20 @@ export const seedStarterFunnelsForBrand = async (
         })
         quizDeploymentId = String(dep.id)
       }
+    } catch (err) {
+      warnings.push(logStep(siteId, 'quiz deployment create', err))
     }
+  } else {
+    warnings.push('quiz deployment skipped: no brandless MVA quiz available')
+  }
 
-    // 2) LP deployment, wired to the quiz deployment if we have one.
-    // Path is /c/<brand-slug> — same brand-identifying pattern.
-    let lpDeploymentId: string | null = null
-    if (lpId != null) {
-      const lpPath = `/c/${brandSlug}`
+  // 2) LP deployment, wired to the quiz deployment if we have one. Path is
+  // /c/<brand-slug> — same brand-identifying pattern.
+  let lpDeploymentId: string | null = null
+  let lpPath: string | null = null
+  if (lpId != null) {
+    lpPath = `/c/${brandSlug}`
+    try {
       const existingLp = await payload.find({
         collection: 'funnel-lp-deployments',
         where: { and: [{ site: { equals: siteId } }, { path: { equals: lpPath } }] },
@@ -381,14 +435,14 @@ export const seedStarterFunnelsForBrand = async (
         })
         lpDeploymentId = String(dep.id)
       }
+    } catch (err) {
+      warnings.push(logStep(siteId, 'lp deployment create', err))
     }
-
-    return { ok: true, quizDeploymentId, lpDeploymentId }
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('[funnel-samples] seedStarterFunnelsForBrand failed:', err)
-    return { ok: false, error: err instanceof Error ? err.message : 'starter seed failed' }
+  } else {
+    warnings.push('lp deployment skipped: no brandless MVA LP available')
   }
+
+  return { ok: true, quizDeploymentId, quizPath, lpDeploymentId, lpPath, warnings }
 }
 
 /**
