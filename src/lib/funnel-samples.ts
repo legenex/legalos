@@ -447,13 +447,18 @@ export const seedStarterFunnelsForBrand = async (
 
 /**
  * Backfill helper: walk every Site and run seedStarterFunnelsForBrand on
- * any that don't yet have a Quiz deployment OR an LP deployment. Per-Site
- * idempotency in the seeder makes this safe to run repeatedly — Sites that
- * already have starters are skipped per-deployment.
+ * each one. The seeder is idempotent on (site + brand-slug path), so a
+ * Site that already has the per-brand /s/<slug> + /c/<slug> deployments
+ * stays unchanged.
+ *
+ * Importantly, Sites that have OLD shared-path deployments like /s/mva or
+ * /c/pain ALSO get the new per-brand paths added — the seeder doesn't
+ * delete the old ones, it just creates the brand-slug-prefixed ones
+ * alongside. The user can clean up the old shared paths later by hand.
  *
  * Called by the funnel admin pages so existing brands created before the
- * auto-seed feature shipped get their starter content next time someone
- * opens the Quiz / LP builder.
+ * per-brand-slug auto-seed feature shipped get their brand-specific
+ * deployments the next time someone opens the Quiz / LP builder.
  */
 const brandsBackfilled = new Set<number>()
 export const ensureStarterFunnelsForAllBrands = async (payload: Payload): Promise<void> => {
@@ -462,16 +467,9 @@ export const ensureStarterFunnelsForAllBrands = async (payload: Payload): Promis
     for (const s of sitesRes.docs) {
       const siteId = Number(s.id)
       if (brandsBackfilled.has(siteId)) continue
-      const [qd, lpd] = await Promise.all([
-        payload.find({ collection: 'funnel-quiz-deployments', where: { site: { equals: siteId } }, limit: 1, overrideAccess: true }),
-        payload.find({ collection: 'funnel-lp-deployments', where: { site: { equals: siteId } }, limit: 1, overrideAccess: true }),
-      ])
-      const hasQuiz = qd.docs.length > 0
-      const hasLp = lpd.docs.length > 0
-      if (hasQuiz && hasLp) {
-        brandsBackfilled.add(siteId)
-        continue
-      }
+      // No 'has any deployment' shortcut — we want every Site to end up
+      // with its per-brand /s/<slug> + /c/<slug> paths even if it already
+      // has older shared-path deployments like /s/mva.
       await seedStarterFunnelsForBrand(payload, siteId)
       brandsBackfilled.add(siteId)
     }
