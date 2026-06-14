@@ -38,7 +38,7 @@ export function parseHex(input: string | undefined | null): RGB | null {
 const toHex2 = (n: number): string => clamp255(n).toString(16).padStart(2, '0')
 export const rgbToHex = (r: number, g: number, b: number): string => `#${toHex2(r)}${toHex2(g)}${toHex2(b)}`
 
-function rgbToHsl({ r, g, b }: RGB): [number, number, number] {
+export function rgbToHsl({ r, g, b }: RGB): [number, number, number] {
   const rn = r / 255
   const gn = g / 255
   const bn = b / 255

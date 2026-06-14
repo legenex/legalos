@@ -6,9 +6,13 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getCurrentUser } from '@/lib/auth'
 import { invokeLLM } from '@/lib/ai/invoke'
-import { extractBrandFromCss, type ExtractedBrand } from '@/lib/builder/extract-brand-tokens'
 import { createSite } from '../../sites/actions'
 import { seedStarterFunnelsForBrand } from '@/lib/funnel-samples'
+import { fetchUrlBundle, fetchGithubBundle } from '@/lib/builder/extract/fetch-bundle'
+import { extractColors, parseTailwindConfig } from '@/lib/builder/extract/extract-colors'
+import { extractLogosFromUrl, extractLogosFromGithub } from '@/lib/builder/extract/extract-logos'
+import { extractCopyFromUrl, extractCopyFromGithub } from '@/lib/builder/extract/extract-copy'
+import { mapExtractedToOutput, type MappedBrand } from '@/lib/builder/extract/map-output'
 
 // In production a "brand" is a Site. The funnel builder's brand object (the
 // artifact shape) is stored verbatim on Site.brand_identity (JSON). These
@@ -276,10 +280,25 @@ export async function deleteBrandSite(args: { siteId: number }): Promise<{ ok: t
 }
 
 // ----------------------------------------------------------------------------
-// AI brand generation (Create with AI / GitHub). Routed through invokeLLM so the
-// banned-vocab + em-dash guards apply. The model infers name/tagline/legal copy;
-// for URL mode the color + font tokens are then overridden with values read off
-// the real site CSS (extractBrandColorsFromUrl) so the palette actually matches.
+// AI brand generation (Create with AI / GitHub).
+//
+// Architecture: SCRAPE EVERYTHING REAL FIRST, then let the LLM fill ONLY the
+// gaps. The old flow let the model invent colors/logos and only patched a few
+// color tokens after — which is why "from URL / GitHub" was inaccurate. Now:
+//
+//   1. fetch one asset bundle from the source (page + CSS + manifest, or repo
+//      tailwind/globals/package/readme + probed public assets),
+//   2. run three independent extractors over it — colors (by role, not var
+//      name), logos (HEAD-validated real URLs), copy/legal (name, tagline,
+//      phone, copyright, privacy/terms),
+//   3. map those internal roles into the output shape (mapExtractedToOutput —
+//      where the dark-backdrop-vs-light-surface seam is enforced),
+//   4. ask the LLM to fill ONLY the fields we could NOT scrape, treating the
+//      scraped values as authoritative and never changing them, and to always
+//      author the TCPA + disclaimer copy,
+//   5. deep-merge with scraped-wins precedence and fill any final defaults.
+//
+// Precedence everywhere: scraped > AI > seed-default.
 // ----------------------------------------------------------------------------
 const AiBrandSchema = z.object({
   name: z.string(),
@@ -310,72 +329,66 @@ const AiBrandSchema = z.object({
   bgPattern: z.string(),
 })
 
-// Best-effort: fetch a page and a few of its stylesheets, then pull the real
-// brand colors/fonts out of the CSS. Returns {} on any failure so the caller
-// falls back to the model's inference. This grounds the palette in the actual
-// site instead of letting the model guess (the #1 cause of "colors don't match").
-const UA_BROWSER =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+type AiBrand = z.infer<typeof AiBrandSchema>
 
-async function fetchTextSafe(url: string, timeoutMs = 8000): Promise<string | null> {
+// Run the three extractors over a real source and map to the output shape.
+// Returns null when the source could not be fetched at all (caller then falls
+// back to pure-LLM inference). Never throws.
+async function scrapeBrand(args: { mode: 'ai' | 'github'; urls?: string[]; repoUrl?: string }): Promise<MappedBrand | null> {
   try {
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs)
-    const res = await fetch(url, { headers: { 'User-Agent': UA_BROWSER, Accept: '*/*' }, redirect: 'follow', signal: ctrl.signal })
-    clearTimeout(timer)
-    if (!res.ok) return null
-    return await res.text()
-  } catch {
+    if (args.mode === 'github') {
+      const bundle = await fetchGithubBundle(args.repoUrl ?? '')
+      if (!bundle || !bundle.accessible) return null
+      const tw = bundle.files.tailwindConfig ? parseTailwindConfig(bundle.files.tailwindConfig) : undefined
+      const colors = extractColors({ tailwind: tw, css: bundle.files.globalsCss || '' })
+      const [logos, copy] = await Promise.all([
+        extractLogosFromGithub(bundle),
+        Promise.resolve(extractCopyFromGithub(bundle)),
+      ])
+      return mapExtractedToOutput({ colors, logos, copy })
+    }
+    // URL mode: extract from the first reachable URL.
+    for (const raw of args.urls ?? []) {
+      const bundle = await fetchUrlBundle(raw)
+      if (!bundle) continue
+      const colors = extractColors({ css: bundle.css, html: bundle.html, googleFontFamilies: bundle.googleFontFamilies })
+      const logos = await extractLogosFromUrl(bundle)
+      const copy = extractCopyFromUrl(bundle)
+      return mapExtractedToOutput({ colors, logos, copy })
+    }
+    return null
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[brand-identities] scrapeBrand failed:', err)
     return null
   }
 }
 
-async function extractBrandColorsFromUrl(rawUrl: string): Promise<ExtractedBrand> {
-  let url = (rawUrl || '').trim()
-  if (!url) return {}
-  if (!/^https?:\/\//i.test(url)) url = 'https://' + url
-  const html = await fetchTextSafe(url)
-  if (!html) return {}
-
-  let css = ''
-  const styleRe = /<style[^>]*>([\s\S]*?)<\/style>/gi
-  let m: RegExpExecArray | null
-  while ((m = styleRe.exec(html)) !== null) css += '\n' + m[1]
-
-  // Pull up to 3 linked stylesheets (where :root brand vars usually live).
-  const linkRe = /<link[^>]+rel=["']?stylesheet["']?[^>]*>/gi
-  const hrefRe = /href=["']([^"']+)["']/i
-  const hrefs: string[] = []
-  let lm: RegExpExecArray | null
-  while ((lm = linkRe.exec(html)) !== null && hrefs.length < 3) {
-    const hm = hrefRe.exec(lm[0])
-    if (hm) hrefs.push(hm[1])
+// Overlay only the DEFINED leaves of a scraped partial onto a complete brand,
+// so scraped values win but never blank out fields the LLM authored.
+const SCALAR_KEYS = ['name', 'displayName', 'tagline', 'logoUrl', 'faviconUrl'] as const
+function applyScrapedWins(base: AiBrand, scraped: MappedBrand): AiBrand {
+  const out: AiBrand = { ...base, colors: { ...base.colors }, typography: { ...base.typography }, contact: { ...base.contact }, legal: { ...base.legal } }
+  for (const k of SCALAR_KEYS) {
+    const v = scraped[k]
+    if (typeof v === 'string' && v.trim()) (out as Record<string, unknown>)[k] = v
   }
-  for (const href of hrefs) {
-    let cssUrl: string
-    try {
-      cssUrl = new URL(href, url).toString()
-    } catch {
-      continue
-    }
-    const sheet = await fetchTextSafe(cssUrl)
-    if (sheet) css += '\n' + sheet
-    if (css.length > 400_000) break
-  }
-
-  if (!css.trim()) return {}
-  try {
-    return extractBrandFromCss(css)
-  } catch {
-    return {}
-  }
+  for (const [k, v] of Object.entries(scraped.colors)) if (typeof v === 'string' && v.trim()) (out.colors as Record<string, string>)[k] = v
+  if (scraped.typography.headlineFont) out.typography.headlineFont = scraped.typography.headlineFont
+  if (scraped.typography.bodyFont) out.typography.bodyFont = scraped.typography.bodyFont
+  if (scraped.contact.callNumber) out.contact.callNumber = scraped.contact.callNumber
+  if (scraped.legal.copyright) out.legal.copyright = scraped.legal.copyright
+  if (scraped.legal.privacyUrl) out.legal.privacyUrl = scraped.legal.privacyUrl
+  if (scraped.legal.termsUrl) out.legal.termsUrl = scraped.legal.termsUrl
+  if (scraped.domains && scraped.domains.length) out.domains = scraped.domains
+  return out
 }
 
 export async function aiGenerateBrand(args: {
   mode: 'ai' | 'github'
   urls?: string[]
   repoUrl?: string
-}): Promise<{ ok: true; brand: z.infer<typeof AiBrandSchema> } | { ok: false; error: string }> {
+}): Promise<{ ok: true; brand: AiBrand } | { ok: false; error: string }> {
   const user = await getCurrentUser()
   if (!user) return { ok: false, error: 'unauthenticated' }
 
@@ -385,34 +398,49 @@ export async function aiGenerateBrand(args: {
       : `Brand URLs:\n${(args.urls ?? []).join('\n')}`
 
   try {
+    // 1. Scrape everything real we can from the source.
+    const scraped = await scrapeBrand(args)
+
+    // 2. Ask the LLM to fill ONLY the gaps. The scraped JSON is injected as
+    //    authoritative; the model must not change provided values, only author
+    //    what is missing (and always write the TCPA + disclaimer).
+    // Elide long data-URI logos from the prompt (the real value is re-applied
+    // verbatim by applyScrapedWins; the LLM only needs to know one exists).
+    const forPrompt = scraped ? stripConfidence(scraped) : null
+    if (forPrompt?.logoUrl?.startsWith('data:')) forPrompt.logoUrl = '(inline SVG logo extracted — keep as provided)'
+    if (forPrompt?.faviconUrl?.startsWith('data:')) forPrompt.faviconUrl = '(inline icon extracted — keep as provided)'
+    const scrapedJson = forPrompt ? JSON.stringify(forPrompt, null, 2) : '(none — extraction failed; infer everything)'
     const brand = await invokeLLM({
-      system:
-        'You design legal-vertical brand identity systems for an attorney lead-gen platform. From the given source, infer a complete brand identity: internal name, display name, tagline, color tokens (valid hex codes), typography, a call CTA, likely domains, and attorney-advertising-safe legal copy (copyright, TCPA consent, privacy/terms URLs, disclaimer). Colors must be valid hex. Do not use em dashes. US English. No guaranteed-result claims.',
-      user: `${source}\n\nReturn one complete brand identity object.`,
+      system: [
+        'You design legal-vertical brand identity systems for an attorney lead-gen platform.',
+        'You will be given an EXTRACTED partial brand identity scraped from the real source.',
+        'RULES:',
+        '1. Treat every provided (non-empty) field as AUTHORITATIVE — copy it verbatim into your output. NEVER change a provided color hex, font, name, logo URL, phone, or legal URL.',
+        '2. Fill in ONLY the fields that are missing or empty, choosing values consistent with the provided ones.',
+        '3. Always AUTHOR fresh legal.tcpaText and legal.defaultDisclaimer using the displayName — attorney-advertising safe, no guaranteed-result claims.',
+        '4. All colors must be valid 6-digit hex. Do not use em dashes. US English.',
+        '5. colors.background is a DARK backdrop; colors.textOnDark must be readable on it — never change a provided one.',
+      ].join('\n'),
+      user: `${source}\n\nEXTRACTED (authoritative — fill only the gaps):\n${scrapedJson}\n\nReturn one complete brand identity object.`,
       schema: AiBrandSchema,
       schemaName: 'brand_identity',
       model: 'claude-sonnet-4-6',
       enforceNoBannedVocab: true,
     })
 
-    // Ground the palette in the real site CSS (URL mode only). The model infers
-    // name/tagline/legal copy well, but invents colors — so override the color
-    // and font tokens with what we actually read off the source site whenever
-    // extraction succeeds.
-    if (args.mode === 'ai' && args.urls?.[0]) {
-      const real = await extractBrandColorsFromUrl(args.urls[0])
-      if (real.primary) brand.colors.primary = real.primary
-      if (real.accent) brand.colors.accent = real.accent
-      if (real.surface) brand.colors.background = real.surface
-      if (real.success) brand.colors.success = real.success
-      if (real.warning) brand.colors.warning = real.warning
-      if (real.danger) brand.colors.danger = real.danger
-      if (real.fontHeading) brand.typography.headlineFont = real.fontHeading
-      if (real.fontBody) brand.typography.bodyFont = real.fontBody
-    }
+    // 3. Defensively re-overlay scraped values (scraped > AI), in case the
+    //    model ignored rule 1 for any field.
+    const final = scraped ? applyScrapedWins(brand, scraped) : brand
 
-    return { ok: true, brand }
+    return { ok: true, brand: final }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'AI generation failed' }
   }
+}
+
+// Drop the internal _confidence metadata before showing the partial to the LLM.
+function stripConfidence(m: MappedBrand): Omit<MappedBrand, '_confidence'> {
+  const { _confidence: _omit, ...rest } = m
+  void _omit
+  return rest
 }

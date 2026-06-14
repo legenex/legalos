@@ -116,7 +116,9 @@ export function extractBrandFromCss(css: string): ExtractedBrand {
   return out
 }
 
-const pickFontToken = (tokens: Tokens, names: string[]): string | undefined => {
+export const cleanFontFamilyName = cleanFontFamily
+
+export const pickFontToken = (tokens: Tokens, names: string[]): string | undefined => {
   const lower: Record<string, string> = {}
   for (const k of Object.keys(tokens)) lower[k.toLowerCase()] = tokens[k]
   for (const n of names) {
@@ -126,7 +128,7 @@ const pickFontToken = (tokens: Tokens, names: string[]): string | undefined => {
   return undefined
 }
 
-const fallbackFontFromCss = (css: string, propRegex: RegExp): string | undefined => {
+export const fallbackFontFromCss = (css: string, propRegex: RegExp): string | undefined => {
   const m = propRegex.exec(css)
   if (!m) return undefined
   const ff = /font-family\s*:\s*([^;}]+)/i.exec(m[0])
