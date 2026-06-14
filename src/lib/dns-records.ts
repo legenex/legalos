@@ -1,12 +1,18 @@
 // Single source of truth for the DNS records we tell a tenant to create for a
-// custom domain. It is APEX-AWARE: a root/apex domain (dont-settle.co) cannot
-// hold a CNAME — only an A record — so we must never instruct one there. A
-// subdomain (lp.checkmyclaim.co) uses a CNAME instead. The TXT record is only
-// an ownership fallback and is always OPTIONAL, because verification in
-// src/lib/dns-check.ts accepts ANY ONE of CNAME / A / TXT.
+// custom domain. We surface exactly ONE record — the one that routes traffic to
+// LegalOS — because that same record also proves ownership (dns-check accepts
+// A / CNAME), so there is nothing else to add:
+//   - apex / root domain (dont-settle.co):  an A record. Apex domains CANNOT
+//     hold a CNAME (the zone apex carries the SOA/NS — RFC 1034), so we never
+//     instruct one there.
+//   - subdomain (lp.checkmyclaim.co):        a CNAME.
 //
-// Records are recomputed on read (see brands/domains/page.tsx) so existing
-// rows reflect the current logic without a backfill.
+// We deliberately do NOT surface the `_legalos.<host>` TXT record. It's only an
+// ownership fallback; verification still accepts it server-side if one happens
+// to exist, but for this direct-A/CNAME model it's noise, so we don't ask for it.
+//
+// Records are recomputed on read (see brands/domains/page.tsx) so existing rows
+// reflect the current logic without a backfill.
 
 export type DnsRecord = {
   type: 'A' | 'CNAME' | 'TXT'
@@ -43,51 +49,40 @@ export const isApexDomain = (host: string): boolean => {
 }
 
 /**
- * The DNS records to display for a custom domain, correct for apex vs subdomain.
- * Resolution acceptance is an OR, so exactly ONE "required" record needs to be
- * live; the TXT is an always-optional ownership fallback.
+ * The single DNS record to display for a custom domain, correct for apex vs
+ * subdomain. That one record both routes traffic AND verifies ownership.
  */
-export const buildDnsRecords = (host: string, token: string | null | undefined): DnsRecord[] => {
+export const buildDnsRecords = (host: string): DnsRecord[] => {
   const cnameTarget = process.env.LEGALOS_CNAME_TARGET ?? 'cname.legenex.com'
   const aTarget = process.env.LEGALOS_A_TARGET || null
 
-  const txt: DnsRecord | null = token
-    ? {
-        type: 'TXT',
-        name: `_legalos.${host}`,
-        value: `legalos-verify=${token}`,
-        required: false,
-        note: 'Optional ownership fallback. Not needed once the record above resolves.',
-      }
-    : null
-
   if (isApexDomain(host)) {
-    const records: DnsRecord[] = []
     if (aTarget) {
-      records.push({
-        type: 'A',
-        name: host,
-        value: aTarget,
-        required: true,
-        note: 'Points your root domain at LegalOS. Serves the site AND verifies ownership.',
-      })
-    } else {
-      // No A target configured: apex can't use a plain CNAME, so the tenant
-      // needs an ALIAS/ANAME record (CNAME flattening) at their provider.
-      records.push({
+      return [
+        {
+          type: 'A',
+          name: host,
+          value: aTarget,
+          required: true,
+          note: 'Points your root domain at LegalOS. Serves the site AND verifies ownership. Apex domains use an A record, not a CNAME.',
+        },
+      ]
+    }
+    // No A target configured: apex can't use a plain CNAME, so the tenant needs
+    // an ALIAS/ANAME record (CNAME flattening) at their provider.
+    return [
+      {
         type: 'CNAME',
         name: host,
         value: cnameTarget,
         required: true,
         note: 'Apex domains cannot use a plain CNAME — use your provider\'s ALIAS/ANAME (CNAME flattening).',
-      })
-    }
-    if (txt) records.push(txt)
-    return records
+      },
+    ]
   }
 
   // Subdomain: a CNAME is correct and sufficient.
-  const records: DnsRecord[] = [
+  return [
     {
       type: 'CNAME',
       name: host,
@@ -96,6 +91,4 @@ export const buildDnsRecords = (host: string, token: string | null | undefined):
       note: 'Points this subdomain at LegalOS. Serves the site AND verifies ownership.',
     },
   ]
-  if (txt) records.push(txt)
-  return records
 }

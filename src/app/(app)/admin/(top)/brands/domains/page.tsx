@@ -67,7 +67,7 @@ export default async function DomainsIndexPage() {
       // self-heal — never trust possibly-stale stored guidance for display.
       dnsRecords:
         (d.kind ?? 'custom') === 'custom'
-          ? buildDnsRecords(d.host, d.verification_token ?? null)
+          ? buildDnsRecords(d.host)
           : Array.isArray(d.dns_records)
           ? (d.dns_records as DnsRecord[])
           : [],

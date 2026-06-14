@@ -41,7 +41,7 @@ export async function createPoolDomain(args: { host: string }): Promise<
         status: 'pending',
         ssl_status: 'pending',
         verification_token: token,
-        dns_records: buildDnsRecords(host, token),
+        dns_records: buildDnsRecords(host),
       } as never,
       user: user as never,
       overrideAccess: false,
