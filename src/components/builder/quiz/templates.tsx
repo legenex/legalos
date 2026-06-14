@@ -6,21 +6,44 @@
 // helpers used by the preview engine.
 
 import { Check, ShieldCheck } from 'lucide-react'
+import {
+  resolvePalette,
+  deriveBrandSurface,
+  effectiveBaseColor,
+  darkestOf,
+  onPrimaryText,
+  auditColorPairs,
+} from '@/lib/builder/color-system'
+
+// Each template exposes ONE `resolveColors(brand) -> ResolvedPalette` instead
+// of independent pageBg/cardBg/textColor/textColorMuted functions. The palette
+// derives text from the opaque surface the text actually sits on, verified to
+// clear WCAG — so white-on-white is structurally impossible. Brand identity
+// flows in two ways: into the SURFACE (deriveBrandSurface hue-blend) and onto
+// ACCENTS (buttons/borders/badges via brand.colors.primary/accent).
+//
+// `accent` helpers (cardBorder, stepBadgeColor, button styling) keep reading
+// brand.colors.primary/accent exactly as before.
 
 export const TEMPLATE_CONFIGS = {
   default: {
-    pageBg: (brand) => brand.colors.background,
+    // Outlined boxes on the page itself (transparent card) — text sits on the
+    // page background, so that's the surfaceBase.
+    resolveColors: (brand) =>
+      resolvePalette(brand, {
+        strategy: 'auto',
+        pageBg: brand.colors.background,
+        cardSurface: 'transparent',
+        surfaceBase: brand.colors.background,
+      }),
     pageOverlay: () => 'none',
     pagePattern: (brand) => `linear-gradient(0deg, transparent 49.5%, ${brand.colors.primary}10 49.5%, ${brand.colors.primary}10 50.5%, transparent 50.5%), linear-gradient(90deg, transparent 49.5%, ${brand.colors.primary}10 49.5%, ${brand.colors.primary}10 50.5%, transparent 50.5%)`,
     patternSize: '40px 40px',
-    cardBg: () => 'transparent',
     cardBorder: (brand) => `2px solid ${brand.colors.primary}`,
     cardRadius: 16,
     cardShadow: (brand) => `0 0 40px ${brand.colors.primary}33, inset 0 0 60px ${brand.colors.primary}08`,
     cardMaxWidth: 920,
     cardPadding: 'clamp(28px, 5vw, 48px) clamp(20px, 4vw, 36px)',
-    textColor: (brand) => brand.colors.textOnDark,
-    textColorMuted: (brand) => `${brand.colors.textOnDark}cc`,
     headlineSize: 'clamp(26px, 5.5vw, 44px)',
     headlineWeight: 700,
     headlineFamily: (brand) => `"${brand.typography.headlineFont}", "Fredoka", system-ui, sans-serif`,
@@ -34,18 +57,26 @@ export const TEMPLATE_CONFIGS = {
     centered: true,
   },
   minimal: {
-    pageBg: (brand) => brand.colors.background,
+    // The template that produced the white-on-white bug. The card surface is
+    // now an algorithmic brand-hued opaque colour: if the brand sets a light
+    // cardBg, the surface stays light and text auto-flips dark.
+    resolveColors: (brand) => {
+      const surfaceBase = deriveBrandSurface(brand.colors.cardBg, brand.colors.primary, { lighten: 0.06, hueBlend: 0.06 })
+      return resolvePalette(brand, {
+        strategy: 'auto',
+        pageBg: brand.colors.background,
+        cardSurface: surfaceBase,
+        surfaceBase,
+      })
+    },
     pageOverlay: (brand) => `radial-gradient(circle at 50% 0%, ${brand.colors.primary}10 0%, transparent 50%)`,
     pagePattern: (brand) => `radial-gradient(${brand.colors.primary}15 1px, transparent 1px)`,
     patternSize: '24px 24px',
-    cardBg: (brand) => brand.colors.cardBg,
     cardBorder: (brand) => `1px solid ${brand.colors.primary}22`,
     cardRadius: 18,
-    cardShadow: (brand) => `0 20px 60px -10px ${brand.colors.primary}33, 0 0 0 1px rgba(255,255,255,0.04)`,
+    cardShadow: (brand) => `0 20px 60px -10px ${brand.colors.primary}33`,
     cardMaxWidth: 720,
     cardPadding: 'clamp(20px, 5vw, 36px) clamp(20px, 4vw, 32px)',
-    textColor: (brand) => brand.colors.textOnDark,
-    textColorMuted: (brand) => `${brand.colors.textOnDark}b3`,
     headlineSize: 'clamp(20px, 4vw, 28px)',
     headlineWeight: 700,
     headlineFamily: (brand) => `"${brand.typography.headlineFont}", system-ui, sans-serif`,
@@ -62,17 +93,22 @@ export const TEMPLATE_CONFIGS = {
     centered: true,
   },
   editorial: {
-    pageBg: () => '#f5ecd9',
+    // Intentional fixed cream paper palette — brand only on accents. Text is
+    // still verified against the fixed surface.
+    resolveColors: (brand) =>
+      resolvePalette(brand, {
+        strategy: 'light',
+        pageBg: '#f5ecd9',
+        cardSurface: 'transparent',
+        surfaceBase: '#f5ecd9',
+      }),
     pageOverlay: () => 'none',
     pagePattern: () => 'none',
-    cardBg: () => 'transparent',
     cardBorder: () => '1px solid rgba(0,0,0,0.1)',
     cardRadius: 4,
     cardShadow: () => 'none',
     cardMaxWidth: 980,
     cardPadding: 'clamp(28px, 5vw, 48px) clamp(20px, 5vw, 56px)',
-    textColor: () => '#1a1a1a',
-    textColorMuted: () => '#6b6354',
     headlineSize: 'clamp(24px, 5vw, 36px)',
     headlineWeight: 700,
     headlineFamily: () => '"Playfair Display", "Georgia", "Times New Roman", serif',
@@ -89,18 +125,28 @@ export const TEMPLATE_CONFIGS = {
     centered: true,
   },
   gradient: {
-    pageBg: (brand) => `linear-gradient(135deg, ${brand.colors.primary} 0%, ${brand.colors.accent} 50%, ${brand.colors.cardBg} 100%)`,
+    // Translucent dark card over a brand gradient. surfaceBase is the
+    // composite of the card overlay over the DARKEST gradient stop, so white
+    // text is safe across the whole gradient — and if a brand picks an
+    // all-light gradient, the resolver still flips text dark.
+    resolveColors: (brand) => {
+      const darkStop = darkestOf(brand.colors.primary, brand.colors.accent, brand.colors.cardBg)
+      const surfaceBase = effectiveBaseColor('#000000', 0.18, darkStop)
+      return resolvePalette(brand, {
+        strategy: 'auto',
+        pageBg: `linear-gradient(135deg, ${brand.colors.primary} 0%, ${brand.colors.accent} 50%, ${brand.colors.cardBg} 100%)`,
+        cardSurface: 'rgba(0,0,0,0.18)',
+        surfaceBase,
+      })
+    },
     pageOverlay: () => 'radial-gradient(circle at 20% 80%, rgba(255,255,255,0.08) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255,255,255,0.06) 0%, transparent 50%)',
     pagePattern: () => 'none',
-    cardBg: () => 'rgba(0,0,0,0.18)',
     cardBackdrop: 'blur(8px)',
     cardBorder: () => '1px solid rgba(255,255,255,0.12)',
     cardRadius: 24,
     cardShadow: () => '0 30px 80px -20px rgba(0,0,0,0.5)',
     cardMaxWidth: 820,
     cardPadding: 'clamp(28px, 6vw, 48px) clamp(20px, 5vw, 40px)',
-    textColor: () => '#ffffff',
-    textColorMuted: () => 'rgba(255,255,255,0.78)',
     headlineSize: 'clamp(26px, 5.5vw, 40px)',
     headlineWeight: 800,
     headlineFamily: (brand) => `"${brand.typography.headlineFont}", system-ui, sans-serif`,
@@ -117,18 +163,25 @@ export const TEMPLATE_CONFIGS = {
     centered: true,
   },
   glass: {
-    pageBg: (brand) => `linear-gradient(180deg, ${brand.colors.background} 0%, ${brand.colors.cardBg} 100%)`,
+    // Frosted card. surfaceBase reflects the REAL backdrop (page bg lightly
+    // whitened) so the text flips correctly when the brand bg is light.
+    resolveColors: (brand) => {
+      const surfaceBase = effectiveBaseColor('#ffffff', 0.06, brand.colors.background)
+      return resolvePalette(brand, {
+        strategy: 'auto',
+        pageBg: `linear-gradient(180deg, ${brand.colors.background} 0%, ${brand.colors.cardBg} 100%)`,
+        cardSurface: 'rgba(255,255,255,0.04)',
+        surfaceBase,
+      })
+    },
     pageOverlay: (brand) => `radial-gradient(circle at 15% 30%, ${brand.colors.primary}25 0%, transparent 40%), radial-gradient(circle at 85% 70%, ${brand.colors.accent}20 0%, transparent 40%)`,
     pagePattern: () => 'none',
-    cardBg: () => 'rgba(255,255,255,0.04)',
     cardBackdrop: 'blur(24px) saturate(180%)',
     cardBorder: () => '1px solid rgba(255,255,255,0.08)',
     cardRadius: 20,
     cardShadow: () => '0 25px 70px -15px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
     cardMaxWidth: 760,
     cardPadding: 'clamp(24px, 5vw, 40px) clamp(20px, 4vw, 36px)',
-    textColor: (brand) => brand.colors.textOnDark,
-    textColorMuted: (brand) => `${brand.colors.textOnDark}a0`,
     headlineSize: 'clamp(22px, 4.5vw, 32px)',
     headlineWeight: 700,
     headlineFamily: (brand) => `"${brand.typography.headlineFont}", system-ui, sans-serif`,
@@ -145,17 +198,23 @@ export const TEMPLATE_CONFIGS = {
     centered: true,
   },
   compact: {
-    pageBg: (brand) => brand.colors.background,
+    // Same safe-surface model as minimal, tighter spacing.
+    resolveColors: (brand) => {
+      const surfaceBase = deriveBrandSurface(brand.colors.cardBg, brand.colors.primary, { lighten: 0.05, hueBlend: 0.05 })
+      return resolvePalette(brand, {
+        strategy: 'auto',
+        pageBg: brand.colors.background,
+        cardSurface: surfaceBase,
+        surfaceBase,
+      })
+    },
     pageOverlay: () => 'none',
     pagePattern: () => 'none',
-    cardBg: (brand) => brand.colors.cardBg,
     cardBorder: (brand) => `1px solid ${brand.colors.primary}22`,
     cardRadius: 12,
     cardShadow: (brand) => `0 8px 24px -8px ${brand.colors.primary}22`,
     cardMaxWidth: 560,
     cardPadding: '20px 18px',
-    textColor: (brand) => brand.colors.textOnDark,
-    textColorMuted: (brand) => `${brand.colors.textOnDark}aa`,
     headlineSize: 'clamp(18px, 4vw, 22px)',
     headlineWeight: 700,
     headlineFamily: (brand) => `"${brand.typography.headlineFont}", system-ui, sans-serif`,
@@ -175,42 +234,81 @@ export const TEMPLATE_CONFIGS = {
 
 export const getTemplateConfig = (templateId) => TEMPLATE_CONFIGS[templateId] || TEMPLATE_CONFIGS.minimal
 
+// COLOR-OVERLAP DETECTOR for a quiz template + brand. Resolves the concrete
+// foreground/background pairings the template will actually render and flags
+// any that collide (unreadable contrast). Returns ColorViolation[] — empty
+// means the combo is safe. Used by the template picker to warn before a
+// brand ships an unreadable quiz. With the contrast-verified palette this
+// should always be clean for the card text; it still catches accent-on-
+// surface and button-text problems a brand can introduce.
+export const auditQuizTemplateColors = (templateId, brand) => {
+  const tc = getTemplateConfig(templateId)
+  const pal = tc.resolveColors(brand)
+  const primary = brand?.colors?.primary || '#1d8df6'
+  const onPrimary = onPrimaryText(primary)
+  return auditColorPairs([
+    { label: 'Headline / answer text on card', fg: pal.text, bg: pal.surfaceBase, kind: 'text' },
+    { label: 'Muted text on card', fg: pal.textMute, bg: pal.surfaceBase, kind: 'large-text' },
+    { label: 'Step badge on card', fg: primary, bg: pal.surfaceBase, kind: 'ui' },
+    { label: 'Selected button text', fg: onPrimary, bg: primary, kind: 'text' },
+  ])
+}
+
+// Back-compat shims: some callers (and the body-section render path) still
+// call tc.pageBg(brand) / tc.cardBg(brand) / tc.textColor(brand) /
+// tc.textColorMuted(brand). Route them through the resolver so there is ONE
+// source of truth and no stale white-on-white path remains.
+for (const key of Object.keys(TEMPLATE_CONFIGS)) {
+  const cfg = TEMPLATE_CONFIGS[key]
+  cfg.pageBg = (brand) => cfg.resolveColors(brand).pageBg
+  cfg.cardBg = (brand) => cfg.resolveColors(brand).cardSurface
+  cfg.textColor = (brand) => cfg.resolveColors(brand).text
+  cfg.textColorMuted = (brand) => cfg.resolveColors(brand).textMute
+}
+
 export const renderAnswerButton = (a, idx, isSelected, onClick, tc, brand) => {
   const C = brand.colors
   const primary = C.primary
+  const pal = tc.resolveColors(brand)
+  const onPrimary = onPrimaryText(primary)
+  // Tint of the card surface for unselected rows — keeps an inset look that
+  // works on BOTH light and dark surfaces (the old hardcoded rgba white tint
+  // was invisible on light cards).
+  const rowTint = pal.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)'
   const fontFamily = tc.bodyFamily(brand)
   const baseStyle = { cursor: 'pointer', fontFamily, textAlign: 'left', width: '100%', transition: 'all 0.18s ease', display: 'flex', alignItems: 'center', gap: 12 }
 
   if (tc.buttonStyle === 'outlined-box') {
-    return <button key={a.id || idx} onClick={onClick} className="quiz-btn quiz-btn-outlined-box" style={{ ...baseStyle, padding: 'clamp(16px, 3vw, 22px) clamp(16px, 3vw, 24px)', borderRadius: tc.buttonRadius, border: `2px solid ${primary}`, backgroundColor: isSelected ? primary : 'transparent', color: isSelected ? '#fff' : C.textOnDark, fontSize: 'clamp(15px, 3vw, 18px)', fontWeight: 600, justifyContent: 'center', textAlign: 'center', fontFamily: tc.headlineFamily(brand) }}>
+    return <button key={a.id || idx} onClick={onClick} className="quiz-btn quiz-btn-outlined-box" style={{ ...baseStyle, padding: 'clamp(16px, 3vw, 22px) clamp(16px, 3vw, 24px)', borderRadius: tc.buttonRadius, border: `2px solid ${primary}`, backgroundColor: isSelected ? primary : 'transparent', color: isSelected ? onPrimary : pal.text, fontSize: 'clamp(15px, 3vw, 18px)', fontWeight: 600, justifyContent: 'center', textAlign: 'center', fontFamily: tc.headlineFamily(brand) }}>
       <span>{a.label}</span>
     </button>
   }
   if (tc.buttonStyle === 'radio-row') {
-    return <button key={a.id || idx} onClick={onClick} className="quiz-btn quiz-btn-radio-row" style={{ ...baseStyle, padding: '16px 18px', borderRadius: tc.buttonRadius, border: `1px solid ${isSelected ? primary : `${primary}33`}`, backgroundColor: isSelected ? `${primary}15` : 'rgba(255,255,255,0.02)', color: tc.textColor(brand), fontSize: 'clamp(14px, 3vw, 15px)', fontWeight: 500 }}>
+    return <button key={a.id || idx} onClick={onClick} className="quiz-btn quiz-btn-radio-row" style={{ ...baseStyle, padding: '16px 18px', borderRadius: tc.buttonRadius, border: `1px solid ${isSelected ? primary : `${primary}33`}`, backgroundColor: isSelected ? `${primary}15` : rowTint, color: pal.text, fontSize: 'clamp(14px, 3vw, 15px)', fontWeight: 500 }}>
       <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${isSelected ? primary : `${primary}66`}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{isSelected && <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: primary }} />}</div>
       <span style={{ flex: 1 }}>{a.label}</span>
     </button>
   }
   if (tc.buttonStyle === 'square-check') {
-    return <button key={a.id || idx} onClick={onClick} className="quiz-btn quiz-btn-square-check" style={{ ...baseStyle, padding: '18px 20px', borderRadius: tc.buttonRadius, border: `${isSelected ? '2px' : '1px'} solid ${isSelected ? primary : '#c9b88a'}`, backgroundColor: isSelected ? `${primary}10` : 'rgba(0,0,0,0.02)', color: tc.textColor(brand), fontSize: 'clamp(15px, 3vw, 17px)', fontWeight: 500, fontFamily: tc.headlineFamily(brand) }}>
-      <div style={{ width: 18, height: 18, borderRadius: 3, border: `2px solid ${isSelected ? primary : '#8b7a4e'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, backgroundColor: isSelected ? primary : 'transparent' }}>{isSelected && <Check size={11} color="#fff" />}</div>
+    return <button key={a.id || idx} onClick={onClick} className="quiz-btn quiz-btn-square-check" style={{ ...baseStyle, padding: '18px 20px', borderRadius: tc.buttonRadius, border: `${isSelected ? '2px' : '1px'} solid ${isSelected ? primary : '#c9b88a'}`, backgroundColor: isSelected ? `${primary}10` : 'rgba(0,0,0,0.02)', color: pal.text, fontSize: 'clamp(15px, 3vw, 17px)', fontWeight: 500, fontFamily: tc.headlineFamily(brand) }}>
+      <div style={{ width: 18, height: 18, borderRadius: 3, border: `2px solid ${isSelected ? primary : '#8b7a4e'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, backgroundColor: isSelected ? primary : 'transparent' }}>{isSelected && <Check size={11} color={onPrimary} />}</div>
       <span style={{ flex: 1 }}>{a.label}</span>
     </button>
   }
   if (tc.buttonStyle === 'radio-glass') {
-    return <button key={a.id || idx} onClick={onClick} className="quiz-btn quiz-btn-radio-glass" style={{ ...baseStyle, padding: '18px 22px', borderRadius: tc.buttonRadius, border: `${isSelected ? '2px' : '1px'} solid ${isSelected ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.18)'}`, backgroundColor: isSelected ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.06)', color: '#fff', fontSize: 'clamp(14px, 3vw, 16px)', fontWeight: 600, backdropFilter: 'blur(4px)' }}>
-      <div style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{isSelected && <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#fff' }} />}</div>
+    // Always on the dark gradient card — white text is safe here.
+    return <button key={a.id || idx} onClick={onClick} className="quiz-btn quiz-btn-radio-glass" style={{ ...baseStyle, padding: '18px 22px', borderRadius: tc.buttonRadius, border: `${isSelected ? '2px' : '1px'} solid ${isSelected ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.18)'}`, backgroundColor: isSelected ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.06)', color: pal.text, fontSize: 'clamp(14px, 3vw, 16px)', fontWeight: 600, backdropFilter: 'blur(4px)' }}>
+      <div style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${pal.text}b3`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{isSelected && <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: pal.text }} />}</div>
       <span style={{ flex: 1 }}>{a.label}</span>
     </button>
   }
   if (tc.buttonStyle === 'glass-pill') {
-    return <button key={a.id || idx} onClick={onClick} className="quiz-btn quiz-btn-glass-pill" style={{ ...baseStyle, padding: '14px 18px', borderRadius: tc.buttonRadius, border: `1px solid ${isSelected ? primary : 'rgba(255,255,255,0.1)'}`, backgroundColor: isSelected ? `${primary}1f` : 'rgba(255,255,255,0.03)', color: tc.textColor(brand), fontSize: 'clamp(14px, 3vw, 15px)', fontWeight: 500, backdropFilter: 'blur(8px)' }}>
-      <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: isSelected ? primary : 'rgba(255,255,255,0.2)', flexShrink: 0 }} />
+    return <button key={a.id || idx} onClick={onClick} className="quiz-btn quiz-btn-glass-pill" style={{ ...baseStyle, padding: '14px 18px', borderRadius: tc.buttonRadius, border: `1px solid ${isSelected ? primary : `${pal.text}1a`}`, backgroundColor: isSelected ? `${primary}1f` : rowTint, color: pal.text, fontSize: 'clamp(14px, 3vw, 15px)', fontWeight: 500, backdropFilter: 'blur(8px)' }}>
+      <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: isSelected ? primary : `${pal.text}33`, flexShrink: 0 }} />
       <span style={{ flex: 1 }}>{a.label}</span>
     </button>
   }
-  return <button key={a.id || idx} onClick={onClick} className="quiz-btn quiz-btn-compact-row" style={{ ...baseStyle, padding: '11px 14px', borderRadius: tc.buttonRadius, border: `1px solid ${isSelected ? primary : `${primary}33`}`, backgroundColor: isSelected ? `${primary}15` : 'rgba(255,255,255,0.02)', color: tc.textColor(brand), fontSize: 'clamp(13px, 2.8vw, 14px)', fontWeight: 500 }}>
+  return <button key={a.id || idx} onClick={onClick} className="quiz-btn quiz-btn-compact-row" style={{ ...baseStyle, padding: '11px 14px', borderRadius: tc.buttonRadius, border: `1px solid ${isSelected ? primary : `${primary}33`}`, backgroundColor: isSelected ? `${primary}15` : rowTint, color: pal.text, fontSize: 'clamp(13px, 2.8vw, 14px)', fontWeight: 500 }}>
     <span style={{ flex: 1 }}>{a.label}</span>
     {isSelected && <Check size={14} color={primary} />}
   </button>

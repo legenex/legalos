@@ -12,6 +12,13 @@ import {
   CheckCircle2, ListChecks, HelpCircle, Megaphone, FileText,
 } from 'lucide-react'
 import { T, genId, brandShortName } from '../ui'
+import { relativeLuminance } from '@/lib/builder/page-lint'
+import { onPrimaryText } from '@/lib/builder/color-system'
+
+// A template's canvas is "dark" when its luminance is below the midpoint.
+// Replaces the brittle canvas === '#0f172a' string-equality that only
+// recognised one specific hex and broke for any brand-driven canvas.
+const tokensAreDark = (tokens) => (relativeLuminance(tokens?.canvas) ?? 1) < 0.5
 
 // ============================================================================
 // LANDING PAGE TEMPLATES
@@ -228,7 +235,7 @@ const Eyebrow = ({ text, tokens, brandColor }) => {
     )
   if (style === 'flame_tag')
     return (
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', backgroundColor: brandColor, color: '#fff', fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', borderRadius: 4 }}>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', backgroundColor: brandColor, color: onPrimaryText(brandColor), fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', borderRadius: 4 }}>
         <Flame size={11} /> {text}
       </div>
     )
@@ -248,15 +255,15 @@ const SectionEditOverlay = ({ onEdit, dark }) => (
 
 const TemplateHeader = ({ section, tokens, brand, onEditSection }) => {
   const c = section.copy || {}
-  const isDark = tokens.canvas === '#0f172a'
+  const isDark = tokensAreDark(tokens)
   return (
     <header onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '14px 32px', borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`, backgroundColor: tokens.canvas, color: tokens.text, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 32, height: 32, borderRadius: 7, background: `linear-gradient(135deg, ${brand.colors.primary}, ${brand.colors.background})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12 }}>{brandShortName(brand)}</div>
+        <div style={{ width: 32, height: 32, borderRadius: 7, background: `linear-gradient(135deg, ${brand.colors.primary}, ${brand.colors.background})`, color: onPrimaryText(brand.colors.primary), display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12 }}>{brandShortName(brand)}</div>
         <div style={{ fontWeight: 700, fontSize: 16, color: tokens.text }}>{c.logoText}</div>
       </div>
-      <button style={{ backgroundColor: brand.colors.primary, color: '#fff', border: 'none', padding: '8px 16px', borderRadius: tokens.radius, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <button style={{ backgroundColor: brand.colors.primary, color: onPrimaryText(brand.colors.primary), border: 'none', padding: '8px 16px', borderRadius: tokens.radius, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         <Phone size={13} /> {c.ctaLabel}
       </button>
     </header>
@@ -279,7 +286,7 @@ const LPQuizEmbed = ({ quiz, brand, tokens, isDark, radius }) => {
             <div style={{ flex: 1, textAlign: 'center', padding: 8, border: `1px solid ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'}`, borderRadius: 6, color: tokens.textMute, fontSize: 13 }}>No</div>
           </div>
         </div>
-        <button style={{ width: '100%', padding: 12, backgroundColor: brand.colors.primary, color: '#fff', border: 'none', borderRadius: radius, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Continue {'→'}</button>
+        <button style={{ width: '100%', padding: 12, backgroundColor: brand.colors.primary, color: onPrimaryText(brand.colors.primary), border: 'none', borderRadius: radius, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Continue {'→'}</button>
         <div style={{ textAlign: 'center', fontSize: 11, color: tokens.textMute, marginTop: 10 }}>Takes 60 seconds {'·'} 100% Free {'·'} No obligation</div>
       </>
     )
@@ -329,7 +336,7 @@ const LPQuizEmbed = ({ quiz, brand, tokens, isDark, radius }) => {
         </div>
       )}
 
-      <button onClick={advance} style={{ width: '100%', padding: 12, backgroundColor: brand.colors.primary, color: '#fff', border: 'none', borderRadius: radius, fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: isLast ? 0.6 : 1 }} disabled={isLast}>
+      <button onClick={advance} style={{ width: '100%', padding: 12, backgroundColor: brand.colors.primary, color: onPrimaryText(brand.colors.primary), border: 'none', borderRadius: radius, fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: isLast ? 0.6 : 1 }} disabled={isLast}>
         {isLast ? 'End of preview' : `Continue ${'→'}`}
       </button>
       <div style={{ textAlign: 'center', fontSize: 11, color: tokens.textMute, marginTop: 10 }}>Takes 60 seconds {'·'} 100% Free {'·'} No obligation</div>
@@ -339,7 +346,7 @@ const LPQuizEmbed = ({ quiz, brand, tokens, isDark, radius }) => {
 
 const TemplateHero = ({ section, tokens, brand, quizDepLabel, quiz, onEditSection }) => {
   const c = section.copy || {}
-  const isDark = tokens.canvas === '#0f172a'
+  const isDark = tokensAreDark(tokens)
   return (
     <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '48px 32px 56px', background: tokens.heroBg, color: tokens.text, cursor: 'pointer', fontFamily: tokens.bodyFont }}>
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
@@ -376,7 +383,7 @@ const TemplateHero = ({ section, tokens, brand, quizDepLabel, quiz, onEditSectio
 
 const TemplateTicker = ({ section, tokens, brand, onEditSection }) => {
   const c = section.copy || {}
-  const isDark = tokens.canvas === '#0f172a'
+  const isDark = tokensAreDark(tokens)
   return (
     <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '20px 32px', backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)', borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`, cursor: 'pointer', overflow: 'hidden' }}>
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
@@ -395,7 +402,7 @@ const TemplateTicker = ({ section, tokens, brand, onEditSection }) => {
 
 const TemplateAuthority = ({ section, tokens, brand, onEditSection }) => {
   const c = section.copy || {}
-  const isDark = tokens.canvas === '#0f172a'
+  const isDark = tokensAreDark(tokens)
   return (
     <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '48px 32px', backgroundColor: tokens.surface, color: tokens.text, cursor: 'pointer' }}>
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
@@ -417,7 +424,7 @@ const TemplateAuthority = ({ section, tokens, brand, onEditSection }) => {
 
 const TemplateStory = ({ section, tokens, brand, onEditSection }) => {
   const c = section.copy || {}
-  const isDark = tokens.canvas === '#0f172a'
+  const isDark = tokensAreDark(tokens)
   return (
     <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '56px 32px', backgroundColor: tokens.canvas, color: tokens.text, cursor: 'pointer' }}>
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
@@ -434,7 +441,7 @@ const TemplateStory = ({ section, tokens, brand, onEditSection }) => {
 
 const TemplateEligibility = ({ section, tokens, brand, onEditSection }) => {
   const c = section.copy || {}
-  const isDark = tokens.canvas === '#0f172a'
+  const isDark = tokensAreDark(tokens)
   return (
     <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '56px 32px', backgroundColor: tokens.surface, color: tokens.text, cursor: 'pointer' }}>
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
@@ -460,7 +467,7 @@ const TemplateEligibility = ({ section, tokens, brand, onEditSection }) => {
 
 const TemplateHowItWorks = ({ section, tokens, brand, onEditSection }) => {
   const c = section.copy || {}
-  const isDark = tokens.canvas === '#0f172a'
+  const isDark = tokensAreDark(tokens)
   return (
     <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '56px 32px', backgroundColor: tokens.canvas, color: tokens.text, cursor: 'pointer' }}>
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
@@ -472,7 +479,7 @@ const TemplateHowItWorks = ({ section, tokens, brand, onEditSection }) => {
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(3, (c.steps || []).length || 1)}, 1fr)`, gap: 18 }}>
           {(c.steps || []).map((st, i) => (
             <div key={i} style={{ padding: 22, backgroundColor: tokens.surface, border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`, borderRadius: tokens.radius }}>
-              <div style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: brand.colors.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, marginBottom: 12, fontSize: 14 }}>{i + 1}</div>
+              <div style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: brand.colors.primary, color: onPrimaryText(brand.colors.primary), display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, marginBottom: 12, fontSize: 14 }}>{i + 1}</div>
               <div style={{ fontWeight: 700, color: tokens.text, marginBottom: 6, fontSize: 15 }}>{st.title}</div>
               <div style={{ fontSize: 13, color: tokens.textMute, lineHeight: 1.55 }}>{st.desc}</div>
             </div>
@@ -485,7 +492,7 @@ const TemplateHowItWorks = ({ section, tokens, brand, onEditSection }) => {
 
 const TemplateSettlements = ({ section, tokens, brand, onEditSection }) => {
   const c = section.copy || {}
-  const isDark = tokens.canvas === '#0f172a'
+  const isDark = tokensAreDark(tokens)
   return (
     <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '56px 32px', backgroundColor: tokens.surface, color: tokens.text, cursor: 'pointer' }}>
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
@@ -511,7 +518,7 @@ const TemplateSettlements = ({ section, tokens, brand, onEditSection }) => {
 
 const TemplateTestimonials = ({ section, tokens, brand, onEditSection }) => {
   const c = section.copy || {}
-  const isDark = tokens.canvas === '#0f172a'
+  const isDark = tokensAreDark(tokens)
   return (
     <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '56px 32px', backgroundColor: tokens.canvas, color: tokens.text, cursor: 'pointer' }}>
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
@@ -539,19 +546,22 @@ const TemplateTestimonials = ({ section, tokens, brand, onEditSection }) => {
 
 const TemplateGuarantee = ({ section, tokens, brand, onEditSection }) => {
   const c = section.copy || {}
+  // The whole section sits on brand.colors.primary, so all text/icons must use
+  // the verified on-primary color (white breaks for a light/yellow primary).
+  const onPrimary = onPrimaryText(brand.colors.primary)
   return (
-    <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '56px 32px', backgroundColor: brand.colors.primary, color: '#fff', cursor: 'pointer' }}>
+    <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '56px 32px', backgroundColor: brand.colors.primary, color: onPrimary, cursor: 'pointer' }}>
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={false} />
       <div style={{ maxWidth: 780, margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40, alignItems: 'center' }}>
         <div>
-          <ShieldCheck size={36} color="#fff" style={{ marginBottom: 14 }} />
-          <h2 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 32, color: '#fff', margin: '0 0 10px', letterSpacing: '-0.01em' }}>{c.headline}</h2>
-          <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5, margin: 0 }}>{c.subhead}</p>
+          <ShieldCheck size={36} color={onPrimary} style={{ marginBottom: 14 }} />
+          <h2 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 32, color: onPrimary, margin: '0 0 10px', letterSpacing: '-0.01em' }}>{c.headline}</h2>
+          <p style={{ fontSize: 14, color: onPrimary, opacity: 0.85, lineHeight: 1.5, margin: 0 }}>{c.subhead}</p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {(c.lines || []).map((line, i) => (
-            <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 13, color: '#fff' }}>
-              <div style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 13, color: onPrimary }}>
+              <div style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: `${onPrimary}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <Check size={13} strokeWidth={3} />
               </div>
               {line}
@@ -565,7 +575,7 @@ const TemplateGuarantee = ({ section, tokens, brand, onEditSection }) => {
 
 const TemplateFaq = ({ section, tokens, brand, onEditSection }) => {
   const c = section.copy || {}
-  const isDark = tokens.canvas === '#0f172a'
+  const isDark = tokensAreDark(tokens)
   const [openIdx, setOpenIdx] = useState(0)
   return (
     <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '56px 32px', backgroundColor: tokens.surface, color: tokens.text, cursor: 'pointer' }}>
@@ -593,13 +603,13 @@ const TemplateFaq = ({ section, tokens, brand, onEditSection }) => {
 
 const TemplateFinalCta = ({ section, tokens, brand, onEditSection }) => {
   const c = section.copy || {}
-  const isDark = tokens.canvas === '#0f172a'
+  const isDark = tokensAreDark(tokens)
   return (
     <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '64px 32px', backgroundColor: tokens.canvas, color: tokens.text, cursor: 'pointer', textAlign: 'center' }}>
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
       <div style={{ maxWidth: 680, margin: '0 auto' }}>
         <h2 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 36, color: tokens.text, margin: '0 0 22px', letterSpacing: '-0.01em' }}>{c.headline}</h2>
-        <button style={{ padding: '14px 32px', backgroundColor: brand.colors.primary, color: '#fff', border: 'none', borderRadius: tokens.radius, fontSize: 15, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <button style={{ padding: '14px 32px', backgroundColor: brand.colors.primary, color: onPrimaryText(brand.colors.primary), border: 'none', borderRadius: tokens.radius, fontSize: 15, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           {c.cta_label} <ArrowRight size={15} />
         </button>
         {c.secondary_line && <div style={{ fontSize: 13, color: tokens.textMute, marginTop: 16 }}>{c.secondary_line}</div>}
@@ -610,7 +620,7 @@ const TemplateFinalCta = ({ section, tokens, brand, onEditSection }) => {
 
 const TemplateFooter = ({ section, tokens, brand, onEditSection }) => {
   const c = section.copy || {}
-  const isDark = tokens.canvas === '#0f172a'
+  const isDark = tokensAreDark(tokens)
   return (
     <footer onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '32px 32px 24px', backgroundColor: tokens.surface, color: tokens.textMute, cursor: 'pointer', borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}` }}>
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />

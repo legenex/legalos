@@ -16,6 +16,8 @@
 // quiz, LP, advertorial, and site page that points at that Site, even if
 // brand_identity still has an older value in its JSON blob.
 
+import { onPrimaryText } from './builder/color-system'
+
 export type DomainLite = { host: string; primary: boolean; status: string }
 
 const str = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : fallback)
@@ -60,12 +62,21 @@ export function siteToBrand(s: Record<string, unknown>, domainList: DomainLite[]
   }
   const colors = mergeNested(colorsFromSite, identity.colors as Record<string, unknown> | undefined)
   // Final defaults for anything still empty so renderers always have values.
+  const primaryResolved = colors.primary || '#1d8df6'
   const colorsResolved = {
-    primary: colors.primary || '#1d8df6',
+    primary: primaryResolved,
     accent: colors.accent || colors.primary || '#1d8df6',
     background: colors.background || '#0a1a3a',
     cardBg: colors.cardBg || '#0d2447',
+    // textOnDark stays only as a legacy alias = "text on a known-dark
+    // surface". Templates no longer source text from it — they derive
+    // contrast-verified text via color-system.ts. Do not reintroduce it
+    // as a generic text color or white-on-white returns.
     textOnDark: colors.textOnDark || '#ffffff',
+    // Contrast-safe text color for ON the primary (filled buttons/badges).
+    // Lets non-template consumers get a readable button-text color without
+    // recomputing. Computed via the same verifier the templates use.
+    onPrimary: onPrimaryText(primaryResolved),
     success: colors.success || '#10b981',
     warning: colors.warning || '#f59e0b',
     danger: colors.danger || '#ef4444',

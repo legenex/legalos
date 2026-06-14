@@ -19,6 +19,7 @@ import { genId, mkA, defaultLeadFormFields, VISIBLE_BY_DEFAULT } from './seed-da
 import { StepListPanel, TierGridPanel } from './builder'
 import { NodeEditorModal, SettingsModal, AddStepModal } from './editors'
 import { QuizPreviewView, NodePreviewModal } from './preview'
+import { auditQuizTemplateColors } from './templates'
 import { brandShortName } from '../ui'
 import { createQuiz, saveQuiz, cloneQuiz, deleteQuiz, saveQuizDeployment, deleteQuizDeployment } from '@/app/(app)/admin/(top)/quizzes/actions'
 
@@ -282,16 +283,22 @@ const DeploymentEditor = ({ deployment, isDraft, quizzes, brands, onSave, onBack
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
               {QUIZ_TEMPLATES.map((t) => {
                 const active = (draft.templateId || 'minimal') === t.id
-                return <button key={t.id} onClick={() => update({ templateId: t.id })} style={{ padding: 12, backgroundColor: active ? T.bgElev2 : T.bgElev, border: `1px solid ${active ? T.primary : T.border}`, borderRadius: 8, cursor: 'pointer', textAlign: 'left', color: T.text, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                // Color-overlap detector: flag any template that would render
+                // unreadable text for THIS brand before it ships.
+                const violations = brand ? auditQuizTemplateColors(t.id, brand) : []
+                const hasError = violations.some((v) => v.severity === 'error')
+                const hasWarn = violations.length > 0
+                return <button key={t.id} onClick={() => update({ templateId: t.id })} title={hasWarn ? violations.map((v) => v.message).join('\n') : undefined} style={{ padding: 12, backgroundColor: active ? T.bgElev2 : T.bgElev, border: `1px solid ${active ? T.primary : hasError ? T.danger : T.border}`, borderRadius: 8, cursor: 'pointer', textAlign: 'left', color: T.text, display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <div style={{ width: 14, height: 14, borderRadius: '50%', border: `2px solid ${active ? T.primary : T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{active && <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: T.primary }} />}</div>
                     <span style={{ fontSize: 12.5, fontWeight: 600 }}>{t.name}</span>
+                    {hasWarn && <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, letterSpacing: '0.04em', backgroundColor: hasError ? `${T.danger}22` : `${T.warning}22`, color: hasError ? T.danger : T.warning }}>{hasError ? 'LOW CONTRAST' : 'CHECK'}</span>}
                   </div>
                   <div style={{ fontSize: 11, color: T.textMute, lineHeight: 1.4 }}>{t.desc}</div>
                 </button>
               })}
             </div>
-            <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 6 }}>Brand colors still apply. The template controls layout, typography, button style, and overall feel.</div>
+            <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 6 }}>Brand colors still apply. The template controls layout, typography, button style, and overall feel. A <span style={{ color: T.warning }}>CHECK</span> / <span style={{ color: T.danger }}>LOW CONTRAST</span> tag means this template + the selected brand has a color overlap that hurts readability.</div>
           </div>
           {draft.renderMode === 'embed' && <>
             <div>
