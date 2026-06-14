@@ -226,7 +226,12 @@ export async function createBrandSite(args: {
     await payload.update({
       collection: 'sites',
       id: created.site.id,
-      data: { brand_identity: brand, brand: brandTokensFromIdentity(brand), ...phoneFields(brand) } as never,
+      // A brand created through the wizard is a complete, launch-ready site
+      // (seeded published pages + an auto-issued preview domain), so it is born
+      // 'active'. createSite defaults to 'draft' for raw CMS use; the public
+      // router 404s drafts, which would otherwise leave a freshly created brand
+      // showing "Page not found" at its own domain.
+      data: { status: 'active', brand_identity: brand, brand: brandTokensFromIdentity(brand), ...phoneFields(brand) } as never,
       user: user as never,
       overrideAccess: false,
     })

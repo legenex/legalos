@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { AlertCircle, CheckCircle2, ExternalLink, FileText, Globe, Inbox, Layers, Pencil } from 'lucide-react'
 import { TestCaptureButton } from '@/components/app/TestCaptureModal'
+import { invalidateHostCache } from '@/lib/site-resolver'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,8 +55,28 @@ export default async function SiteOverviewPage({ params }: Props) {
   ])
 
   const primary = primaryDomain.docs[0]
+
+  // Self-heal: a brand whose primary domain is live but whose Site is still in
+  // the pre-launch 'draft' state would 404 publicly while this dashboard reads
+  // "Ready". Publishing here makes the live URL actually serve its Home page and
+  // keeps the badge honest. Only 'draft' is promoted — 'paused'/'archived' are
+  // deliberate states we leave alone. (Covers brands created before sites were
+  // born active; new brands are already active and skip this.)
+  if (site.status === 'draft' && primary?.status === 'active') {
+    try {
+      await payload.update({ collection: 'sites', id: site.id, data: { status: 'active' } as never, overrideAccess: true })
+      site.status = 'active'
+      invalidateHostCache()
+    } catch {
+      // best effort — non-fatal for rendering the dashboard
+    }
+  }
+
   const livePreviewUrl = primary ? `https://${primary.host}` : `/?site=${site.slug}`
-  const status = primary?.status === 'active' ? 'ready' : 'partial'
+  // "Ready" must mean actually publicly served: a live primary domain AND a
+  // published (active) Site. Previously this only checked the domain, so a draft
+  // site read "Ready" while the public router 404'd it.
+  const status = primary?.status === 'active' && site.status === 'active' ? 'ready' : 'partial'
 
   const recentLeads = await payload.find({
     collection: 'leads',
