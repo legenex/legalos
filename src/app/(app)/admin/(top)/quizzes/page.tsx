@@ -5,6 +5,7 @@ import config from '@payload-config'
 import { QuizBuilderApp } from '@/components/builder/quiz/QuizBuilderApp'
 import { buildBrandsFromSites } from '@/lib/brand-map'
 import { ensureFunnelSamples, ensureStarterFunnelsForAllBrands } from '@/lib/funnel-samples'
+import { ensureBrandTokensSyncedForAllBrands } from '@/app/(app)/admin/(top)/brands/brand-identities/actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +15,7 @@ export default async function QuizzesPage() {
   const payload = await getPayload({ config })
   await ensureFunnelSamples(payload)
   await ensureStarterFunnelsForAllBrands(payload)
+  await ensureBrandTokensSyncedForAllBrands()
   const [qRes, depRes, sitesRes, domainsRes] = await Promise.all([
     payload.find({ collection: 'funnel-quizzes', limit: 500, sort: '-updatedAt', overrideAccess: true }),
     payload.find({ collection: 'funnel-quiz-deployments', limit: 1000, depth: 0, overrideAccess: true }),

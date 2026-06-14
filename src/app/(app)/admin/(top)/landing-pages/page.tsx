@@ -5,6 +5,7 @@ import config from '@payload-config'
 import { LandingPagesApp } from '@/components/builder/lp/LandingPagesApp'
 import { buildBrandsFromSites } from '@/lib/brand-map'
 import { ensureFunnelSamples, ensureStarterFunnelsForAllBrands } from '@/lib/funnel-samples'
+import { ensureBrandTokensSyncedForAllBrands } from '@/app/(app)/admin/(top)/brands/brand-identities/actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,7 @@ export default async function LandingPagesPage() {
   const payload = await getPayload({ config })
   await ensureFunnelSamples(payload)
   await ensureStarterFunnelsForAllBrands(payload)
+  await ensureBrandTokensSyncedForAllBrands()
   const [lpRes, depRes, sitesRes, domainsRes, quizRes, quizDepRes] = await Promise.all([
     payload.find({ collection: 'funnel-landing-pages', limit: 500, sort: '-updatedAt', overrideAccess: true }),
     payload.find({ collection: 'funnel-lp-deployments', limit: 1000, depth: 0, overrideAccess: true }),

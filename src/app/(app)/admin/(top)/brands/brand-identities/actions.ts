@@ -54,13 +54,77 @@ const brandTokensFromIdentity = (brand: Record<string, unknown>): Record<string,
   return {
     primary: isHex(colors.primary) ? colors.primary.trim() : SITE_BRAND_DEFAULT.primary,
     accent: isHex(colors.accent) ? colors.accent.trim() : SITE_BRAND_DEFAULT.accent,
-    // brand_identity.background is the page background → Site surface.
-    surface: isHex(colors.background) ? (colors.background as string).trim() : SITE_BRAND_DEFAULT.surface,
-    // Keep a readable dark ink for body text on the light surface.
-    ink: SITE_BRAND_DEFAULT.ink,
+    // brand_identity.colors.background is the DARK card backdrop in the
+    // funnel-artifact model — the colour the quiz / advertorial / LP
+    // preview paint behind their cards. It maps to Site.brand.ink (which
+    // siteToBrand reads back into colors.background for those previews).
+    // Mapping it to Site.brand.surface was wrong: surface drives the
+    // light page background on Site Pages, so the user's dark identity
+    // colour was lost on the way to the funnel renderers.
+    ink: isHex(colors.background) ? (colors.background as string).trim() : SITE_BRAND_DEFAULT.ink,
+    // surface stays at the LegalOS default light page colour — it's a
+    // distinct concept (light page bg for Site Pages) that the funnel
+    // artifact has no equivalent for. Users can still override it via
+    // the Site → Settings → Brand editor if they want a different page
+    // bg.
+    surface: SITE_BRAND_DEFAULT.surface,
     muted: SITE_BRAND_DEFAULT.muted,
     font_heading: typeof typo.headlineFont === 'string' && typo.headlineFont.trim() ? typo.headlineFont.trim() : SITE_BRAND_DEFAULT.font_heading,
     font_body: typeof typo.bodyFont === 'string' && typo.bodyFont.trim() ? typo.bodyFont.trim() : SITE_BRAND_DEFAULT.font_body,
+  }
+}
+
+// One-time backfill: re-applies brandTokensFromIdentity to every Site that
+// already has a brand_identity. Earlier versions of brandTokensFromIdentity
+// wrote brand_identity.colors.background into Site.brand.surface (a light
+// page bg) instead of Site.brand.ink (the dark card backdrop the quiz / LP
+// preview actually reads). Existing brands ended up with Site.brand.ink set
+// to a generic dark default, so siteToBrand never surfaced the user's chosen
+// brand colour to the funnel renderers.
+//
+// Re-applying the (now corrected) mapping fixes that without asking the user
+// to manually re-save every brand. Idempotent — Sites whose Site.brand already
+// matches the derived tokens are skipped.
+const brandTokensSynced = new Set<number>()
+export const ensureBrandTokensSyncedForAllBrands = async (): Promise<void> => {
+  const payload = await getPayload({ config })
+  try {
+    const sitesRes = await payload.find({ collection: 'sites', limit: 500, overrideAccess: true })
+    for (const s of sitesRes.docs) {
+      const siteId = Number(s.id)
+      if (brandTokensSynced.has(siteId)) continue
+      const identity = (s as { brand_identity?: Record<string, unknown> | null }).brand_identity
+      if (!identity || typeof identity !== 'object') {
+        brandTokensSynced.add(siteId)
+        continue
+      }
+      const desired = brandTokensFromIdentity(identity)
+      const current = ((s as { brand?: Record<string, unknown> }).brand ?? {}) as Record<string, unknown>
+      // Compare the four colour tokens that actually drive funnel rendering;
+      // any difference means a re-sync is needed.
+      const matches = ['primary', 'accent', 'ink', 'surface'].every(
+        (k) => String(current[k] ?? '') === desired[k],
+      )
+      if (matches) {
+        brandTokensSynced.add(siteId)
+        continue
+      }
+      try {
+        await payload.update({
+          collection: 'sites',
+          id: siteId,
+          data: { brand: desired } as never,
+          overrideAccess: true,
+        })
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(`[brand-identities] brand-token re-sync failed for site=${siteId}:`, err)
+      }
+      brandTokensSynced.add(siteId)
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[brand-identities] brand-token backfill walk failed:', err)
   }
 }
 
