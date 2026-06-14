@@ -9,24 +9,12 @@ import { invalidateHostCache } from '@/lib/site-resolver'
 import { verifyAndPromoteDomain, setPrimary } from '@/app/(app)/admin/sites/[slug]/settings/domains/actions'
 import { unprovisionDomainInPlesk } from '@/lib/plesk/provision-domain'
 import { pleskIsConfigured } from '@/lib/plesk/client'
+import { buildDnsRecords } from '@/lib/dns-records'
 
 const randomToken = (len = 24): string => crypto.randomBytes(Math.ceil(len / 2)).toString('hex').slice(0, len)
 
 const normalizeHost = (raw: string): string =>
   raw.toLowerCase().trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '')
-
-const dnsRecordsFor = (host: string, token: string): Array<{ type: string; name: string; value: string; note?: string }> => {
-  const cnameTarget = process.env.LEGALOS_CNAME_TARGET ?? 'cname.legenex.com'
-  const aTarget = process.env.LEGALOS_A_TARGET
-  const records: Array<{ type: string; name: string; value: string; note?: string }> = [
-    { type: 'CNAME', name: host, value: cnameTarget, note: 'Subdomains and www. Apex domains may need an A record instead.' },
-    { type: 'TXT', name: `_legalos.${host}`, value: `legalos-verify=${token}`, note: 'Always-accepted fallback for ownership verification.' },
-  ]
-  if (aTarget) {
-    records.splice(1, 0, { type: 'A', name: host, value: aTarget, note: 'Apex / root domain. Required if you cannot CNAME.' })
-  }
-  return records
-}
 
 /** Create a domain in the unassigned pool (no site yet). */
 export async function createPoolDomain(args: { host: string }): Promise<
@@ -53,7 +41,7 @@ export async function createPoolDomain(args: { host: string }): Promise<
         status: 'pending',
         ssl_status: 'pending',
         verification_token: token,
-        dns_records: dnsRecordsFor(host, token),
+        dns_records: buildDnsRecords(host, token),
       } as never,
       user: user as never,
       overrideAccess: false,

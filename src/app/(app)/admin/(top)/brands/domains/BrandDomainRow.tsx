@@ -10,8 +10,8 @@ import {
   verifyAttachedDomain,
   makeDomainPrimary,
 } from './actions'
+import type { DnsRecord } from '@/lib/dns-records'
 
-type DnsRecord = { type: string; name: string; value: string; note?: string }
 type SiteOption = { id: number; name: string; slug: string }
 
 type Domain = {
@@ -200,7 +200,7 @@ export function BrandDomainRow({ domain, sites }: { domain: Domain; sites: SiteO
 
           {/* DNS records */}
           {domain.kind === 'custom' && domain.dnsRecords.length > 0 ? (
-            <Section title="DNS records" hint="Add at your DNS provider, then click Verify DNS.">
+            <Section title="DNS records" hint="Add the required record at your DNS provider, then click Verify DNS. Any one required record is enough.">
               <div className="rounded-md border border-[var(--color-border)] overflow-hidden">
                 <table className="w-full text-[12px]">
                   <thead className="bg-[var(--color-surface-2)] text-[var(--color-ink-muted)] uppercase text-[10px] tracking-wider">
@@ -208,14 +208,23 @@ export function BrandDomainRow({ domain, sites }: { domain: Domain; sites: SiteO
                       <th className="text-left px-3 py-2 font-semibold">Type</th>
                       <th className="text-left px-3 py-2 font-semibold">Name</th>
                       <th className="text-left px-3 py-2 font-semibold">Value</th>
+                      <th className="text-left px-3 py-2 font-semibold">Need</th>
                     </tr>
                   </thead>
                   <tbody className="font-mono">
                     {domain.dnsRecords.map((r, i) => (
-                      <tr key={i} className="border-t border-[var(--color-border)]">
+                      <tr key={i} className="border-t border-[var(--color-border)] align-top">
                         <td className="px-3 py-2 text-[var(--color-ink-muted)]">{r.type}</td>
                         <td className="px-3 py-2 text-white break-all">{r.name}</td>
-                        <td className="px-3 py-2 text-white break-all">{r.value}</td>
+                        <td className="px-3 py-2 text-white break-all">
+                          {r.value}
+                          {r.note ? (
+                            <span className="block mt-1 font-sans text-[11px] leading-snug text-[var(--color-ink-dim)]">{r.note}</span>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <Badge tone={r.required ? 'warn' : 'neutral'}>{r.required ? 'Required' : 'Optional'}</Badge>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

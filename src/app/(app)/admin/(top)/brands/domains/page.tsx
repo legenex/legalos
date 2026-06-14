@@ -1,12 +1,12 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
+import { buildDnsRecords, type DnsRecord } from '@/lib/dns-records'
 import { AddDomainButton } from './AddDomainModal'
 import { BrandDomainRow } from './BrandDomainRow'
 
 export const dynamic = 'force-dynamic'
 
 type SiteLite = { id: number; name: string; slug: string }
-type DnsRecord = { type: string; name: string; value: string; note?: string }
 type DomainLite = {
   id: number
   host: string
@@ -63,7 +63,14 @@ export default async function DomainsIndexPage() {
       siteId,
       siteSlug,
       verificationToken: d.verification_token ?? null,
-      dnsRecords: Array.isArray(d.dns_records) ? (d.dns_records as DnsRecord[]) : [],
+      // Recompute records from the current (apex-aware) logic so existing rows
+      // self-heal — never trust possibly-stale stored guidance for display.
+      dnsRecords:
+        (d.kind ?? 'custom') === 'custom'
+          ? buildDnsRecords(d.host, d.verification_token ?? null)
+          : Array.isArray(d.dns_records)
+          ? (d.dns_records as DnsRecord[])
+          : [],
       lastCheckedAt: d.last_checked_at ?? null,
     }
   })
