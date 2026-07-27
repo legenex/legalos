@@ -19,6 +19,7 @@ import {
   Settings,
   Plug,
   Activity,
+  Bot,
   ChevronDown,
   ChevronRight,
   Loader2,
@@ -54,6 +55,7 @@ const SETTINGS_NAV: NavItem[] = [
   { href: '/admin/settings/integrations', label: 'Integrations', icon: Plug },
   { href: '/admin/settings/users', label: 'Users', icon: Users },
   { href: '/admin/settings/system', label: 'System', icon: Activity },
+  { href: '/admin/plan', label: 'Agent Plan', icon: Bot },
 ]
 
 export function Sidebar({ userEmail }: { userEmail: string }) {
