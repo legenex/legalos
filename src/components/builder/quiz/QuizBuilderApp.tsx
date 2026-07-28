@@ -6,31 +6,78 @@
 // + quiz DeploymentEditor + embed modal. Brands come from props (shared Brand
 // Identities); persistence is via server actions instead of localStorage.
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ChevronLeft, Settings, Eye, Power, PowerOff, ListChecks, Rocket, Edit3, Copy, Trash2,
-  Plus, Code2, Save, X,
+  Plus, Code2, Save, X, Undo2, Redo2, Archive, ArchiveRestore, Loader2, Check, AlertTriangle,
 } from 'lucide-react'
 import { T, Btn, Input, Select, Label, Pill, IconBtn, ConfirmDialog, Toast, PageHeader } from '../ui'
 import { BodySectionEditor, AddBodySectionPicker, BODY_SECTION_DEFS } from '../body-sections'
 import { NODE_TYPE_FOR_QTYPE, QUIZ_TEMPLATES, RENDER_MODES, PIXEL_PROVIDERS } from './config'
 import { genId, mkA, defaultLeadFormFields, VISIBLE_BY_DEFAULT } from './seed-data'
-import { StepListPanel, TierGridPanel } from './builder'
+import { QuizFlowGrid } from './builder'
 import { NodeEditorModal, SettingsModal, AddStepModal } from './editors'
 import { QuizPreviewView, NodePreviewModal } from './preview'
 import { auditQuizTemplateColors } from './templates'
 import { brandShortName } from '../ui'
-import { createQuiz, saveQuiz, cloneQuiz, deleteQuiz, saveQuizDeployment, deleteQuizDeployment } from '@/app/(app)/admin/(top)/quizzes/actions'
+import {
+  moveStepBy, duplicateStep, duplicateNode, deleteStep,
+  upsertCustomField, newCustomField, lintQuizGraph,
+} from '@/lib/quiz-graph'
+import {
+  createQuiz, saveQuiz, cloneQuiz, deleteQuiz, setQuizArchived,
+  saveQuizDeployment, deleteQuizDeployment,
+} from '@/app/(app)/admin/(top)/quizzes/actions'
 
-const QuizBuilderTopBar = ({ view, quizName, onBack, onSettings, onPreview, onPublish, isPublished, onBackToBuilder, previewSource }) => (
-  <div style={{ position: 'sticky', top: 0, zIndex: 30, height: 56, backgroundColor: 'rgba(37,46,57,0.92)', backdropFilter: 'blur(12px)', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', padding: '0 20px', gap: 16, flexShrink: 0 }}>
+/**
+ * Save status indicator. The builder autosaves, so the useful signal is not "is
+ * there a Save button" but "is my work actually on the server yet" - which is
+ * also what lets Back skip the confirm dialog entirely when nothing is pending.
+ */
+const SaveIndicator = ({ state }) => {
+  const map = {
+    saved: { color: T.success, icon: Check, label: 'Saved' },
+    pending: { color: T.warning, icon: null, label: 'Unsaved' },
+    saving: { color: T.info, icon: Loader2, label: 'Saving...' },
+    error: { color: T.danger, icon: AlertTriangle, label: 'Save failed' },
+  }
+  const s = map[state] || map.saved
+  const Icon = s.icon
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: s.color, fontFamily: '"JetBrains Mono", monospace', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+    {Icon && <Icon size={11} style={state === 'saving' ? { animation: 'spin 1s linear infinite' } : undefined} />}
+    {s.label}
+  </span>
+}
+
+const QuizBuilderTopBar = ({
+  view, quizName, onBack, onSettings, onPreview, onPublish, isPublished, onBackToBuilder, previewSource,
+  saveState, onSave, onUndo, onRedo, canUndo, canRedo,
+}) => (
+  <div style={{ position: 'sticky', top: 0, zIndex: 30, height: 56, backgroundColor: 'rgba(37,46,57,0.92)', backdropFilter: 'blur(12px)', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', padding: '0 20px', gap: 14, flexShrink: 0 }}>
     {view === 'builder' && <>
       <Btn variant="ghost" size="sm" icon={ChevronLeft} onClick={onBack}>Back</Btn>
       <div style={{ width: 1, height: 26, backgroundColor: T.border }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 13, color: T.text, fontWeight: 600, letterSpacing: '-0.01em' }}>{quizName}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        <span style={{ fontSize: 13, color: T.text, fontWeight: 600, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{quizName}</span>
         <Pill color={isPublished ? T.success : T.textMute}>{isPublished ? 'LIVE' : 'DRAFT'}</Pill>
+      </div>
+      <div style={{ width: 1, height: 26, backgroundColor: T.border }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <IconBtn
+          icon={Undo2}
+          onClick={onUndo}
+          disabled={!canUndo}
+          title={canUndo ? 'Undo (Ctrl/Cmd+Z)' : 'Nothing to undo'}
+          style={{ opacity: canUndo ? 1 : 0.35, cursor: canUndo ? 'pointer' : 'not-allowed' }}
+        />
+        <IconBtn
+          icon={Redo2}
+          onClick={onRedo}
+          disabled={!canRedo}
+          title={canRedo ? 'Redo (Ctrl/Cmd+Shift+Z)' : 'Nothing to redo'}
+          style={{ opacity: canRedo ? 1 : 0.35, cursor: canRedo ? 'pointer' : 'not-allowed' }}
+        />
       </div>
     </>}
     {view === 'deploymentEdit' && <>
@@ -40,8 +87,18 @@ const QuizBuilderTopBar = ({ view, quizName, onBack, onSettings, onPreview, onPu
     </>}
     <div style={{ flex: 1 }} />
     {view === 'builder' && <>
+      <SaveIndicator state={saveState} />
       <Btn variant="secondary" size="sm" icon={Settings} onClick={onSettings}>Settings</Btn>
       <Btn variant="secondary" size="sm" icon={Eye} onClick={onPreview}>Preview</Btn>
+      <Btn
+        variant={saveState === 'error' ? 'danger' : 'secondary'}
+        size="sm"
+        icon={Save}
+        onClick={onSave}
+        disabled={saveState === 'saved' || saveState === 'saving'}
+        title={saveState === 'error' ? 'Retry saving' : saveState === 'saved' ? 'Everything is saved' : 'Save now (Ctrl/Cmd+S)'}
+        style={{ opacity: (saveState === 'saved' || saveState === 'saving') ? 0.5 : 1 }}
+      >{saveState === 'error' ? 'Retry Save' : 'Save'}</Btn>
       <Btn variant={isPublished ? 'danger' : 'primary'} size="sm" icon={isPublished ? PowerOff : Power} onClick={onPublish}>{isPublished ? 'Unpublish' : 'Publish'}</Btn>
     </>}
     {view === 'preview' && <Btn variant="secondary" size="sm" icon={ChevronLeft} onClick={onBackToBuilder}>{previewSource === 'list-deployments' ? 'Back to Deployments' : previewSource === 'list-quizzes' ? 'Back to Quizzes' : 'Back to Builder'}</Btn>}
@@ -61,39 +118,85 @@ const QuizBuilderTabBar = ({ active, onChange }) => {
   </div>
 }
 
-const QuizListView = ({ quizzes, brands, deployments, onOpen, onClone, onDelete, onTogglePublish, onPreview, onRename }) => {
+const QuizListView = ({
+  quizzes, brands, deployments, scope, onScopeChange,
+  onOpen, onClone, onDelete, onTogglePublish, onPreview, onRename, onArchive,
+}) => {
   const [renamingId, setRenamingId] = useState(null)
   const [renameDraft, setRenameDraft] = useState('')
   const startRename = (q) => { setRenamingId(q.id); setRenameDraft(q.name) }
   const commitRename = () => { if (renamingId && renameDraft.trim()) onRename?.(renamingId, renameDraft.trim()); setRenamingId(null) }
+
+  const activeCount = quizzes.filter((q) => !q.isArchived).length
+  const archivedCount = quizzes.filter((q) => q.isArchived).length
+  const showingArchived = scope === 'archived'
+  const shown = quizzes.filter((q) => (showingArchived ? q.isArchived : !q.isArchived))
+
+  const scopes = [
+    { id: 'active', label: 'Active', count: activeCount },
+    { id: 'archived', label: 'Archived', count: archivedCount },
+  ]
+
   return <div style={{ display: 'grid', gap: 12 }}>
-    {quizzes.length === 0 ? <div style={{ padding: 60, textAlign: 'center', backgroundColor: T.bgElev, border: `1px dashed ${T.border}`, borderRadius: 10, color: T.textMute }}>No quizzes yet.</div> :
-      quizzes.map((q) => {
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      {scopes.map((s) => {
+        const active = scope === s.id
+        return <button
+          key={s.id}
+          onClick={() => onScopeChange(s.id)}
+          style={{ padding: '5px 12px', borderRadius: 999, fontSize: 11.5, fontWeight: 600, backgroundColor: active ? T.primarySoft : T.bgElev, border: `1px solid ${active ? T.primary : T.border}`, color: active ? T.primary : T.textMute, cursor: 'pointer', fontFamily: '"Inter", sans-serif', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+        >
+          {s.id === 'archived' && <Archive size={11} />}
+          {s.label}
+          <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 10, opacity: 0.8 }}>{s.count}</span>
+        </button>
+      })}
+      {showingArchived && <span style={{ fontSize: 11, color: T.textMute, marginLeft: 6 }}>
+        Archived quizzes are always unpublished. Restore one to edit or publish it again.
+      </span>}
+    </div>
+
+    {shown.length === 0 ? <div style={{ padding: 60, textAlign: 'center', backgroundColor: T.bgElev, border: `1px dashed ${T.border}`, borderRadius: 10, color: T.textMute }}>
+      {showingArchived ? 'Nothing archived.' : activeCount === 0 && archivedCount > 0 ? 'No active quizzes. Check the Archived tab.' : 'No quizzes yet.'}
+    </div> :
+      shown.map((q) => {
         const quizDeployments = deployments.filter((d) => d.quizId === q.id)
+        const liveDeployments = quizDeployments.filter((d) => d.status === 'live').length
         const usedBrandNames = [...new Set(quizDeployments.map((d) => brands.find((b) => b.id === d.brandId)?.displayName).filter(Boolean))]
-        return <div key={q.id} style={{ backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 10, padding: '18px 22px', display: 'flex', alignItems: 'center', gap: 20 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 8, backgroundColor: q.isPublished ? T.primarySoft : T.bgElev2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: q.isPublished ? T.primary : T.textMute }}><ListChecks size={18} /></div>
+        return <div key={q.id} style={{ backgroundColor: T.bgElev, border: `1px solid ${q.isArchived ? T.border : T.border}`, borderRadius: 10, padding: '18px 22px', display: 'flex', alignItems: 'center', gap: 20, opacity: q.isArchived ? 0.75 : 1 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 8, backgroundColor: q.isArchived ? T.bgElev2 : q.isPublished ? T.primarySoft : T.bgElev2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: q.isArchived ? T.textLow : q.isPublished ? T.primary : T.textMute, flexShrink: 0 }}>
+            {q.isArchived ? <Archive size={18} /> : <ListChecks size={18} />}
+          </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               {renamingId === q.id ? (
                 <input autoFocus value={renameDraft} onChange={(e) => setRenameDraft(e.target.value)} onBlur={commitRename} onKeyDown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setRenamingId(null) }} style={{ flex: 1, maxWidth: 360, backgroundColor: T.bg, border: `1px solid ${T.primary}`, borderRadius: 4, padding: '3px 8px', color: T.text, fontSize: 15, fontWeight: 600, outline: 'none' }} />
               ) : (
                 <div onClick={(e) => { e.stopPropagation(); startRename(q) }} style={{ fontSize: 15, color: T.text, fontWeight: 600, letterSpacing: '-0.01em', cursor: 'text' }} title="Click to rename">{q.name}</div>
               )}
-              <Pill color={q.isPublished ? T.success : T.textMute}>{q.isPublished ? 'LIVE' : 'DRAFT'}</Pill>
+              {q.isArchived
+                ? <Pill color={T.textMute}>ARCHIVED</Pill>
+                : <Pill color={q.isPublished ? T.success : T.textMute}>{q.isPublished ? 'LIVE' : 'DRAFT'}</Pill>}
             </div>
             <div style={{ display: 'flex', gap: 14, marginTop: 6, fontSize: 11, color: T.textMute, fontFamily: '"JetBrains Mono", monospace', flexWrap: 'wrap' }}>
               <span>{q.steps.length} steps</span><span>·</span><span>{q.nodes.length} variants</span><span>·</span><span>{q.tiers.length} tiers</span>
-              {quizDeployments.length > 0 && <><span>·</span><span style={{ color: T.info }}>{quizDeployments.length} deployments</span></>}
+              {quizDeployments.length > 0 && <><span>·</span><span style={{ color: T.info }}>{quizDeployments.length} deployment{quizDeployments.length === 1 ? '' : 's'}{liveDeployments > 0 ? ` (${liveDeployments} live)` : ''}</span></>}
               {usedBrandNames.length > 0 && <><span>·</span><span style={{ color: T.purple }}>{usedBrandNames.join(', ')}</span></>}
+              {q.isArchived && q.archivedAt && <><span>·</span><span>archived {new Date(q.archivedAt).toLocaleDateString()}</span></>}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <Btn variant="secondary" size="sm" icon={Eye} onClick={() => onPreview(q.id)}>Preview</Btn>
-            <Btn variant="primary" size="sm" icon={Edit3} onClick={() => onOpen(q.id)}>Edit</Btn>
-            <IconBtn icon={Copy} onClick={() => onClone(q.id)} title="Clone" />
-            <IconBtn icon={q.isPublished ? PowerOff : Power} onClick={() => onTogglePublish(q.id)} />
-            <IconBtn icon={Trash2} onClick={() => onDelete(q.id)} style={{ color: T.danger }} />
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            {q.isArchived ? <>
+              <Btn variant="secondary" size="sm" icon={ArchiveRestore} onClick={() => onArchive(q.id, false)}>Restore</Btn>
+              <IconBtn icon={Trash2} onClick={() => onDelete(q.id)} style={{ color: T.danger }} title="Delete permanently" />
+            </> : <>
+              <Btn variant="secondary" size="sm" icon={Eye} onClick={() => onPreview(q.id)}>Preview</Btn>
+              <Btn variant="primary" size="sm" icon={Edit3} onClick={() => onOpen(q.id)}>Edit</Btn>
+              <IconBtn icon={Copy} onClick={() => onClone(q.id)} title="Clone" />
+              <IconBtn icon={q.isPublished ? PowerOff : Power} onClick={() => onTogglePublish(q.id)} title={q.isPublished ? 'Unpublish' : 'Publish'} />
+              <IconBtn icon={Archive} onClick={() => onArchive(q.id, true)} title="Archive" />
+              <IconBtn icon={Trash2} onClick={() => onDelete(q.id)} style={{ color: T.danger }} title="Delete" />
+            </>}
           </div>
         </div>
       })}
@@ -399,6 +502,7 @@ const EmbedCodeModal = ({ deployment, onClose }) => {
 export function QuizBuilderApp({ initialQuizzes, initialDeployments, brands }) {
   const router = useRouter()
   const [tab, setTab] = useState('quizzes')
+  const [quizScope, setQuizScope] = useState('active')
   const [view, setView] = useState('list')
   const [quizzes, setQuizzes] = useState(initialQuizzes)
   const [deployments, setDeployments] = useState(initialDeployments)
@@ -415,12 +519,47 @@ export function QuizBuilderApp({ initialQuizzes, initialDeployments, brands }) {
   const [pendingTiers, setPendingTiers] = useState(null)
   const [pendingDelete, setPendingDelete] = useState(null)
   const [pendingStepDelete, setPendingStepDelete] = useState(null)
+  const [pendingArchive, setPendingArchive] = useState(null)
   const [showEmbed, setShowEmbed] = useState(null)
   const [leaveBuilderReq, setLeaveBuilderReq] = useState(false)
   const [toast, setToast] = useState(null)
-  const saveTimer = useRef(null)
 
-  useEffect(() => { if (view === 'list') { setQuizzes(initialQuizzes); setDeployments(initialDeployments) } }, [initialQuizzes, initialDeployments, view])
+  // --- save state -----------------------------------------------------------
+  // The builder autosaves on a debounce, so "dirty" is not a boolean the UI can
+  // guess at: it is the gap between the last edit and the last acknowledged
+  // write. Tracking that gap with sequence numbers gives an accurate status, an
+  // explicit Save that flushes now, and - the point of the request - a Back
+  // action that only interrupts the user when a save is actually outstanding.
+  const [saveState, setSaveState] = useState('saved')
+  const saveTimer = useRef(null)
+  const dirtySeq = useRef(0)
+  const savedSeq = useRef(0)
+  const pendingSave = useRef(null) // { id, quiz } most recent unsaved snapshot
+
+  // --- undo / redo ----------------------------------------------------------
+  // Snapshots are stored by reference, not cloned: every mutation path (the
+  // quiz-graph ops, patchNode, the modal drafts) is immutable, so an old
+  // reference can never be mutated out from under the stack. Cloning whole
+  // node graphs on every keystroke would be the expensive way to buy nothing.
+  const [undoStack, setUndoStack] = useState([])
+  const [redoStack, setRedoStack] = useState([])
+  const UNDO_LIMIT = 50
+
+  // Mirror of `quizzes` so a handler can read the result of the edit it just
+  // made. React state is async, and several actions chain (save a node, then
+  // duplicate it) - reading stale state there would duplicate the old version.
+  const quizzesRef = useRef(initialQuizzes)
+  const applyQuizzes = useCallback((next) => { quizzesRef.current = next; setQuizzes(next) }, [])
+
+  // Resync from the server only when nothing is outstanding, so a router
+  // refresh can never overwrite work that has not been acknowledged yet.
+  useEffect(() => {
+    if (view !== 'list') return
+    if (saveState !== 'saved') return
+    quizzesRef.current = initialQuizzes
+    setQuizzes(initialQuizzes)
+    setDeployments(initialDeployments)
+  }, [initialQuizzes, initialDeployments, view, saveState])
 
   const quizPatch = (q) => ({ name: q.name, slug: q.slug, is_published: q.isPublished, tiers: q.tiers, steps: q.steps, nodes: q.nodes, custom_fields: q.customFields })
 
@@ -429,34 +568,199 @@ export function QuizBuilderApp({ initialQuizzes, initialDeployments, brands }) {
   const selectedNode = currentQuiz?.nodes.find((n) => n.id === selectedNodeId)
   const previewNode = currentQuiz?.nodes.find((n) => n.id === previewNodeId)
   const customFields = currentQuiz?.customFields || []
+  const graphIssues = useMemo(() => (currentQuiz ? lintQuizGraph(currentQuiz) : []), [currentQuiz])
 
-  const patchQuiz = (id, patch) => {
-    let next
-    setQuizzes((qs) => qs.map((q) => { if (q.id !== id) return q; next = { ...q, ...patch }; return next }))
+  const getQuiz = useCallback((id) => quizzesRef.current.find((q) => q.id === id), [])
+
+  const runSave = useCallback(async () => {
     clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => { if (next) saveQuiz({ id, patch: quizPatch(next) }) }, 450)
+    const target = pendingSave.current
+    if (!target) { setSaveState('saved'); return true }
+    const seq = dirtySeq.current
+    if (seq === savedSeq.current) { setSaveState('saved'); return true }
+    setSaveState('saving')
+    const res = await saveQuiz({ id: target.id, patch: quizPatch(target.quiz) })
+    if (!res?.ok) {
+      setSaveState('error')
+      setToast({ message: `Save failed: ${res?.error || 'unknown error'}`, type: 'error' })
+      return false
+    }
+    savedSeq.current = seq
+    if (dirtySeq.current === seq) {
+      pendingSave.current = null
+      setSaveState('saved')
+    } else {
+      // An edit landed while the write was in flight; keep the newer one queued.
+      setSaveState('pending')
+      saveTimer.current = setTimeout(() => { void runSave() }, 450)
+    }
+    return true
+  }, [])
+
+  /** Write a quiz into state and schedule the debounced save. */
+  const writeQuiz = useCallback((quiz) => {
+    applyQuizzes(quizzesRef.current.map((q) => (q.id === quiz.id ? quiz : q)))
+    dirtySeq.current += 1
+    pendingSave.current = { id: quiz.id, quiz }
+    setSaveState('pending')
+    clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => { void runSave() }, 450)
+  }, [applyQuizzes, runSave])
+
+  // Never leave a debounce armed after unmount.
+  useEffect(() => () => clearTimeout(saveTimer.current), [])
+
+  // The stacks are mirrored in refs so undo/redo can read them synchronously and
+  // do their work OUTSIDE a setState updater. Updaters must be pure - React
+  // invokes them twice under StrictMode - so writing the quiz or cross-pushing
+  // to the other stack from inside one would double-apply in development.
+  const undoRef = useRef([])
+  const redoRef = useRef([])
+  const setUndo = useCallback((next) => { undoRef.current = next; setUndoStack(next) }, [])
+  const setRedo = useCallback((next) => { redoRef.current = next; setRedoStack(next) }, [])
+  const resetHistory = useCallback(() => { setUndo([]); setRedo([]) }, [setUndo, setRedo])
+
+  const pushUndo = useCallback((snapshot) => {
+    setUndo([...undoRef.current, snapshot].slice(-UNDO_LIMIT))
+    // A fresh edit invalidates the redo branch.
+    setRedo([])
+  }, [setUndo, setRedo])
+
+  /**
+   * Apply a pure quiz-graph operation to the open quiz: snapshot for undo, then
+   * write. Ops that are a no-op return their input by reference, which is the
+   * signal to skip both (so a disabled-looking button never burns an undo slot
+   * or a save round-trip).
+   */
+  const mutateQuiz = useCallback((fn) => {
+    const q = getQuiz(currentQuizId)
+    if (!q) return null
+    const next = fn(q)
+    if (!next || next === q) return null
+    pushUndo(q)
+    writeQuiz(next)
+    return next
+  }, [currentQuizId, getQuiz, pushUndo, writeQuiz])
+
+  const undo = useCallback(() => {
+    const stack = undoRef.current
+    if (stack.length === 0) return
+    const prev = stack[stack.length - 1]
+    const live = getQuiz(prev.id)
+    setUndo(stack.slice(0, -1))
+    if (live) setRedo([...redoRef.current, live].slice(-UNDO_LIMIT))
+    writeQuiz(prev)
+  }, [getQuiz, writeQuiz, setUndo, setRedo])
+
+  const redo = useCallback(() => {
+    const stack = redoRef.current
+    if (stack.length === 0) return
+    const next = stack[stack.length - 1]
+    const live = getQuiz(next.id)
+    setRedo(stack.slice(0, -1))
+    if (live) setUndo([...undoRef.current, live].slice(-UNDO_LIMIT))
+    writeQuiz(next)
+  }, [getQuiz, writeQuiz, setUndo, setRedo])
+
+  // Keyboard shortcuts, suppressed while a modal is open or focus is in a text
+  // control - undoing quiz structure out from under an open editor draft would
+  // discard edits the user can still see on screen.
+  const anyModalOpen = !!selectedNode || !!previewNode || showSettings || showAddStep
+    || !!pendingDelete || !!pendingStepDelete || !!pendingArchive || !!showEmbed || leaveBuilderReq
+  useEffect(() => {
+    if (view !== 'builder' || anyModalOpen) return
+    const onKey = (e) => {
+      const el = e.target
+      const tag = (el?.tagName || '').toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || el?.isContentEditable) return
+      if (!(e.metaKey || e.ctrlKey)) return
+      const key = (e.key || '').toLowerCase()
+      if (key === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo() }
+      else if (key === 'y') { e.preventDefault(); redo() }
+      else if (key === 's') { e.preventDefault(); void runSave() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [view, anyModalOpen, undo, redo, runSave])
+
+  // Last-resort guard: a browser-level close/reload with a write outstanding.
+  useEffect(() => {
+    if (saveState === 'saved') return
+    const warn = (e) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [saveState])
+
+  /** Rename/publish/archive edits from the list view: immediate, not undoable. */
+  const patchQuizById = (id, patch) => {
+    const q = getQuiz(id)
+    if (!q) return
+    writeQuiz({ ...q, ...patch })
   }
   const patchNode = (qid, nid, patch) => {
-    let next
-    setQuizzes((qs) => qs.map((q) => { if (q.id !== qid) return q; next = { ...q, nodes: q.nodes.map((n) => n.id === nid ? { ...n, ...patch } : n) }; return next }))
-    clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => { if (next) saveQuiz({ id: qid, patch: quizPatch(next) }) }, 450)
+    const q = getQuiz(qid)
+    if (!q) return
+    pushUndo(q)
+    writeQuiz({ ...q, nodes: q.nodes.map((n) => (n.id === nid ? { ...n, ...patch } : n)) })
   }
 
-  const openQuiz = (id) => { setCurrentQuizId(id); const q = quizzes.find((x) => x.id === id); if (q?.steps[0]) setSelectedStepKey(q.steps[0].key); setView('builder') }
+  const openQuiz = (id) => {
+    setCurrentQuizId(id)
+    const q = getQuiz(id)
+    if (q?.steps[0]) setSelectedStepKey(q.steps[0].key)
+    // Undo history is per editing session: carrying it across quizzes would let
+    // an undo write one quiz's structure while a different one is open.
+    resetHistory()
+    setView('builder')
+  }
   const cloneQuizHandler = (id) => { cloneQuiz({ id }).then((res) => { if (res.ok) router.refresh(); else setToast({ message: res.error, type: 'error' }) }) }
   const deleteQuizHandler = (id) => setPendingDelete({ kind: 'quiz', id })
   const togglePublish = (id) => {
-    const q = quizzes.find((x) => x.id === id)
+    const q = getQuiz(id)
     if (!q) return
-    setQuizzes((qs) => qs.map((x) => x.id === id ? { ...x, isPublished: !x.isPublished } : x))
-    saveQuiz({ id, patch: { is_published: !q.isPublished } }).then(() => router.refresh())
+    // An archived quiz must never be publishable: archive means retired, and a
+    // retired quiz that still serves traffic is the exact state to prevent.
+    if (q.isArchived) { setToast({ message: 'Restore this quiz before publishing it.', type: 'warning' }); return }
+    const isPublished = !q.isPublished
+    applyQuizzes(quizzesRef.current.map((x) => (x.id === id ? { ...x, isPublished } : x)))
+    saveQuiz({ id, patch: { is_published: isPublished } }).then((res) => {
+      if (!res?.ok) {
+        // Roll the optimistic flip back rather than showing a state the server
+        // did not accept.
+        applyQuizzes(quizzesRef.current.map((x) => (x.id === id ? { ...x, isPublished: !isPublished } : x)))
+        setToast({ message: `Could not ${isPublished ? 'publish' : 'unpublish'}: ${res?.error || 'unknown error'}`, type: 'error' })
+        return
+      }
+      router.refresh()
+    })
+  }
+  const archiveQuizHandler = (id, archived) => setPendingArchive({ id, archived })
+  const confirmArchive = () => {
+    if (!pendingArchive) return
+    const { id, archived } = pendingArchive
+    setPendingArchive(null)
+    const q = getQuiz(id)
+    if (!q) return
+    const optimistic = { ...q, isArchived: archived, isPublished: archived ? false : q.isPublished, archivedAt: archived ? new Date().toISOString() : null }
+    applyQuizzes(quizzesRef.current.map((x) => (x.id === id ? optimistic : x)))
+    // After a restore the quiz leaves the Archived list, so follow it over to
+    // Active rather than leaving the user looking at where it used to be.
+    if (!archived) setQuizScope('active')
+    setQuizArchived({ id, archived }).then((res) => {
+      if (!res?.ok) {
+        applyQuizzes(quizzesRef.current.map((x) => (x.id === id ? q : x)))
+        setToast({ message: `Could not ${archived ? 'archive' : 'restore'}: ${res?.error || 'unknown error'}`, type: 'error' })
+        return
+      }
+      setToast({ message: archived ? 'Quiz archived and unpublished.' : 'Quiz restored.', type: 'success' })
+      router.refresh()
+    })
   }
   const createQuizHandler = () => {
-    const q = { name: 'New Quiz', slug: `quiz-${Date.now().toString(36)}`, isPublished: false, tiers: [{ id: genId('t'), name: 'Tier 1', color: T.success }], steps: [{ key: 'welcome', label: 'Welcome' }], nodes: [], customFields: JSON.parse(JSON.stringify(currentQuiz?.customFields || [])) }
+    const q = { name: 'New Quiz', slug: `quiz-${Date.now().toString(36)}`, isPublished: false, isArchived: false, tiers: [{ id: genId('t'), name: 'Tier 1', color: T.success }], steps: [{ key: 'welcome', label: 'Welcome' }], nodes: [], customFields: JSON.parse(JSON.stringify(currentQuiz?.customFields || [])) }
     createQuiz({ quiz: q }).then((res) => {
       if (!res.ok) { setToast({ message: res.error, type: 'error' }); return }
-      setQuizzes((arr) => [...arr, { ...q, id: res.id }])
+      applyQuizzes([...quizzesRef.current, { ...q, id: res.id }])
       openQuiz(res.id)
     })
   }
@@ -482,43 +786,155 @@ export function QuizBuilderApp({ initialQuizzes, initialDeployments, brands }) {
     })
   }
 
-  const updateStepOrder = (order) => patchQuiz(currentQuizId, { steps: order.map((k) => currentQuiz.steps.find((s) => s.key === k)) })
-  const renameStep = (key, newLabel) => patchQuiz(currentQuizId, { steps: currentQuiz.steps.map((s) => s.key === key ? { ...s, label: newLabel } : s) })
+  const renameStep = (key, newLabel) => mutateQuiz((q) => ({ ...q, steps: q.steps.map((s) => (s.key === key ? { ...s, label: newLabel } : s)) }))
+
+  // --- structural edits, all delegated to quiz-graph ------------------------
+  const moveStepHandler = (stepKey, delta) => mutateQuiz((q) => moveStepBy(q, stepKey, delta))
+
+  const duplicateStepHandler = (stepKey) => {
+    const q = getQuiz(currentQuizId)
+    if (!q) return
+    const res = duplicateStep(q, stepKey, genId)
+    if (!res) return
+    pushUndo(q)
+    writeQuiz(res.quiz)
+    setSelectedStepKey(res.newStepKey)
+    setToast({ message: `Step duplicated with ${res.clonedNodeIds.length} variant${res.clonedNodeIds.length === 1 ? '' : 's'}.`, type: 'success' })
+  }
+
+  const duplicateNodeHandler = (nodeId) => {
+    const q = getQuiz(currentQuizId)
+    if (!q) return
+    const res = duplicateNode(q, nodeId, genId)
+    if (!res.ok) {
+      setToast({
+        message: res.reason === 'no_free_slot'
+          ? 'This step is full: every tier and the SHARED cell already have a variant. Duplicate the step instead, or free a cell.'
+          : 'Could not find that variant.',
+        type: 'warning',
+      })
+      return
+    }
+    pushUndo(q)
+    writeQuiz(res.quiz)
+    setSelectedNodeId(res.newNodeId)
+    setToast({
+      message: res.assignedTiers.length === 0
+        ? 'Variant duplicated into the SHARED cell.'
+        : `Variant duplicated into ${q.tiers.find((t) => t.id === res.assignedTiers[0])?.name || 'the next free tier'}.`,
+      type: 'success',
+    })
+  }
+
+  /** Create a custom field from inside a node editor. Returns the result so the
+   *  caller can surface a validation message and select the new key. */
+  const createCustomField = useCallback((seed) => {
+    const q = getQuiz(currentQuizId)
+    if (!q) return { ok: false, error: 'No quiz is open.' }
+    const key = (seed?.key ?? '').trim()
+    const field = key
+      ? { id: genId('cf'), key, label: (seed.label ?? '').trim() || key, type: seed.type || 'text', options: seed.options ?? [] }
+      : newCustomField(q, { label: seed?.label, type: seed?.type }, genId)
+    const res = upsertCustomField(q, field)
+    if (!res.ok) return res
+    pushUndo(q)
+    writeQuiz(res.quiz)
+    setToast({ message: `Created field {{${res.field.key}}}`, type: 'success' })
+    return res
+  }, [currentQuizId, getQuiz, pushUndo, writeQuiz])
   const baseNewNode = (typeMeta, stepKey, tiers) => {
     const nodeType = NODE_TYPE_FOR_QTYPE[typeMeta.id] || 'question'
     const visibleByDef = VISIBLE_BY_DEFAULT[nodeType]
     return { id: genId('n'), stepKey, tiers, type: nodeType, fieldName: `field_${Date.now().toString(36).slice(-4)}`, questionType: typeMeta.id, headline: 'New Question', question: '', subheadline: '', isVisible: visibleByDef, answers: nodeType === 'question' ? [mkA('Answer 1'), mkA('Answer 2')] : nodeType === 'form' ? [mkA('Submitted')] : [], formFields: nodeType === 'form' ? defaultLeadFormFields() : undefined, conditions: nodeType === 'decision' ? [] : undefined, webhookMethod: (nodeType === 'webhook' || nodeType === 'verification') ? 'POST' : undefined, webhookUrl: '', webhookHeaders: [], webhookPayload: '', responseMappings: [], redirect: nodeType === 'endpoint' ? { mode: 'none', url: '', buttonText: 'Continue' } : undefined, dynamicContent: [], ai: { enabled: false }, enterScript: '', exitScript: '' }
   }
   const handleAddStepPick = (typeMeta) => {
-    const newStepKey = `step_${Date.now().toString(36)}`
-    const newNode = { ...baseNewNode(typeMeta, newStepKey, []), tiers: [] }
-    patchQuiz(currentQuizId, { steps: [...currentQuiz.steps, { key: newStepKey, label: typeMeta.name }], nodes: [...currentQuiz.nodes, newNode] })
-    setSelectedStepKey(newStepKey); setSelectedNodeId(newNode.id); setShowAddStep(false)
+    const newStepKey = genId('step')
+    let newNodeId = null
+    mutateQuiz((q) => {
+      const newNode = { ...baseNewNode(typeMeta, newStepKey, []), tiers: [] }
+      newNodeId = newNode.id
+      return { ...q, steps: [...q.steps, { key: newStepKey, label: typeMeta.name }], nodes: [...q.nodes, newNode] }
+    })
+    setSelectedStepKey(newStepKey)
+    if (newNodeId) setSelectedNodeId(newNodeId)
+    setShowAddStep(false)
   }
   const addVariantToCell = (stepKey, tiers) => { setPendingTiers({ stepKey, tiers }); setShowAddStep(true) }
-  const addVariantToStep = (stepKey) => addVariantToCell(stepKey, [])
   const handleAddVariantPick = (typeMeta) => {
     if (!pendingTiers) return handleAddStepPick(typeMeta)
     const { stepKey, tiers } = pendingTiers
-    const newNode = baseNewNode(typeMeta, stepKey, tiers)
-    patchQuiz(currentQuizId, { nodes: [...currentQuiz.nodes, newNode] })
-    setSelectedNodeId(newNode.id); setShowAddStep(false); setPendingTiers(null)
+    let newNodeId = null
+    mutateQuiz((q) => {
+      const newNode = baseNewNode(typeMeta, stepKey, tiers)
+      newNodeId = newNode.id
+      return { ...q, nodes: [...q.nodes, newNode] }
+    })
+    if (newNodeId) setSelectedNodeId(newNodeId)
+    setShowAddStep(false)
+    setPendingTiers(null)
   }
+
   const deleteStepRequest = (key) => setPendingStepDelete(key)
-  const confirmDeleteStep = () => { if (!pendingStepDelete) return; patchQuiz(currentQuizId, { steps: currentQuiz.steps.filter((s) => s.key !== pendingStepDelete), nodes: currentQuiz.nodes.filter((n) => n.stepKey !== pendingStepDelete) }); if (selectedStepKey === pendingStepDelete) setSelectedStepKey(null); setPendingStepDelete(null) }
+  const pendingStepInfo = useMemo(() => {
+    if (!pendingStepDelete || !currentQuiz) return null
+    const step = currentQuiz.steps.find((s) => s.key === pendingStepDelete)
+    const preview = deleteStep(currentQuiz, pendingStepDelete)
+    return { label: step?.label || 'this step', variants: preview.deletedNodeIds.length, refs: preview.clearedRefs }
+  }, [pendingStepDelete, currentQuiz])
+  const confirmDeleteStep = () => {
+    if (!pendingStepDelete) return
+    const key = pendingStepDelete
+    setPendingStepDelete(null)
+    const q = getQuiz(currentQuizId)
+    if (!q) return
+    const res = deleteStep(q, key)
+    pushUndo(q)
+    writeQuiz(res.quiz)
+    if (selectedStepKey === key) setSelectedStepKey(null)
+    if (res.deletedNodeIds.includes(selectedNodeId)) setSelectedNodeId(null)
+    if (res.clearedRefs > 0) {
+      setToast({ message: `Step deleted. ${res.clearedRefs} route${res.clearedRefs === 1 ? '' : 's'} that pointed at it ${res.clearedRefs === 1 ? 'was' : 'were'} cleared.`, type: 'info' })
+    }
+  }
+
   const saveNode = (node) => patchNode(currentQuizId, node.id, node)
-  const deleteNode = (nid) => patchQuiz(currentQuizId, { nodes: currentQuiz.nodes.filter((n) => n.id !== nid) })
+  const deleteNode = (nid) => {
+    mutateQuiz((q) => ({ ...q, nodes: q.nodes.filter((n) => n.id !== nid) }))
+    if (selectedNodeId === nid) setSelectedNodeId(null)
+  }
 
   const confirmDelete = () => {
     if (!pendingDelete) return
     const { kind, id } = pendingDelete
-    if (kind === 'quiz') { deleteQuiz({ id }).then((res) => { if (res.ok) { setQuizzes((qs) => qs.filter((q) => q.id !== id)); router.refresh() } else setToast({ message: res.error, type: 'error' }) }) }
+    if (kind === 'quiz') { deleteQuiz({ id }).then((res) => { if (res.ok) { applyQuizzes(quizzesRef.current.filter((q) => q.id !== id)); router.refresh() } else setToast({ message: res.error, type: 'error' }) }) }
     if (kind === 'deployment') { deleteQuizDeployment({ id }).then((res) => { if (res.ok) { setDeployments((ds) => ds.filter((d) => d.id !== id)); router.refresh() } else setToast({ message: res.error, type: 'error' }) }) }
     setPendingDelete(null)
   }
 
-  const handleBackFromBuilder = () => setLeaveBuilderReq(true)
-  const doLeaveBuilder = () => { clearTimeout(saveTimer.current); if (currentQuiz) saveQuiz({ id: currentQuiz.id, patch: quizPatch(currentQuiz) }).then(() => router.refresh()); setLeaveBuilderReq(false); setView('list'); setCurrentQuizId(null); setSelectedStepKey(null); setSelectedNodeId(null); setTab('quizzes') }
+  const exitBuilder = () => {
+    setLeaveBuilderReq(false)
+    setView('list')
+    setCurrentQuizId(null)
+    setSelectedStepKey(null)
+    setSelectedNodeId(null)
+    resetHistory()
+    setTab('quizzes')
+  }
+
+  /**
+   * Back out of the builder. The requested behaviour: no dialog when there is
+   * nothing to save. A pending write is flushed silently first; only a write
+   * that has actually FAILED is worth interrupting the user for, because that is
+   * the one case where leaving loses work.
+   */
+  const handleBackFromBuilder = async () => {
+    if (saveState === 'saved') { exitBuilder(); router.refresh(); return }
+    if (saveState === 'error') { setLeaveBuilderReq(true); return }
+    const ok = await runSave()
+    if (!ok) { setLeaveBuilderReq(true); return }
+    exitBuilder()
+    router.refresh()
+  }
 
   const previewBrand = (previewDeploymentId ? brands.find((b) => b.id === deployments.find((d) => d.id === previewDeploymentId)?.brandId) : null) || brands.find((b) => deployments.find((d) => d.quizId === currentQuiz?.id && d.brandId === b.id)) || brands[0]
   const previewDep = previewDeploymentId ? deployments.find((d) => d.id === previewDeploymentId) : deployments.find((d) => d.quizId === currentQuiz?.id)
@@ -534,37 +950,133 @@ export function QuizBuilderApp({ initialQuizzes, initialDeployments, brands }) {
       onPreview={() => { setPreviewSource('builder'); setPreviewDeploymentId(null); setView('preview') }}
       onPublish={() => togglePublish(currentQuizId)}
       isPublished={currentQuiz?.isPublished}
+      saveState={saveState}
+      onSave={() => { void runSave() }}
+      onUndo={undo}
+      onRedo={redo}
+      canUndo={undoStack.length > 0}
+      canRedo={redoStack.length > 0}
       onBackToBuilder={() => { if (previewSource === 'list-deployments') { setView('list'); setTab('deployments') } else if (previewSource === 'list-quizzes') { setView('list'); setTab('quizzes') } else { setView('builder') } }}
       previewSource={previewSource}
     />}
 
     {view === 'list' && <ListShell tab={tab} onTabChange={setTab} onCreate={tab === 'quizzes' ? createQuizHandler : createDeployment}>
-      {tab === 'quizzes' && <QuizListView quizzes={quizzes} brands={brands} deployments={deployments} onOpen={openQuiz} onClone={cloneQuizHandler} onDelete={deleteQuizHandler} onTogglePublish={togglePublish} onPreview={(id) => { openQuiz(id); setPreviewSource('list-quizzes'); setPreviewDeploymentId(null); setView('preview') }} onRename={(id, name) => patchQuiz(id, { name })} />}
+      {tab === 'quizzes' && <QuizListView
+        quizzes={quizzes}
+        brands={brands}
+        deployments={deployments}
+        scope={quizScope}
+        onScopeChange={setQuizScope}
+        onOpen={openQuiz}
+        onClone={cloneQuizHandler}
+        onDelete={deleteQuizHandler}
+        onTogglePublish={togglePublish}
+        onArchive={archiveQuizHandler}
+        onPreview={(id) => { openQuiz(id); setPreviewSource('list-quizzes'); setPreviewDeploymentId(null); setView('preview') }}
+        onRename={(id, name) => patchQuizById(id, { name })}
+      />}
       {tab === 'deployments' && <DeploymentListView deployments={deployments} quizzes={quizzes} brands={brands} onOpen={openDeployment} onClone={cloneDeploymentHandler} onDelete={deleteDeploymentHandler} onToggleStatus={toggleDeploymentStatus} onCopyEmbed={(id) => setShowEmbed(id)} onPreview={(id) => { const dep = deployments.find((d) => d.id === id); if (!dep) return; openQuiz(dep.quizId); setPreviewSource('list-deployments'); setPreviewDeploymentId(id); setView('preview') }} onRename={(id, name) => { const d = deployments.find((x) => x.id === id); setDeployments((ds) => ds.map((x) => x.id === id ? { ...x, name } : x)); if (d) saveQuizDeployment({ deployment: { ...d, name } }) }} />}
     </ListShell>}
 
     {view === 'builder' && currentQuiz && <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-      <StepListPanel quiz={currentQuiz} selectedStepKey={selectedStepKey} selectedNodeId={selectedNodeId} onSelectStep={setSelectedStepKey} onSelectNode={setSelectedNodeId} onUpdateStepOrder={updateStepOrder} onAddStepClick={() => { setPendingTiers(null); setShowAddStep(true) }} onDeleteStepRequest={deleteStepRequest} onAddVariant={addVariantToStep} onRenameStep={renameStep} onPreviewNode={setPreviewNodeId} />
-      <TierGridPanel quiz={currentQuiz} selectedNodeId={selectedNodeId} onSelectNode={setSelectedNodeId} onAddVariantToCell={addVariantToCell} />
+      <QuizFlowGrid
+        quiz={currentQuiz}
+        selectedStepKey={selectedStepKey}
+        selectedNodeId={selectedNodeId}
+        issues={graphIssues}
+        onSelectStep={setSelectedStepKey}
+        onSelectNode={setSelectedNodeId}
+        onPreviewNode={setPreviewNodeId}
+        onAddVariantToCell={addVariantToCell}
+        onAddStepClick={() => { setPendingTiers(null); setShowAddStep(true) }}
+        onMoveStep={moveStepHandler}
+        onDuplicateStep={duplicateStepHandler}
+        onDeleteStepRequest={deleteStepRequest}
+        onRenameStep={renameStep}
+        onDuplicateNode={duplicateNodeHandler}
+      />
     </div>}
 
     {view === 'preview' && currentQuiz && <QuizPreviewView quiz={currentQuiz} brand={previewBrand} deployment={previewDep} brands={brands} deployments={deployments} onBackToBuilder={() => setView('builder')} />}
 
     {view === 'deploymentEdit' && currentDeployment && <DeploymentEditor deployment={currentDeployment} isDraft={!!draftDeployment} quizzes={quizzes} brands={brands} onSave={persistDeployment} onBack={() => { setView('list'); setTab('deployments'); setDraftDeployment(null); setCurrentDeploymentId(null) }} />}
 
-    {selectedNode && <NodeEditorModal node={selectedNode} quiz={currentQuiz} customFields={customFields} onSave={saveNode} onClose={() => setSelectedNodeId(null)} onDelete={deleteNode} onRenameStep={renameStep} />}
+    {selectedNode && <NodeEditorModal
+      node={selectedNode}
+      quiz={currentQuiz}
+      customFields={customFields}
+      onSave={saveNode}
+      onClose={() => setSelectedNodeId(null)}
+      onDelete={deleteNode}
+      onRenameStep={renameStep}
+      onDuplicate={duplicateNodeHandler}
+      onCreateCustomField={createCustomField}
+    />}
 
     {previewNode && <NodePreviewModal node={previewNode} brand={brands[0]} customFields={customFields} onClose={() => setPreviewNodeId(null)} />}
 
-    {showSettings && currentQuiz && <SettingsModal quiz={currentQuiz} onClose={() => setShowSettings(false)} onSave={(q) => { patchQuiz(currentQuizId, q); setShowSettings(false) }} />}
+    {showSettings && currentQuiz && <SettingsModal quiz={currentQuiz} onClose={() => setShowSettings(false)} onSave={(q) => { mutateQuiz(() => q); setShowSettings(false) }} />}
 
     {showAddStep && <AddStepModal open={showAddStep} onClose={() => { setShowAddStep(false); setPendingTiers(null) }} onPick={pendingTiers ? handleAddVariantPick : handleAddStepPick} />}
 
     {showEmbed && <EmbedCodeModal deployment={deployments.find((d) => d.id === showEmbed)} onClose={() => setShowEmbed(null)} />}
 
-    <ConfirmDialog open={!!pendingDelete} title={`Delete this ${pendingDelete?.kind}?`} message="This cannot be undone." confirmText="Delete" onConfirm={confirmDelete} onCancel={() => setPendingDelete(null)} />
-    <ConfirmDialog open={!!pendingStepDelete} title="Delete this step?" message="All variants on this step will be removed." confirmText="Delete step" onConfirm={confirmDeleteStep} onCancel={() => setPendingStepDelete(null)} />
-    <ConfirmDialog open={leaveBuilderReq} title="Leave builder?" message="Your work is auto-saved. Save and leave will sync everything." confirmText="Save and Leave" cancelText="Stay" onConfirm={doLeaveBuilder} onCancel={() => setLeaveBuilderReq(false)} />
+    <ConfirmDialog
+      open={!!pendingDelete}
+      title={`Delete this ${pendingDelete?.kind}?`}
+      message={pendingDelete?.kind === 'quiz'
+        ? `This permanently deletes the quiz and its ${deployments.filter((d) => d.quizId === pendingDelete.id).length} deployment(s). Archive it instead if you only want it out of the way.`
+        : 'This cannot be undone.'}
+      confirmText="Delete"
+      onConfirm={confirmDelete}
+      onCancel={() => setPendingDelete(null)}
+    />
+    <ConfirmDialog
+      open={!!pendingStepDelete}
+      title={`Delete "${pendingStepInfo?.label || 'this step'}"?`}
+      message={[
+        pendingStepInfo?.variants
+          ? `${pendingStepInfo.variants} variant${pendingStepInfo.variants === 1 ? '' : 's'} on this step will be removed.`
+          : 'This step has no variants.',
+        pendingStepInfo?.refs
+          ? `${pendingStepInfo.refs} route${pendingStepInfo.refs === 1 ? '' : 's'} elsewhere point here and will be cleared so nothing routes to a missing step.`
+          : '',
+        'Undo is available afterwards.',
+      ].filter(Boolean).join(' ')}
+      confirmText="Delete step"
+      onConfirm={confirmDeleteStep}
+      onCancel={() => setPendingStepDelete(null)}
+    />
+    <ConfirmDialog
+      open={!!pendingArchive}
+      title={pendingArchive?.archived ? 'Archive this quiz?' : 'Restore this quiz?'}
+      message={pendingArchive?.archived
+        ? [
+          'It moves to the Archived tab and is unpublished so it cannot serve traffic.',
+          (() => {
+            const live = deployments.filter((d) => d.quizId === pendingArchive.id && d.status === 'live').length
+            return live > 0
+              ? `${live} deployment${live === 1 ? '' : 's'} still reference it and will stop serving this quiz.`
+              : ''
+          })(),
+          'Nothing is deleted; you can restore it at any time.',
+        ].filter(Boolean).join(' ')
+        : 'It returns to the Active tab as a draft. Publish it again when you are ready.'}
+      confirmText={pendingArchive?.archived ? 'Archive' : 'Restore'}
+      onConfirm={confirmArchive}
+      onCancel={() => setPendingArchive(null)}
+    />
+    <ConfirmDialog
+      open={leaveBuilderReq}
+      title="Your last change did not save"
+      message="Leaving now loses that change. Retry the save, or leave anyway."
+      confirmText="Retry save"
+      cancelText="Stay"
+      tertiaryText="Leave anyway"
+      onConfirm={async () => { const ok = await runSave(); if (ok) { exitBuilder(); router.refresh() } }}
+      onCancel={() => setLeaveBuilderReq(false)}
+      onTertiary={() => { exitBuilder(); router.refresh() }}
+    />
     <Toast message={toast?.message} type={toast?.type} onDismiss={() => setToast(null)} />
   </div>
 }

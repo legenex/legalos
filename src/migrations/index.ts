@@ -10,6 +10,7 @@ import * as migration_20260529_020000_pages_scheduled_publish from './20260529_0
 import * as migration_20260529_040000_new_block_types from './20260529_040000_new_block_types';
 import * as migration_20260529_060000_sites_global_blocks from './20260529_060000_sites_global_blocks';
 import * as migration_20260530_000000_locked_documents_media_rel from './20260530_000000_locked_documents_media_rel';
+import * as migration_20260728_120000_funnel_quizzes_archive from './20260728_120000_funnel_quizzes_archive';
 
 export const migrations = [
   {
@@ -71,5 +72,10 @@ export const migrations = [
     up: migration_20260530_000000_locked_documents_media_rel.up,
     down: migration_20260530_000000_locked_documents_media_rel.down,
     name: '20260530_000000_locked_documents_media_rel',
+  },
+  {
+    up: migration_20260728_120000_funnel_quizzes_archive.up,
+    down: migration_20260728_120000_funnel_quizzes_archive.down,
+    name: '20260728_120000_funnel_quizzes_archive',
   },
 ];

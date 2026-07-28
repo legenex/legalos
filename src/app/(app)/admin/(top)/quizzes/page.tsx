@@ -28,6 +28,8 @@ export default async function QuizzesPage() {
     name: r.name,
     slug: r.slug,
     isPublished: Boolean(r.is_published),
+    isArchived: Boolean(r.is_archived),
+    archivedAt: r.archived_at ?? null,
     tiers: Array.isArray(r.tiers) ? r.tiers : [],
     steps: Array.isArray(r.steps) ? r.steps : [],
     nodes: Array.isArray(r.nodes) ? r.nodes : [],

@@ -11,15 +11,113 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import {
   Hash, Search, PlayCircle, ChevronUp, ChevronDown, Send, Loader2, Plus, X, Trash2,
   Save, Eye, EyeOff, Zap, Sparkles, Edit3, Copy, Globe, Mail, Phone, ShieldCheck, Code2,
+  SkipForward, AlertTriangle,
 } from 'lucide-react'
 import { T, Btn, Input, Textarea, Select, Label, Pill, IconBtn, ConfirmDialog } from '../ui'
 import { NODE_CATEGORIES, findNodeTypeMeta, FIELD_TYPES, OPERATORS, HTTP_METHODS } from './config'
 import { VISIBLE_BY_DEFAULT, tierIsShared, isNodeVisible, genId, mkA, SEED_CUSTOM_FIELDS } from './seed-data'
+import { addTier, deleteTier, tierDeleteImpact, isRoutedOnly } from '@/lib/quiz-graph'
 import { aiTestPrompt } from '@/app/(app)/admin/(top)/quizzes/actions'
 
-export const FieldPicker = ({ customFields, onInsert, anchor = 'top-right' }) => {
+/**
+ * A custom-field <Select> that can also CREATE the field it is missing.
+ *
+ * Before this, every field reference in the node editor could only point at a
+ * field that already existed, so discovering a missing field mid-edit meant
+ * leaving the node, opening Settings > Custom Fields, creating it, and coming
+ * back. The creator is rendered inline (in flow, below the select) rather than
+ * as an absolutely-positioned popover on purpose: the node editor body is a
+ * scroll container, and a popover would be clipped by its overflow.
+ *
+ * `onCreateCustomField` receives the draft field, persists it on the quiz, and
+ * returns { ok, field } | { ok: false, error } - validation (duplicate/malformed
+ * key) lives in quiz-graph so this component never invents its own rules. When
+ * the prop is absent the create affordance simply does not render.
+ */
+export const FieldSelect = ({
+  value, onChange, customFields, onCreateCustomField,
+  filterType = null, placeholder = '- pick field -', style, disabled = false,
+}) => {
+  const [creating, setCreating] = useState(false)
+  const [draft, setDraft] = useState({ key: '', label: '', type: 'text' })
+  const [error, setError] = useState('')
+
+  const options = filterType ? (customFields || []).filter((cf) => cf.type === filterType) : (customFields || [])
+  // A value pointing at a field that was deleted (or filtered out) must stay
+  // visible rather than silently resetting the select to the first option.
+  const orphaned = value && !options.some((cf) => cf.key === value)
+
+  const start = () => {
+    setDraft({ key: '', label: '', type: filterType || 'text' })
+    setError('')
+    setCreating(true)
+  }
+  const submit = () => {
+    const res = onCreateCustomField?.({ ...draft, options: [] })
+    if (!res?.ok) { setError(res?.error || 'Could not create the field.'); return }
+    onChange(res.field.key)
+    setCreating(false)
+    setError('')
+  }
+
+  return <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0, ...style }}>
+    <div style={{ display: 'flex', gap: 5, alignItems: 'center', minWidth: 0 }}>
+      <Select value={value || ''} onChange={(e) => onChange(e.target.value)} disabled={disabled} style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontFamily: '"JetBrains Mono", monospace' }}>
+        <option value="">{placeholder}</option>
+        {orphaned && <option value={value}>{value} (missing)</option>}
+        {options.map((cf) => <option key={cf.id} value={cf.key}>{cf.key}{filterType === 'dropdown' ? ` (${(cf.options || []).length} options)` : ''}</option>)}
+      </Select>
+      {onCreateCustomField && !disabled && <button
+        type="button"
+        onClick={() => (creating ? setCreating(false) : start())}
+        title={filterType ? `Create a new ${filterType} field` : 'Create a new custom field'}
+        style={{ flexShrink: 0, background: creating ? T.primarySoft : T.bgElev2, border: `1px solid ${creating ? T.primary : T.border}`, borderRadius: 4, padding: '4px 7px', color: creating ? T.primary : T.textDim, cursor: 'pointer', fontSize: 10, fontFamily: '"JetBrains Mono", monospace', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+      >{creating ? <X size={10} /> : <Plus size={10} />} field</button>}
+    </div>
+
+    {orphaned && <div style={{ fontSize: 10, color: T.warning, fontFamily: '"JetBrains Mono", monospace' }}>
+      "{value}" is not {filterType ? `a ${filterType} field` : 'a defined custom field'} any more. Pick another or create it.
+    </div>}
+
+    {creating && <div style={{ padding: 10, backgroundColor: T.bg, border: `1px solid ${T.borderHover}`, borderRadius: 6, display: 'flex', flexDirection: 'column', gap: 7 }}>
+      <div style={{ fontSize: 10, color: T.textMute, fontFamily: '"JetBrains Mono", monospace', textTransform: 'uppercase', letterSpacing: '0.12em' }}>New custom field</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+        <Input
+          mono
+          autoFocus
+          value={draft.key}
+          onChange={(e) => setDraft((d) => ({ ...d, key: e.target.value }))}
+          onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') setCreating(false) }}
+          placeholder="field_key"
+          style={{ fontSize: 11 }}
+        />
+        <Input
+          value={draft.label}
+          onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
+          onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') setCreating(false) }}
+          placeholder="Label"
+          style={{ fontSize: 11 }}
+        />
+        <Select value={draft.type} onChange={(e) => setDraft((d) => ({ ...d, type: e.target.value }))} style={{ fontSize: 11 }}>
+          {FIELD_TYPES.map((ft) => <option key={ft.value} value={ft.value}>{ft.label}</option>)}
+        </Select>
+      </div>
+      {error && <div style={{ fontSize: 10.5, color: T.danger }}>{error}</div>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 10, color: T.textLow, flex: 1 }}>
+          Saved on the quiz immediately. {draft.type === 'dropdown' ? 'Add its options under Settings > Custom Fields.' : 'Auto-captures from ?' + (draft.key || 'key') + '= on load.'}
+        </span>
+        <Btn variant="ghost" size="xs" onClick={() => setCreating(false)}>Cancel</Btn>
+        <Btn variant="primary" size="xs" icon={Plus} onClick={submit}>Create</Btn>
+      </div>
+    </div>}
+  </div>
+}
+
+export const FieldPicker = ({ customFields, onInsert, anchor = 'top-right', onCreateCustomField }) => {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [createError, setCreateError] = useState('')
   const ref = useRef(null)
   useEffect(() => {
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
@@ -42,6 +140,24 @@ export const FieldPicker = ({ customFields, onInsert, anchor = 'top-right' }) =>
             <span style={{ fontSize: 10, color: T.textMute }}>{cf.label}</span>
           </button>)}
       </div>
+      {/* Create-and-insert, so a field that does not exist yet does not force a
+          trip out to Settings mid-edit. The typed search text seeds the key. */}
+      {onCreateCustomField && <div style={{ padding: 8, borderTop: `1px solid ${T.border}` }}>
+        <Btn
+          variant="secondary"
+          size="xs"
+          icon={Plus}
+          style={{ width: '100%', justifyContent: 'center' }}
+          onClick={() => {
+            const key = search.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '')
+            const res = onCreateCustomField({ key: key || undefined, label: search.trim() || undefined, type: 'text', options: [] })
+            if (!res?.ok) { setCreateError(res?.error || 'Could not create the field.'); return }
+            onInsert(`{{${res.field.key}}}`)
+            setOpen(false); setSearch(''); setCreateError('')
+          }}
+        >Create{search.trim() ? ` "${search.trim()}"` : ' new field'} and insert</Btn>
+        {createError && <div style={{ fontSize: 10, color: T.danger, marginTop: 5 }}>{createError}</div>}
+      </div>}
     </div>}
   </div>
 }
@@ -106,7 +222,7 @@ export const WebhookTester = ({ method, url, headers, payload, customFields }) =
   </div>
 }
 
-export const WebhookEditor = ({ draft, update, customFields }) => {
+export const WebhookEditor = ({ draft, update, customFields, onCreateCustomField }) => {
   const urlRef = useRef(null)
   const bodyRef = useRef(null)
   const headerValueRefs = useRef({})
@@ -189,14 +305,17 @@ export const WebhookEditor = ({ draft, update, customFields }) => {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         {responseMappings.length === 0 && <div style={{ fontSize: 10.5, color: T.textLow, padding: '8px 10px', border: `1px dashed ${T.border}`, borderRadius: 5, textAlign: 'center' }}>No response mappings set</div>}
-        {responseMappings.map((m) => <div key={m.id} style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+        {responseMappings.map((m) => <div key={m.id} style={{ display: 'flex', gap: 5, alignItems: 'flex-start' }}>
           <Input mono value={m.jsonPath} onChange={(e) => updMapping(m.id, { jsonPath: e.target.value })} placeholder="data.tier" style={{ flex: 1, fontSize: 11 }} />
-          <span style={{ color: T.textLow, fontFamily: '"JetBrains Mono", monospace', fontSize: 11 }}>{'->'}</span>
-          <Select value={m.fieldKey} onChange={(e) => updMapping(m.id, { fieldKey: e.target.value })} style={{ flex: 1, fontSize: 11, fontFamily: '"JetBrains Mono", monospace' }}>
-            <option value="">- pick field -</option>
-            {customFields.map((cf) => <option key={cf.id} value={cf.key}>{cf.key}</option>)}
-          </Select>
-          <IconBtn icon={X} onClick={() => rmMapping(m.id)} />
+          <span style={{ color: T.textLow, fontFamily: '"JetBrains Mono", monospace', fontSize: 11, paddingTop: 7 }}>{'->'}</span>
+          <FieldSelect
+            value={m.fieldKey}
+            onChange={(key) => updMapping(m.id, { fieldKey: key })}
+            customFields={customFields}
+            onCreateCustomField={onCreateCustomField}
+            style={{ flex: 1 }}
+          />
+          <IconBtn icon={X} onClick={() => rmMapping(m.id)} style={{ marginTop: 3 }} />
         </div>)}
       </div>
     </div>
@@ -205,7 +324,7 @@ export const WebhookEditor = ({ draft, update, customFields }) => {
   </div>
 }
 
-export const DynamicContentEditor = ({ rules, customFields, onChange }) => {
+export const DynamicContentEditor = ({ rules, customFields, onChange, onCreateCustomField }) => {
   const safe = rules || []
   const addRule = () => onChange([...safe, { id: genId('dc'), ifField: '', ifOperator: 'eq', ifValue: '', overrides: { headline: '', tagline: '', question: '', subheadline: '' } }])
   const updRule = (id, p) => onChange(safe.map((r) => r.id === id ? { ...r, ...p } : r))
@@ -226,11 +345,14 @@ export const DynamicContentEditor = ({ rules, customFields, onChange }) => {
         <IconBtn icon={ChevronDown} onClick={() => moveRule(i, 1)} />
         <IconBtn icon={Trash2} onClick={() => rmRule(rule.id)} style={{ color: T.danger }} />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: 6, marginBottom: 12 }}>
-        <Select value={rule.ifField} onChange={(e) => updRule(rule.id, { ifField: e.target.value })}>
-          <option value="">- if field -</option>
-          {customFields.map((cf) => <option key={cf.id} value={cf.key}>{cf.key}</option>)}
-        </Select>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: 6, marginBottom: 12, alignItems: 'start' }}>
+        <FieldSelect
+          value={rule.ifField}
+          onChange={(key) => updRule(rule.id, { ifField: key })}
+          customFields={customFields}
+          onCreateCustomField={onCreateCustomField}
+          placeholder="- if field -"
+        />
         <Select value={rule.ifOperator} onChange={(e) => updRule(rule.id, { ifOperator: e.target.value })}>
           {OPERATORS.map((op) => <option key={op.value} value={op.value}>{op.label}</option>)}
         </Select>
@@ -248,7 +370,7 @@ export const DynamicContentEditor = ({ rules, customFields, onChange }) => {
   </div>
 }
 
-export const AIEditor = ({ draft, customFields, update }) => {
+export const AIEditor = ({ draft, customFields, update, onCreateCustomField }) => {
   const ai = draft.ai || { enabled: false, prompt: '', outputField: '', model: 'claude-sonnet-4-6', sourceField: '' }
   const updAi = (p) => update({ ai: { ...ai, ...p } })
   const [busy, setBusy] = useState(false)
@@ -275,9 +397,15 @@ export const AIEditor = ({ draft, customFields, update }) => {
       <button onClick={() => updAi({ enabled: !ai.enabled })} style={{ padding: '7px 12px', borderRadius: 6, backgroundColor: ai.enabled ? `${T.purple}22` : T.bgElev2, border: `1px solid ${ai.enabled ? T.purple : T.border}`, color: ai.enabled ? T.purple : T.textMute, cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{ai.enabled ? 'ON' : 'OFF'}</button>
     </div>
     {ai.enabled && <>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <div><Label>Source Field (the input to analyze)</Label><Select value={ai.sourceField} onChange={(e) => updAi({ sourceField: e.target.value })}><option value="">- pick source -</option>{customFields.map((cf) => <option key={cf.id} value={cf.key}>{cf.key}</option>)}</Select></div>
-        <div><Label>Output Field (where the result is written)</Label><Select value={ai.outputField} onChange={(e) => updAi({ outputField: e.target.value })}><option value="">- pick output -</option>{customFields.map((cf) => <option key={cf.id} value={cf.key}>{cf.key}</option>)}</Select></div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'start' }}>
+        <div>
+          <Label>Source Field (the input to analyze)</Label>
+          <FieldSelect value={ai.sourceField} onChange={(key) => updAi({ sourceField: key })} customFields={customFields} onCreateCustomField={onCreateCustomField} placeholder="- pick source -" />
+        </div>
+        <div>
+          <Label>Output Field (where the result is written)</Label>
+          <FieldSelect value={ai.outputField} onChange={(key) => updAi({ outputField: key })} customFields={customFields} onCreateCustomField={onCreateCustomField} placeholder="- pick output -" />
+        </div>
       </div>
       <div><Label>Model</Label><Select value={ai.model} onChange={(e) => updAi({ model: e.target.value })}><option value="claude-sonnet-4-6">Claude Sonnet 4.6 (fast)</option><option value="claude-opus-4-7">Claude Opus 4.7 (most capable)</option><option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (cheapest)</option></Select></div>
       <div>
@@ -295,7 +423,7 @@ export const AIEditor = ({ draft, customFields, update }) => {
   </div>
 }
 
-export const NodeEditorModal = ({ node, quiz, customFields, onSave, onClose, onDelete, onRenameStep }) => {
+export const NodeEditorModal = ({ node, quiz, customFields, onSave, onClose, onDelete, onRenameStep, onDuplicate, onCreateCustomField }) => {
   const [draft, setDraft] = useState(node)
   const [tab, setTab] = useState('content')
   const [dirty, setDirty] = useState(false)
@@ -337,6 +465,21 @@ export const NodeEditorModal = ({ node, quiz, customFields, onSave, onClose, onD
   const visibleByDefault = VISIBLE_BY_DEFAULT[draft.type]
   const effectiveVisible = isNodeVisible(draft)
   const redirect = draft.redirect || { mode: 'none', url: '', buttonText: 'Continue' }
+
+  const routedOnly = isRoutedOnly(draft)
+  // An optional step is only reachable by an explicit route, so count the routes
+  // that actually target it. Routes originating on this same step are excluded:
+  // a sibling tier variant pointing here is a self-loop, not an entry point.
+  const inboundRoutes = useMemo(() => {
+    let n = 0
+    for (const other of quiz.nodes) {
+      if (other.stepKey === draft.stepKey) continue
+      for (const a of other.answers || []) if (a.nextStepKey === draft.stepKey) n += 1
+      for (const c of other.conditions || []) if (c.nextStepKey === draft.stepKey) n += 1
+      if (other.defaultNextStepKey === draft.stepKey) n += 1
+    }
+    return n
+  }, [quiz.nodes, draft.stepKey])
 
   const tabs = [
     { id: 'content', label: 'Content', show: true },
@@ -400,10 +543,14 @@ export const NodeEditorModal = ({ node, quiz, customFields, onSave, onClose, onD
             </>}
             {draft.questionType === 'dropdown' && <div>
               <Label>Dropdown Source (custom field)</Label>
-              <Select value={draft.dropdownField || ''} onChange={(e) => update({ dropdownField: e.target.value })}>
-                <option value="">- pick a custom field -</option>
-                {customFields.filter((cf) => cf.type === 'dropdown').map((cf) => <option key={cf.id} value={cf.key}>{cf.label} ({cf.options.length} options)</option>)}
-              </Select>
+              <FieldSelect
+                value={draft.dropdownField || ''}
+                onChange={(key) => update({ dropdownField: key })}
+                customFields={customFields}
+                onCreateCustomField={onCreateCustomField}
+                filterType="dropdown"
+                placeholder="- pick a custom field -"
+              />
               <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 6 }}>Manage options under Settings {'>'} Custom Fields</div>
             </div>}
             {isForm && <div style={{ padding: 12, backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 8 }}>
@@ -416,7 +563,7 @@ export const NodeEditorModal = ({ node, quiz, customFields, onSave, onClose, onD
             </div>}
           </div>}
 
-          {tab === 'dynamic' && <DynamicContentEditor rules={draft.dynamicContent} customFields={customFields} onChange={(rules) => update({ dynamicContent: rules })} />}
+          {tab === 'dynamic' && <DynamicContentEditor rules={draft.dynamicContent} customFields={customFields} onChange={(rules) => update({ dynamicContent: rules })} onCreateCustomField={onCreateCustomField} />}
 
           {tab === 'answers' && <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {draft.answers.map((answer, ai) => <div key={answer.id} style={{ border: `1px solid ${T.border}`, backgroundColor: T.bgElev, borderRadius: 8, padding: 12 }}>
@@ -433,14 +580,18 @@ export const NodeEditorModal = ({ node, quiz, customFields, onSave, onClose, onD
                 </div>
                 {answer.fieldMappings.length === 0 ? <div style={{ fontSize: 10.5, color: T.textLow, padding: '6px 8px', border: `1px dashed ${T.border}`, borderRadius: 5 }}>No fields set when this answer is selected</div> :
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                    {answer.fieldMappings.map((m, mi) => <div key={mi} style={{ display: 'flex', gap: 5 }}>
-                      <Select value={m.key} onChange={(e) => updFM(answer.id, mi, { key: e.target.value })} style={{ flex: 1, fontSize: 11, fontFamily: '"JetBrains Mono", monospace' }}>
-                        <option value="">- field -</option>
-                        {customFields.map((cf) => <option key={cf.id} value={cf.key}>{cf.key}</option>)}
-                      </Select>
-                      <span style={{ color: T.textLow, alignSelf: 'center', fontFamily: '"JetBrains Mono", monospace', fontSize: 12 }}>=</span>
+                    {answer.fieldMappings.map((m, mi) => <div key={mi} style={{ display: 'flex', gap: 5, alignItems: 'flex-start' }}>
+                      <FieldSelect
+                        value={m.key}
+                        onChange={(key) => updFM(answer.id, mi, { key })}
+                        customFields={customFields}
+                        onCreateCustomField={onCreateCustomField}
+                        placeholder="- field -"
+                        style={{ flex: 1 }}
+                      />
+                      <span style={{ color: T.textLow, fontFamily: '"JetBrains Mono", monospace', fontSize: 12, paddingTop: 7 }}>=</span>
                       <Input value={m.value} onChange={(e) => updFM(answer.id, mi, { value: e.target.value })} placeholder="value" style={{ flex: 1, fontSize: 11, fontFamily: '"JetBrains Mono", monospace' }} />
-                      <IconBtn icon={X} onClick={() => rmFM(answer.id, mi)} />
+                      <IconBtn icon={X} onClick={() => rmFM(answer.id, mi)} style={{ marginTop: 3 }} />
                     </div>)}
                   </div>}
               </div>
@@ -494,11 +645,14 @@ export const NodeEditorModal = ({ node, quiz, customFields, onSave, onClose, onD
                 <Pill color={T.textLow}>IF #{ci + 1}</Pill><div style={{ flex: 1 }} />
                 <IconBtn icon={Trash2} onClick={() => rmCond(cond.id)} />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
-                <Select value={cond.field} onChange={(e) => updCond(cond.id, { field: e.target.value })}>
-                  <option value="">- field -</option>
-                  {customFields.map((cf) => <option key={cf.id} value={cf.key}>{cf.key}</option>)}
-                </Select>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: 6, marginBottom: 8, alignItems: 'start' }}>
+                <FieldSelect
+                  value={cond.field}
+                  onChange={(key) => updCond(cond.id, { field: key })}
+                  customFields={customFields}
+                  onCreateCustomField={onCreateCustomField}
+                  placeholder="- field -"
+                />
                 <Select value={cond.operator} onChange={(e) => updCond(cond.id, { operator: e.target.value })}>
                   {OPERATORS.map((op) => <option key={op.value} value={op.value}>{op.label}</option>)}
                 </Select>
@@ -522,7 +676,7 @@ export const NodeEditorModal = ({ node, quiz, customFields, onSave, onClose, onD
             </div>
           </div>}
 
-          {tab === 'webhook' && <WebhookEditor draft={draft} update={update} customFields={customFields} />}
+          {tab === 'webhook' && <WebhookEditor draft={draft} update={update} customFields={customFields} onCreateCustomField={onCreateCustomField} />}
 
           {tab === 'redirect' && <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div style={{ fontSize: 11.5, color: T.textMute, lineHeight: 1.5 }}>Endpoint nodes can redirect the user to an external URL. Choose how the redirect should happen.</div>
@@ -558,6 +712,42 @@ export const NodeEditorModal = ({ node, quiz, customFields, onSave, onClose, onD
               </div>
               <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.border}` }}>Default for {draft.type} nodes: {visibleByDefault ? 'visible' : 'hidden'}</div>
             </div>
+
+            {/* Optional question: skipped by normal step-order advance, entered
+                only when an answer, condition, or default route targets it. */}
+            <div style={{ padding: 14, backgroundColor: T.bgElev, border: `1px solid ${routedOnly ? T.warning : T.border}`, borderRadius: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 6, backgroundColor: routedOnly ? `${T.warning}22` : T.bgElev2, color: routedOnly ? T.warning : T.textMute, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <SkipForward size={14} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, color: T.text, fontWeight: 600 }}>Optional question</div>
+                  <div style={{ fontSize: 11.5, color: T.textMute, marginTop: 2 }}>
+                    {routedOnly
+                      ? 'Skipped when the quiz advances in step order. Only shown when an earlier answer, a condition, or a default route sends the user here.'
+                      : 'Currently shown to everyone who reaches this step in order. Turn on to make it reachable only by explicit routing.'}
+                  </div>
+                </div>
+                <button
+                  onClick={() => update({ routedOnly: !routedOnly })}
+                  style={{ padding: '8px 14px', borderRadius: 6, backgroundColor: routedOnly ? `${T.warning}22` : T.bgElev2, border: `1px solid ${routedOnly ? T.warning : T.border}`, color: routedOnly ? T.warning : T.textMute, cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}
+                >{routedOnly ? 'OPTIONAL' : 'ALWAYS'}</button>
+              </div>
+              <div style={{ fontSize: 10.5, marginTop: 10, paddingTop: 8, borderTop: `1px solid ${T.border}`, display: 'flex', alignItems: 'flex-start', gap: 6, color: routedOnly && inboundRoutes === 0 ? T.danger : T.textLow }}>
+                {routedOnly && inboundRoutes === 0 && <AlertTriangle size={11} style={{ flexShrink: 0, marginTop: 1 }} />}
+                <span>
+                  {inboundRoutes === 0
+                    ? routedOnly
+                      ? 'Nothing routes to this step, so it can never be reached. Point an answer at it, or turn Optional off.'
+                      : 'Nothing routes to this step; it is reached by step order only.'
+                    : `${inboundRoutes} route${inboundRoutes === 1 ? '' : 's'} elsewhere in the quiz target this step.`}
+                </span>
+              </div>
+              {routedOnly && quiz.tiers.length > 0 && <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 6 }}>
+                Set per variant: another tier&apos;s variant on this step can stay non-optional, so only the tiers using this variant skip it.
+              </div>}
+            </div>
+
             <div>
               <Label>Active Tiers (which tiers see this variant)</Label>
               <div style={{ display: 'flex', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
@@ -609,10 +799,17 @@ export const NodeEditorModal = ({ node, quiz, customFields, onSave, onClose, onD
             <div><Label>Exit Script (runs when answer is submitted)</Label><Textarea value={draft.exitScript || ''} onChange={(e) => update({ exitScript: e.target.value })} placeholder={'// runs on exit'} style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 11.5, minHeight: 100 }} /></div>
           </div>}
 
-          {tab === 'ai' && <AIEditor draft={draft} customFields={customFields} update={update} />}
+          {tab === 'ai' && <AIEditor draft={draft} customFields={customFields} update={update} onCreateCustomField={onCreateCustomField} />}
         </div>
         <div style={{ padding: '14px 22px', borderTop: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 8 }}>
           <Btn variant="danger" size="md" icon={Trash2} onClick={() => setDeleteReq(true)}>Delete Variant</Btn>
+          {onDuplicate && <Btn
+            variant="secondary"
+            size="md"
+            icon={Copy}
+            onClick={() => { persist(); onDuplicate(node.id) }}
+            title="Save this variant, then copy it into the next free cell on this step"
+          >Duplicate</Btn>}
           <div style={{ flex: 1 }} />
           <Btn variant="ghost" size="md" onClick={handleClose}>Cancel</Btn>
           <Btn variant="secondary" size="md" icon={Save} onClick={handleSave} style={{ opacity: dirty ? 1 : 0.6 }}>Save</Btn>
@@ -730,6 +927,7 @@ export const SettingsModal = ({ quiz, onClose, onSave }) => {
   const [dirty, setDirty] = useState(false)
   const [editingField, setEditingField] = useState(null)
   const [pendingFieldDelete, setPendingFieldDelete] = useState(null)
+  const [pendingTierDelete, setPendingTierDelete] = useState(null)
   useEffect(() => { setDraft(quiz); setDirty(false) }, [quiz])
   const update = (p) => { setDraft((d) => ({ ...d, ...p })); setDirty(true) }
   const updIntegrations = (p) => update({ integrations: { ...(draft.integrations || {}), ...p } })
@@ -741,6 +939,37 @@ export const SettingsModal = ({ quiz, onClose, onSave }) => {
   const duplicateField = (cf) => update({ customFields: [...customFields, { ...cf, id: genId('cf'), key: `${cf.key}_copy`, label: `${cf.label} (copy)` }] })
   const newField = () => { const f = { id: genId('cf'), key: `field_${customFields.length}`, label: 'New Field', type: 'text', options: [] }; update({ customFields: [...customFields, f] }); setEditingField(f) }
   const confirmFieldDelete = () => { if (pendingFieldDelete) update({ customFields: customFields.filter((cf) => cf.id !== pendingFieldDelete) }); setPendingFieldDelete(null) }
+
+  // Deleting a tier is not just a list removal: variants scoped only to it are
+  // removed with it (leaving them would silently make them SHARED, showing a
+  // tier-specific question to everyone), "set tier" answers pointing at it are
+  // cleared, and the remaining default names are resequenced. quiz-graph owns
+  // all of that so the impact stated in the dialog is computed by the same walk
+  // the delete performs.
+  const pendingTier = pendingTierDelete ? draft.tiers.find((t) => t.id === pendingTierDelete) : null
+  const pendingImpact = pendingTierDelete ? tierDeleteImpact(draft, pendingTierDelete) : null
+  const confirmTierDelete = () => {
+    if (!pendingTierDelete) return
+    setDraft((d) => deleteTier(d, pendingTierDelete).quiz)
+    setDirty(true)
+    setPendingTierDelete(null)
+  }
+  const tierDeleteMessage = () => {
+    if (!pendingImpact) return ''
+    const parts = []
+    if (pendingImpact.orphanedNodeIds.length > 0) {
+      parts.push(`${pendingImpact.orphanedNodeIds.length} variant${pendingImpact.orphanedNodeIds.length === 1 ? '' : 's'} exist only for this tier and will be deleted.`)
+    }
+    if (pendingImpact.narrowedNodeIds.length > 0) {
+      parts.push(`${pendingImpact.narrowedNodeIds.length} variant${pendingImpact.narrowedNodeIds.length === 1 ? '' : 's'} also serve other tiers and will just lose this one.`)
+    }
+    if (pendingImpact.clearedSetTier > 0) {
+      parts.push(`${pendingImpact.clearedSetTier} answer${pendingImpact.clearedSetTier === 1 ? '' : 's'} that set this tier will be cleared.`)
+    }
+    if (parts.length === 0) parts.push('No variants or answers reference this tier.')
+    parts.push('Remaining tiers keep their ids and are renumbered.')
+    return parts.join(' ')
+  }
 
   return <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 100, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
     <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 880, maxHeight: '90vh', backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -760,13 +989,26 @@ export const SettingsModal = ({ quiz, onClose, onSave }) => {
         </div>}
 
         {tab === 'tiers' && <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {draft.tiers.map((t, i) => <div key={t.id} style={{ padding: 10, backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input type="color" value={t.color} onChange={(e) => { const a = [...draft.tiers]; a[i] = { ...t, color: e.target.value }; update({ tiers: a }) }} style={{ width: 28, height: 28, padding: 1, borderRadius: 4, border: `1px solid ${T.border}`, backgroundColor: T.bg }} />
-            <Input value={t.name} onChange={(e) => { const a = [...draft.tiers]; a[i] = { ...t, name: e.target.value }; update({ tiers: a }) }} style={{ flex: 1 }} />
-            <Input mono value={t.id} disabled style={{ width: 90, opacity: 0.6 }} />
-            <IconBtn icon={Trash2} onClick={() => update({ tiers: draft.tiers.filter((x) => x.id !== t.id) })} />
-          </div>)}
-          <Btn variant="secondary" size="md" icon={Plus} onClick={() => update({ tiers: [...draft.tiers, { id: genId('t'), name: `Tier ${draft.tiers.length + 1}`, color: '#a78bfa' }] })}>Add Tier</Btn>
+          <div style={{ fontSize: 11.5, color: T.textMute }}>
+            Tier ids are permanent (every variant references its tiers by id). Deleting a tier resequences the remaining
+            <code style={{ fontFamily: '"JetBrains Mono", monospace', color: T.textDim, margin: '0 4px' }}>Tier N</code>
+            names so the numbering never shows gaps; names you have customised are left alone.
+          </div>
+          {draft.tiers.map((t, i) => {
+            const impact = tierDeleteImpact(draft, t.id)
+            const variantCount = impact.orphanedNodeIds.length + impact.narrowedNodeIds.length
+            return <div key={t.id} style={{ padding: 10, backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="color" value={t.color} onChange={(e) => { const a = [...draft.tiers]; a[i] = { ...t, color: e.target.value }; update({ tiers: a }) }} style={{ width: 28, height: 28, padding: 1, borderRadius: 4, border: `1px solid ${T.border}`, backgroundColor: T.bg, flexShrink: 0 }} />
+              <Input value={t.name} onChange={(e) => { const a = [...draft.tiers]; a[i] = { ...t, name: e.target.value }; update({ tiers: a }) }} style={{ flex: 1 }} />
+              <Pill color={variantCount > 0 ? T.info : T.textLow}>{variantCount} variant{variantCount === 1 ? '' : 's'}</Pill>
+              <Input mono value={t.id} disabled style={{ width: 90, opacity: 0.6, flexShrink: 0 }} />
+              <IconBtn icon={Trash2} onClick={() => setPendingTierDelete(t.id)} style={{ color: T.danger }} />
+            </div>
+          })}
+          {draft.tiers.length === 0 && <div style={{ padding: 16, textAlign: 'center', fontSize: 11.5, color: T.textLow, border: `1px dashed ${T.border}`, borderRadius: 6 }}>
+            No tiers. Every step shows its SHARED variant to all visitors.
+          </div>}
+          <Btn variant="secondary" size="md" icon={Plus} onClick={() => { setDraft((d) => addTier(d, genId)); setDirty(true) }}>Add Tier</Btn>
         </div>}
 
         {tab === 'fields' && <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -872,5 +1114,14 @@ export const SettingsModal = ({ quiz, onClose, onSave }) => {
     </div>
     {editingField && <CustomFieldEditModal field={editingField} onSave={saveField} onClose={() => setEditingField(null)} />}
     <ConfirmDialog open={!!pendingFieldDelete} title="Delete custom field?" message="This cannot be undone." confirmText="Delete" onConfirm={confirmFieldDelete} onCancel={() => setPendingFieldDelete(null)} />
+    <ConfirmDialog
+      open={!!pendingTierDelete}
+      title={`Delete ${pendingTier?.name || 'this tier'}?`}
+      message={tierDeleteMessage()}
+      confirmText="Delete tier"
+      cancelText="Keep tier"
+      onConfirm={confirmTierDelete}
+      onCancel={() => setPendingTierDelete(null)}
+    />
   </div>
 }

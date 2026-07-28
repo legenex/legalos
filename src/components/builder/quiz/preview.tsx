@@ -13,8 +13,10 @@ import { ICON_OPTIONS } from '../body-sections'
 import { findNodeTypeMeta } from './config'
 import {
   SEED_CUSTOM_FIELDS, applyDynamicContent, isNodeVisible, isWithin3MonthsOfToday,
-  nodesForStep, sharedNodeForStep, tierIsShared,
 } from './seed-data'
+import {
+  resolveNodeForStep, nextSequentialStepIndex, explicitStepIndex, entryStepIndex,
+} from '@/lib/quiz-graph'
 import { getTemplateConfig, renderAnswerButton, renderProgressIndicator, renderHeader } from './templates'
 import { onPrimaryText, getSafeTextColor, getSafeMutedColor, deriveBrandSurface } from '@/lib/builder/color-system'
 import { aiTestPrompt } from '@/app/(app)/admin/(top)/quizzes/actions'
@@ -339,7 +341,9 @@ export const NodePreviewModal = ({ node, brand, customFields, templateId = 'mini
 }
 
 export const QuizPreviewView = ({ quiz, brand, deployment, onBackToBuilder, brands, deployments }) => {
-  const [stepIdx, setStepIdx] = useState(0)
+  // Entry obeys the same skip rules as advancing, so a quiz whose first row is
+  // an optional question opens on the first step a visitor would really see.
+  const [stepIdx, setStepIdx] = useState(() => Math.max(entryStepIndex(quiz, null), 0))
   const [currentTier, setCurrentTier] = useState(null)
   const [fieldValues, setFieldValues] = useState({})
   const [history, setHistory] = useState([])
@@ -359,15 +363,13 @@ export const QuizPreviewView = ({ quiz, brand, deployment, onBackToBuilder, bran
   const renderMode = effectiveDeployment?.renderMode || 'standalone'
   const sections = effectiveDeployment?.bodySectionOverrides || effectiveBrand?.defaultBodySections || []
 
-  const currentNode = useMemo(() => {
-    const step = quiz.steps[stepIdx]
-    if (!step) return null
-    const variants = nodesForStep(quiz, step.key)
-    const shared = variants.find((v) => tierIsShared(v))
-    if (shared) return shared
-    if (currentTier) return variants.find((v) => v.tiers.includes(currentTier)) || null
-    return variants[0] || null
-  }, [quiz, stepIdx, currentTier])
+  // Node resolution and step sequencing both come from quiz-graph so the
+  // preview walks the flow exactly as the builder draws it (and, in turn,
+  // exactly as the public runtime will).
+  const currentNode = useMemo(
+    () => resolveNodeForStep(quiz, quiz.steps[stepIdx]?.key, currentTier),
+    [quiz, stepIdx, currentTier],
+  )
 
   useEffect(() => {
     if (!currentNode) return
@@ -375,7 +377,7 @@ export const QuizPreviewView = ({ quiz, brand, deployment, onBackToBuilder, bran
   }, [currentNode])
 
   const reset = () => {
-    setStepIdx(0); setCurrentTier(null); setHistory([])
+    setStepIdx(Math.max(entryStepIndex(quiz, null), 0)); setCurrentTier(null); setHistory([])
     const captured = {}
     customFields.forEach((cf) => { if (/^(utm_|ad_|campaign|source|medium|gclid|fbclid)/i.test(cf.key)) captured[cf.key] = `preview_${cf.key}` })
     setFieldValues(captured)
@@ -407,16 +409,28 @@ export const QuizPreviewView = ({ quiz, brand, deployment, onBackToBuilder, bran
 
     setFieldValues(newValues)
 
+    // Tier can change on this very answer, and the next step must be resolved
+    // against the NEW tier - otherwise a tier switch reads the outgoing tier's
+    // variants for one step.
+    const nextTier = answer.setTier || currentTier
+
     if (currentNode.type === 'decision' && currentNode.conditions) {
       for (const cond of currentNode.conditions) {
         const v = newValues[cond.field] || ''
         const ok = cond.operator === 'eq' ? v === cond.value : cond.operator === 'neq' ? v !== cond.value : cond.operator === 'contains' ? v.includes(cond.value) : cond.operator === 'is_empty' ? !v : cond.operator === 'is_not_empty' ? !!v : false
-        if (ok) { const ti = quiz.steps.findIndex((s) => s.key === cond.nextStepKey); if (ti >= 0) { setStepIdx(ti); return } }
+        // Explicit routing reaches optional steps on purpose.
+        if (ok) { const ti = explicitStepIndex(quiz, cond.nextStepKey); if (ti >= 0) { setStepIdx(ti); return } }
       }
-      if (currentNode.defaultNextStepKey) { const ti = quiz.steps.findIndex((s) => s.key === currentNode.defaultNextStepKey); if (ti >= 0) { setStepIdx(ti); return } }
+      const di = explicitStepIndex(quiz, currentNode.defaultNextStepKey)
+      if (di >= 0) { setStepIdx(di); return }
     }
-    if (answer.nextStepKey) { const ti = quiz.steps.findIndex((s) => s.key === answer.nextStepKey); if (ti >= 0) { setStepIdx(ti); return } }
-    if (stepIdx < quiz.steps.length - 1) setStepIdx(stepIdx + 1)
+    const ai = explicitStepIndex(quiz, answer.nextStepKey)
+    if (ai >= 0) { setStepIdx(ai); return }
+
+    // No explicit route: fall through in step order, skipping steps marked
+    // optional (routed-only) and steps with no variant for this tier.
+    const seq = nextSequentialStepIndex(quiz, stepIdx, nextTier)
+    if (seq >= 0) setStepIdx(seq)
   }
 
   const goBack = () => { if (!history.length) return; const last = history[history.length - 1]; setStepIdx(last.stepIdx); setCurrentTier(last.tier); setFieldValues(last.values); setHistory((h) => h.slice(0, -1)) }

@@ -32,6 +32,7 @@ export async function createQuiz(args: { quiz: Record<string, unknown> }) {
         name: q.name || 'New Quiz',
         slug: q.slug || `quiz-${Date.now().toString(36)}`,
         is_published: Boolean(q.isPublished),
+        is_archived: false,
         tiers: q.tiers ?? [],
         steps: q.steps ?? [],
         nodes: q.nodes ?? [],
@@ -73,6 +74,9 @@ export async function cloneQuiz(args: { id: string }) {
         name: `${src.name} (copy)`,
         slug: `${src.slug}-copy-${Date.now().toString(36).slice(-4)}`,
         is_published: false,
+        // A clone starts active even when cloned from an archived quiz: the
+        // point of cloning an archive is to bring the work back into use.
+        is_archived: false,
         tiers: src.tiers ?? [],
         steps: src.steps ?? [],
         nodes: src.nodes ?? [],
@@ -85,6 +89,37 @@ export async function cloneQuiz(args: { id: string }) {
     return { ok: true, id: String(created.id) }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'clone failed' }
+  }
+}
+
+/**
+ * Archive or restore a quiz.
+ *
+ * Archiving always forces `is_published: false` in the same write. Archive means
+ * retired, and a retired quiz that is still published would keep serving traffic
+ * from its deployments - so the two flags are set together rather than trusting
+ * the caller to remember. Restoring deliberately does NOT re-publish: it comes
+ * back as a draft so republishing is an explicit decision.
+ */
+export async function setQuizArchived(args: { id: string; archived: boolean }) {
+  const user = await getCurrentUser()
+  if (!user) return { ok: false, error: 'unauthenticated' }
+  const payload = await getPayload({ config })
+  try {
+    const archived = Boolean(args.archived)
+    await payload.update({
+      collection: 'funnel-quizzes',
+      id: args.id,
+      data: archived
+        ? { is_archived: true, archived_at: new Date().toISOString(), is_published: false }
+        : { is_archived: false, archived_at: null },
+      user,
+      overrideAccess: false,
+    })
+    revalidatePath(PATH)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'archive failed' }
   }
 }
 
