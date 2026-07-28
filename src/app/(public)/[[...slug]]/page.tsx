@@ -1,9 +1,17 @@
 import type { ReactNode } from 'react'
+import type { Metadata } from 'next'
 import { headers } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { resolveSiteByHost, isFallbackHost } from '@/lib/site-resolver'
+import {
+  resolveQuizDeployment,
+  quizDeploymentMeta,
+  deploymentUrl,
+  type ResolvedQuizDeployment,
+} from '@/lib/quiz-deployment'
+import { QuizRuntime } from '@/components/public/quiz/QuizRuntime'
 import { renderTemplateVars, applyTemplateOverrides, deepRenderTemplateVars, type SiteForTemplate } from '@/lib/template-vars'
 import { resolvePhoneForPath } from '@/lib/resolve-phone'
 import { getCurrentUser } from '@/lib/auth'
@@ -73,7 +81,56 @@ const loadTrackingConfig = async (siteId: string | number): Promise<TrackingConf
 
 export const dynamic = 'force-dynamic'
 
-type Props = { params: Promise<{ slug?: string[] }> }
+type Props = {
+  params: Promise<{ slug?: string[] }>
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}
+
+/**
+ * Per-deployment metadata.
+ *
+ * Only quiz deployments produce tags here; every other path returns `{}` and
+ * keeps whatever the layout already sets, so adding this cannot change how an
+ * existing page presents itself. The lookup is the same React-cached call the
+ * body makes, so a deployment page costs one resolution total, not two, and
+ * the crawler's <title> is guaranteed to describe the document the visitor is
+ * served.
+ */
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params
+  const path = normalizePath(slug)
+  const h = await headers()
+  const host = h.get('x-legalos-host') ?? h.get('host') ?? ''
+  if (!host || isFallbackHost(host)) return {}
+
+  const resolved = await resolveSiteByHost(host)
+  if (!resolved?.siteId) return {}
+
+  const dep = await resolveQuizDeployment(Number(resolved.siteId), host, path, false)
+  if (!dep) return {}
+
+  const meta = quizDeploymentMeta(dep)
+  const url = deploymentUrl(host, path)
+  return {
+    title: meta.title,
+    description: meta.description,
+    alternates: { canonical: url },
+    openGraph: {
+      type: 'website',
+      title: meta.title,
+      description: meta.description,
+      url,
+      siteName: dep.brand.displayName || undefined,
+      ...(meta.image ? { images: [{ url: meta.image }] } : {}),
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: meta.title,
+      description: meta.description,
+      ...(meta.image ? { images: [meta.image] } : {}),
+    },
+  }
+}
 
 const normalizePath = (segments: string[] | undefined): string => {
   if (!segments || segments.length === 0) return '/'
@@ -111,9 +168,12 @@ const sharedTemplateKeyForPath = (path: string): string | null => {
   return map[path] ?? null
 }
 
-export default async function PublicCatchAll({ params }: Props) {
+export default async function PublicCatchAll({ params, searchParams }: Props) {
   const { slug } = await params
   const path = normalizePath(slug)
+  // ?embed=1 renders a quiz deployment without page chrome, for the iframe the
+  // embed script injects. It affects nothing else on the public router.
+  const embedMode = (await searchParams)?.embed === '1'
   const h = await headers()
   const rawPreviewSiteSlug = h.get('x-legalos-preview-site')
   const previewMode = h.get('x-legalos-preview') === '1'
@@ -285,7 +345,17 @@ export default async function PublicCatchAll({ params }: Props) {
     return <RenderLandingPage lp={lp.docs[0] as unknown as RenderLPDoc} site={site} path={path} />
   }
 
-  // 5. Try BlogPosts under /blog/<slug>.
+  // 5. Try a funnel quiz deployment bound to this Site + path. This is what
+  // makes a brandless quiz a real, separately crawlable page: its own URL, its
+  // own brand, its own theme, its own metadata (see generateMetadata above).
+  // An authored Page always wins, so a deployment can never shadow one.
+  const quizDep = await resolveQuizDeployment(Number(siteId), host ?? '', path, isAdminPreview)
+  if (quizDep) {
+    const tc = await loadTrackingConfig(site.id)
+    return <RenderQuizDeployment resolved={quizDep} tc={tc} embed={embedMode} site={site} />
+  }
+
+  // 6. Try BlogPosts under /blog/<slug>.
   if (path.startsWith('/blog/')) {
     const blogSlug = path.slice('/blog/'.length)
     const post = await payload.find({
@@ -531,6 +601,40 @@ async function RenderLandingPage({
         </p>
       ) : null}
     </article>
+  )
+}
+
+/**
+ * Render a funnel quiz deployment as a standalone public page.
+ *
+ * TrustedForm and Jornaya are requested with `hasForm` — a quiz collects
+ * contact details exactly like a lead form does, and the pipeline claims the
+ * cert on submit, so the scripts have to be on the page from the start rather
+ * than injected at the last step.
+ */
+function RenderQuizDeployment({
+  resolved,
+  tc,
+  embed,
+  site,
+}: {
+  resolved: ResolvedQuizDeployment
+  tc: TrackingConfigShape | null
+  embed: boolean
+  site: SiteForTemplate & { id: string | number; name?: string | null }
+}) {
+  const siteSlug = (site as { slug?: string }).slug ?? resolved.siteSlug
+  return (
+    <>
+      <SiteScripts tc={tc} hasForm />
+      <QuizRuntime
+        quiz={resolved.quiz}
+        brand={resolved.brand}
+        deployment={resolved.deployment}
+        site={{ slug: siteSlug, name: site.name ?? null }}
+        embed={embed || resolved.deployment.renderMode === 'embed'}
+      />
+    </>
   )
 }
 

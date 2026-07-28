@@ -18,6 +18,7 @@ import {
   resolveNodeForStep, nextSequentialStepIndex, explicitStepIndex, entryStepIndex,
 } from '@/lib/quiz-graph'
 import { getTemplateConfig, renderAnswerButton, renderProgressIndicator, renderHeader } from './templates'
+import { applyQuizTheme } from '@/lib/quiz-theme'
 import { onPrimaryText, getSafeTextColor, getSafeMutedColor, deriveBrandSurface } from '@/lib/builder/color-system'
 import { aiTestPrompt } from '@/app/(app)/admin/(top)/quizzes/actions'
 
@@ -358,8 +359,14 @@ export const QuizPreviewView = ({ quiz, brand, deployment, onBackToBuilder, bran
     if (Object.keys(captured).length > 0) setFieldValues((prev) => ({ ...captured, ...prev }))
   }, [quiz.id])
 
-  const effectiveBrand = brands.find((b) => b.id === selectedBrandId) || brand
   const effectiveDeployment = deployments.find((d) => d.id === selectedDeploymentId) || deployment
+  // The preview renders the deployment's THEMED brand, exactly as the public
+  // runtime does. Without this the preview would keep showing the brand's own
+  // colours while the live page shipped the deployment's theme.
+  const effectiveBrand = applyQuizTheme(
+    brands.find((b) => b.id === selectedBrandId) || brand,
+    effectiveDeployment?.themeOverrides,
+  )
   const renderMode = effectiveDeployment?.renderMode || 'standalone'
   const sections = effectiveDeployment?.bodySectionOverrides || effectiveBrand?.defaultBodySections || []
 

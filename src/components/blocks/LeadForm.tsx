@@ -1,6 +1,14 @@
 'use client'
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import {
+  CONTACT_KEYS,
+  captureAttribution,
+  readTrustedFormCert,
+  readJornayaLeadId,
+  firePixelEvents,
+  submitLead,
+} from '@/lib/lead-capture-client'
 
 type FormFieldDef = {
   name: string
@@ -25,62 +33,14 @@ type LeadFormBlock = {
   form_fields?: FormFieldDef[] | null
 }
 
-// Field names that map into the canonical `contact` object the lead pipeline
-// expects. Anything else the user puts in form_fields rides along as `extra`.
-const CONTACT_KEYS = new Set(['first_name', 'last_name', 'email', 'phone', 'state', 'zip'])
+// CONTACT_KEYS, attribution capture, TrustedForm / Jornaya reads, the POST and
+// the pixel fire all live in @/lib/lead-capture-client so this form and the
+// public quiz runtime submit through one implementation. See that module for
+// why the shared event_id makes copying it a correctness bug.
 
 type Site = {
   slug: string
   name?: string | null
-}
-
-const captureAttribution = (): Record<string, string> => {
-  if (typeof window === 'undefined') return {}
-  const out: Record<string, string> = {}
-  const params = new URLSearchParams(window.location.search)
-  for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'ttclid']) {
-    const v = params.get(k)
-    if (v) out[k] = v
-  }
-  if (document.referrer) out.referrer = document.referrer
-  out.landing_path = window.location.pathname
-
-  // Session id: stable per tab.
-  let sid = sessionStorage.getItem('legalos_session_id')
-  if (!sid) {
-    sid = `s-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-    sessionStorage.setItem('legalos_session_id', sid)
-  }
-  out.session_id = sid
-
-  // Meta cookies
-  const fbc = document.cookie.split('; ').find((c) => c.startsWith('_fbc='))?.split('=')[1]
-  const fbp = document.cookie.split('; ').find((c) => c.startsWith('_fbp='))?.split('=')[1]
-  if (fbc) out.fbc = fbc
-  if (fbp) out.fbp = fbp
-  return out
-}
-
-// Read the latest TrustedForm cert URL from the auto-injected hidden input.
-const readTrustedFormCert = (): string => {
-  if (typeof document === 'undefined') return ''
-  const el = document.querySelector<HTMLInputElement>('input[name="xxTrustedFormCertUrl"]')
-  return el?.value ?? ''
-}
-
-const readJornayaLeadId = (): string => {
-  if (typeof document === 'undefined') return ''
-  const el = document.querySelector<HTMLInputElement>('input[name="universal_leadid"]')
-  return el?.value ?? ''
-}
-
-declare global {
-  interface Window {
-    fbq?: (...args: unknown[]) => void
-    ttq?: { track?: (event: string, params: Record<string, unknown>, options?: Record<string, unknown>) => void }
-    gtag?: (...args: unknown[]) => void
-    dataLayer?: unknown[]
-  }
 }
 
 export function LeadForm({ block, site }: { block: LeadFormBlock; site: Site }) {
@@ -155,39 +115,19 @@ export function LeadForm({ block, site }: { block: LeadFormBlock; site: Site }) 
       jornaya_lead_id: readJornayaLeadId() || undefined,
     }
 
-    try {
-      const resp = await fetch('/api/leads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      const result = (await resp.json()) as { ok: boolean; lead_id?: number; event_id?: string; error?: string }
-      if (!resp.ok || !result.ok) {
-        setError(result.error ?? 'Submission failed. Please try again.')
-        setPending(false)
-        return
-      }
-
-      // Fire client-side pixel events with the shared event_id from the server.
-      if (result.event_id) {
-        try {
-          window.fbq?.('track', 'Lead', { content_name: site.name ?? site.slug }, { eventID: result.event_id })
-        } catch {}
-        try {
-          window.ttq?.track?.('SubmitForm', { content_name: site.name ?? site.slug }, { event_id: result.event_id })
-        } catch {}
-        try {
-          window.gtag?.('event', 'generate_lead', { transaction_id: result.event_id, value: 1, currency: 'USD' })
-        } catch {}
-      }
-
-      // Redirect to the success page.
-      const slug = block.success_slug ?? '/submitted'
-      window.location.assign(slug)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Network error')
+    const result = await submitLead(payload)
+    if (!result.ok) {
+      setError(result.error ?? 'Submission failed. Please try again.')
       setPending(false)
+      return
     }
+
+    // Client pixels fire with the server-issued event_id so Meta can dedupe
+    // them against the CAPI event the pipeline already sent.
+    firePixelEvents(result.event_id ?? '', site.name ?? site.slug)
+
+    // Redirect to the success page.
+    window.location.assign(block.success_slug ?? '/submitted')
   }
 
   return (

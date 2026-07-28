@@ -11,6 +11,7 @@ import * as migration_20260529_040000_new_block_types from './20260529_040000_ne
 import * as migration_20260529_060000_sites_global_blocks from './20260529_060000_sites_global_blocks';
 import * as migration_20260530_000000_locked_documents_media_rel from './20260530_000000_locked_documents_media_rel';
 import * as migration_20260728_120000_funnel_quizzes_archive from './20260728_120000_funnel_quizzes_archive';
+import * as migration_20260728_180000_funnel_quiz_public_render from './20260728_180000_funnel_quiz_public_render';
 
 export const migrations = [
   {
@@ -77,5 +78,10 @@ export const migrations = [
     up: migration_20260728_120000_funnel_quizzes_archive.up,
     down: migration_20260728_120000_funnel_quizzes_archive.down,
     name: '20260728_120000_funnel_quizzes_archive',
+  },
+  {
+    up: migration_20260728_180000_funnel_quiz_public_render.up,
+    down: migration_20260728_180000_funnel_quiz_public_render.down,
+    name: '20260728_180000_funnel_quiz_public_render',
   },
 ];

@@ -13,6 +13,16 @@ const getClient = (): Anthropic => {
   return client
 }
 
+/**
+ * An image to send alongside the prompt. Base64 payload only — a URL would make
+ * the model's provider fetch it, which we cannot audit or scope.
+ */
+export type InvokeLLMImage = {
+  mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+  /** Raw base64, no `data:` prefix. */
+  dataBase64: string
+}
+
 export type InvokeLLMArgs<TSchema extends z.ZodTypeAny> = {
   system: string
   user: string
@@ -22,6 +32,12 @@ export type InvokeLLMArgs<TSchema extends z.ZodTypeAny> = {
   maxTokens?: number
   enforceNoBannedVocab?: boolean
   maxRetries?: number
+  /**
+   * Optional images for vision prompts (e.g. deriving a palette from a
+   * screenshot). Sent as content blocks before the text, which is the ordering
+   * Anthropic recommends when the text refers to the images.
+   */
+  images?: InvokeLLMImage[]
 }
 
 export const invokeLLM = async <TSchema extends z.ZodTypeAny>(
@@ -36,8 +52,14 @@ export const invokeLLM = async <TSchema extends z.ZodTypeAny>(
     maxTokens = 4096,
     enforceNoBannedVocab = false,
     maxRetries = 2,
+    images,
   } = args
   const client = getClient()
+
+  const imageBlocks = (images ?? []).map((img) => ({
+    type: 'image' as const,
+    source: { type: 'base64' as const, media_type: img.mediaType, data: img.dataBase64 },
+  }))
 
   const toolSchema = zodToJsonSchema(schema)
   let attempt = 0
@@ -53,7 +75,14 @@ export const invokeLLM = async <TSchema extends z.ZodTypeAny>(
       model,
       max_tokens: maxTokens,
       system,
-      messages: [{ role: 'user', content: additionalUser }],
+      messages: [
+        {
+          role: 'user',
+          content: imageBlocks.length
+            ? [...imageBlocks, { type: 'text' as const, text: additionalUser }]
+            : additionalUser,
+        },
+      ],
       tools: [
         {
           name: schemaName,

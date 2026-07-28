@@ -20,6 +20,7 @@ import {
   Plug,
   Activity,
   Bot,
+  ScrollText,
   ChevronDown,
   ChevronRight,
   Loader2,
@@ -56,6 +57,7 @@ const SETTINGS_NAV: NavItem[] = [
   { href: '/admin/settings/users', label: 'Users', icon: Users },
   { href: '/admin/settings/system', label: 'System', icon: Activity },
   { href: '/admin/plan', label: 'Agent Plan', icon: Bot },
+  { href: '/admin/buildlog', label: 'Build Log', icon: ScrollText },
 ]
 
 export function Sidebar({ userEmail }: { userEmail: string }) {

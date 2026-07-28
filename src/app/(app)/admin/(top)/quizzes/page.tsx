@@ -55,6 +55,7 @@ export default async function QuizzesPage() {
       templateId: r.template_id ?? 'default',
       status: r.status ?? 'draft',
       embedPreviewBg: r.embed_preview_bg ?? '',
+      themeOverrides: r.theme_overrides ?? null,
       headerConfig: r.header_config ?? {},
       footerConfig: r.footer_config ?? {},
       bodySectionOverrides: r.body_section_overrides ?? null,

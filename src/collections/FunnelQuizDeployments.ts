@@ -41,6 +41,12 @@ export const FunnelQuizDeployments: CollectionConfig = {
       ],
     },
     { name: 'embed_preview_bg', type: 'text' },
+    // Per-deployment look: template id, colour overrides, font overrides, and
+    // how they were generated. Layered over the brand at render time by
+    // applyQuizTheme (src/lib/quiz-theme.ts) rather than written back to the
+    // Site, so two deployments of the same quiz under one brand can look
+    // completely different without either one editing the brand.
+    { name: 'theme_overrides', type: 'json' },
     { name: 'header_config', type: 'json' },
     { name: 'footer_config', type: 'json' },
     { name: 'body_section_overrides', type: 'json' },
