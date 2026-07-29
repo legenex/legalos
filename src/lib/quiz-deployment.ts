@@ -2,7 +2,7 @@ import { cache } from 'react'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { siteToBrand, type DomainLite } from './brand-map'
-import { applyQuizTheme, resolveQuizTemplateId, normalizeQuizTheme } from './quiz-theme'
+import { resolveQuizTemplateId } from './quiz-theme'
 import { normalizeDeploymentPath } from './quiz-deployment-path'
 import { normalizeDestinations, type DestinationMap } from './quiz-destinations'
 import { isClaimedByAuthoredContent, pathVariantsFor } from './public-path-claims'
@@ -38,7 +38,6 @@ export type PublicQuizDeployment = {
   headerConfig: Record<string, unknown> | null
   footerConfig: Record<string, unknown> | null
   bodySectionOverrides: unknown[] | null
-  themeOverrides: unknown
   destinationOverrides: DestinationMap
   utm: Record<string, unknown>
   pixels: Record<string, unknown>
@@ -57,7 +56,7 @@ export type PublicQuiz = {
 export type ResolvedQuizDeployment = {
   deployment: PublicQuizDeployment
   quiz: PublicQuiz
-  /** Brand with the deployment's theme already layered on. Ready to render. */
+  /** The brand, exactly as the brand record defines it. Ready to render. */
   brand: ReturnType<typeof siteToBrand>
   siteId: number
   siteSlug: string
@@ -205,7 +204,6 @@ const hydrateQuizDeployment = async (
     bodySectionOverrides: Array.isArray(doc.body_section_overrides)
       ? (doc.body_section_overrides as unknown[])
       : null,
-    themeOverrides: normalizeQuizTheme(doc.theme_overrides),
     destinationOverrides: normalizeDestinations(doc.destination_overrides),
     utm: (doc.utm ?? {}) as Record<string, unknown>,
     pixels: (doc.pixels ?? {}) as Record<string, unknown>,
@@ -224,7 +222,7 @@ const hydrateQuizDeployment = async (
       nodes: asArray(quizDoc.nodes),
       customFields: asArray(quizDoc.custom_fields),
     },
-    brand: applyQuizTheme(baseBrand, deployment.themeOverrides),
+    brand: baseBrand,
     siteId,
     siteSlug: String(siteDoc.slug ?? ''),
   }

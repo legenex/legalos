@@ -42,7 +42,7 @@ import {
   captureAttribution, readTrustedFormCert, readJornayaLeadId, firePixelEvents, submitLead,
 } from '@/lib/lead-capture-client'
 import { splitQuizAnswers, isDeliverableContact } from '@/lib/quiz-lead'
-import { applyQuizTheme } from '@/lib/quiz-theme'
+import { withHostSurface } from '@/lib/quiz-theme'
 
 // Node types that exist for the flow author, not for the visitor. They resolve
 // and advance without ever painting a question card.
@@ -94,9 +94,7 @@ export function QuizRuntime({
   // same "derive from the surface it actually sits on" rule the colour system
   // enforces everywhere else; passing the host surface through is what lets it
   // apply across the boundary.
-  const brand = surfaceColor
-    ? applyQuizTheme(brandIn, { colors: { background: surfaceColor, cardBg: surfaceColor } })
-    : brandIn
+  const brand = withHostSurface(brandIn, surfaceColor)
 
   const [stepIdx, setStepIdx] = useState(() => Math.max(entryStepIndex(quiz, null), 0))
   const [currentTier, setCurrentTier] = useState(null)

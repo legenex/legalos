@@ -6,6 +6,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getCurrentUser } from '@/lib/auth'
 import { invokeLLM } from '@/lib/ai/invoke'
+import { resolveBrandTokens } from '@/lib/brand/resolve-tokens'
 import { createSite } from '../../sites/actions'
 import { seedStarterFunnelsForBrand } from '@/lib/funnel-samples'
 import { fetchUrlBundle, fetchGithubBundle } from '@/lib/builder/extract/fetch-bundle'
@@ -448,4 +449,179 @@ function stripConfidence(m: MappedBrand): Omit<MappedBrand, '_confidence'> {
   const { _confidence: _omit, ...rest } = m
   void _omit
   return rest
+}
+
+// ---------------------------------------------------------------------------
+// Brand Extraction (P0-C)
+//
+// This used to live on the deployment editor as "Theme", where it generated and
+// applied a palette per deployment. That made it a third owner of colour
+// alongside the brand record and the hardcoded values in components, and three
+// owners of one value produce arbitrary output.
+//
+// It now proposes to the BRAND, and only the brand. Three properties keep it
+// honest:
+//
+//   - It returns a PROPOSAL in the exact shape of the brand token contract. It
+//     writes nothing. The caller shows it, a human accepts it, and the normal
+//     brand save does the write.
+//   - Every token carries evidence and a confidence score, so "where did that
+//     orange come from" has an answer on screen rather than in someone's head.
+//   - The proposal is run through the real resolver before it is shown, so its
+//     contrast failures are visible at the moment of the decision rather than
+//     discovered on a landing page built on top of it.
+//
+// HONEST LIMITATION: the URL path still reads DECLARED values out of the
+// stylesheet and the Tailwind config. On a site built with a utility framework
+// that returns framework defaults in declaration order rather than the brand's
+// actual colours, which is why dontsettle.co proposed Tailwind's orange-600 and
+// slate-800. Replacing this with computed-style sampling from a headless render
+// is a separate package (P1-B). Confidence is reported LOW for this source so
+// the weakness is visible rather than implied.
+// ---------------------------------------------------------------------------
+
+const BrandProposal = z.object({
+  primary: z.string(),
+  accent: z.string(),
+  cta: z.string(),
+  bg: z.string(),
+  surface: z.string(),
+  ink: z.string(),
+  font_heading: z.string(),
+  font_body: z.string(),
+  rationale: z.string(),
+})
+
+const EXTRACTION_SYSTEM = `You propose brand colour tokens for a legal-intake funnel.
+
+Return one proposal. Rules you must follow:
+- Every colour is a 6-digit hex string starting with #.
+- "bg" is the page background. "surface" is a card sitting on it. They must
+  differ enough to read as separate layers.
+- "primary" is the brand's identity colour. "cta" is the button colour, which
+  may equal primary but is a separate decision.
+- "ink" is body text and must be legible on "bg".
+- Fonts are common family names only, no CSS stacks, no quotes.
+- rationale is one plain sentence. No em dashes.`
+
+export type BrandTokenProposal = {
+  tokens: Record<string, string>
+  evidence: Record<string, { confidence: number; source: string }>
+  rationale: string
+  audit: { pair: string; ratio: number; pass: boolean }[]
+  passes: boolean
+}
+
+export async function proposeBrandTokens(args: {
+  source: 'url' | 'prompt' | 'image'
+  value?: string
+  imageBase64?: string
+  imageMediaType?: string
+}): Promise<{ ok: true; proposal: BrandTokenProposal } | { ok: false; error: string }> {
+  const user = await getCurrentUser()
+  if (!user) return { ok: false, error: 'unauthenticated' }
+
+  const source = args.source
+  const value = (args.value || '').trim()
+
+  try {
+    const extracted: Record<string, string | undefined> = {}
+    const evidence: Record<string, { confidence: number; source: string }> = {}
+    let userPrompt = ''
+    let images: Array<{ mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'; dataBase64: string }> = []
+
+    if (source === 'url') {
+      if (!value) return { ok: false, error: 'Enter a URL to read the brand from.' }
+      const bundle = await fetchUrlBundle(value)
+      if (!bundle) return { ok: false, error: 'Could not load that URL. Check it is reachable and public.' }
+      const c = extractColors({ css: bundle.css, html: bundle.html, googleFontFamilies: bundle.googleFontFamilies })
+      Object.assign(extracted, {
+        primary: c.primary,
+        accent: c.accent,
+        bg: c.darkBackdrop || c.ink,
+        surface: c.surface,
+        font_heading: c.fontHeading,
+        font_body: c.fontBody,
+      })
+      for (const [k, v] of Object.entries(extracted)) {
+        if (v) {
+          evidence[k] = {
+            // Deliberately capped low: a declared-stylesheet read is weak
+            // evidence, and reporting it as strong is how a framework default
+            // gets accepted as a brand colour.
+            confidence: 0.35,
+            source: `declared in ${bundle.host}'s stylesheet or Tailwind config`,
+          }
+        }
+      }
+      const found = Object.entries(extracted).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(', ')
+      userPrompt = `Propose brand tokens matching ${bundle.host}.\n\nValues declared in that site's stylesheet: ${found || 'none found'}.\n\nUse them where they exist and fill the rest so the result is a complete, readable set.`
+    } else if (source === 'prompt') {
+      if (!value) return { ok: false, error: 'Describe the brand you want.' }
+      userPrompt = `Propose brand tokens for this brief:\n\n${value.slice(0, 1200)}`
+    } else {
+      const b64 = (args.imageBase64 || '').replace(/^data:[^,]+,/, '')
+      const mt = args.imageMediaType || ''
+      if (!b64) return { ok: false, error: 'Upload an image to read the brand from.' }
+      if (b64.length > 5_600_000) return { ok: false, error: 'That image is too large. Use one under 3MB.' }
+      if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mt)) {
+        return { ok: false, error: 'Use a JPEG, PNG, GIF or WebP image.' }
+      }
+      images = [{ mediaType: mt as 'image/jpeg', dataBase64: b64 }]
+      userPrompt =
+        'Propose brand tokens from this image. Take the palette from the image itself, then make it work as an interface: the page and card surfaces must separate, and the action colour must stay readable on both.'
+    }
+
+    const out = await invokeLLM({
+      system: EXTRACTION_SYSTEM,
+      user: userPrompt,
+      schema: BrandProposal,
+      schemaName: 'brand_tokens',
+      model: 'claude-sonnet-4-6',
+      maxTokens: 1200,
+      enforceNoBannedVocab: true,
+      ...(images.length ? { images } : {}),
+    })
+
+    // Extraction beats generation where it exists: a value read off the real
+    // site is weak evidence, but it is still evidence, where the model's
+    // version of the same colour is none.
+    const tokens: Record<string, string> = {
+      primary: extracted.primary || out.primary,
+      accent: extracted.accent || out.accent,
+      cta: out.cta,
+      bg: extracted.bg || out.bg,
+      surface: extracted.surface || out.surface,
+      ink: out.ink,
+      font_heading: extracted.font_heading || out.font_heading,
+      font_body: extracted.font_body || out.font_body,
+    }
+    for (const k of Object.keys(tokens)) {
+      if (!evidence[k]) {
+        evidence[k] = {
+          confidence: source === 'image' ? 0.6 : 0.5,
+          source: source === 'image' ? 'derived from the uploaded image' : 'proposed from the written brief',
+        }
+      }
+    }
+
+    // Run the real resolver so the contrast verdict shown next to Accept is the
+    // same one the publish gate will apply later.
+    let audit: BrandTokenProposal['audit'] = []
+    let passes = false
+    try {
+      const resolved = resolveBrandTokens(tokens)
+      audit = resolved.audit.map((a) => ({ pair: a.pair, ratio: a.ratio, pass: a.pass }))
+      passes = resolved.passes
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'The proposal was not a usable token set.',
+      }
+    }
+
+    return { ok: true, proposal: { tokens, evidence, rationale: out.rationale, audit, passes } }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Brand extraction failed' }
+  }
 }

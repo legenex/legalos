@@ -18,7 +18,6 @@ import {
   resolveNodeForStep, nextSequentialStepIndex, explicitStepIndex, entryStepIndex,
 } from '@/lib/quiz-graph'
 import { getTemplateConfig, renderAnswerButton, renderProgressIndicator, renderHeader } from './templates'
-import { applyQuizTheme } from '@/lib/quiz-theme'
 import { resolveRedirectUrl } from '@/lib/quiz-destinations'
 import { onPrimaryText, getSafeTextColor, getSafeMutedColor, deriveBrandSurface } from '@/lib/builder/color-system'
 import { aiTestPrompt } from '@/app/(app)/admin/(top)/quizzes/actions'
@@ -375,13 +374,9 @@ export const QuizPreviewView = ({ quiz, brand, deployment, onBackToBuilder, bran
   }, [quiz.id])
 
   const effectiveDeployment = deployments.find((d) => d.id === selectedDeploymentId) || deployment
-  // The preview renders the deployment's THEMED brand, exactly as the public
-  // runtime does. Without this the preview would keep showing the brand's own
-  // colours while the live page shipped the deployment's theme.
-  const effectiveBrand = applyQuizTheme(
-    brands.find((b) => b.id === selectedBrandId) || brand,
-    effectiveDeployment?.themeOverrides,
-  )
+  // The brand paints the quiz. A deployment picks the template; it does not
+  // author colour, so there is nothing to layer on top here.
+  const effectiveBrand = brands.find((b) => b.id === selectedBrandId) || brand
   const renderMode = effectiveDeployment?.renderMode || 'standalone'
   const sections = effectiveDeployment?.bodySectionOverrides || effectiveBrand?.defaultBodySections || []
 

@@ -52,6 +52,84 @@ export const STATUS_LABEL: Record<ItemStatus, string> = {
 export const ENTRIES: BuildLogEntry[] = [
   {
     date: '2026-07-29',
+    title: 'Deployments stop authoring colour (P0-C)',
+    summary:
+      'The third owner of colour is gone. A deployment could generate and store its own palette, so the brand said one thing and the deployment said another and whichever ran last won. Colour now has exactly one owner, and the generator that used to do the damage now proposes to the brand instead.',
+    items: [
+      {
+        title: 'Per-deployment palettes removed',
+        status: 'shipped',
+        detail:
+          'The Theme tab, the stored palette, and every read of it are gone from the deployment editor, the preview, the public runtime and the resolver. A deployment still picks its template, which is a choice among brand-derived presentations rather than a new colour.',
+        files: ['src/lib/quiz-theme.ts', 'src/components/builder/quiz/QuizBuilderApp.tsx'],
+      },
+      {
+        title: 'The generator moved to Brand Identity and lost its write access',
+        status: 'shipped',
+        detail:
+          'It is now Brand Extraction, on the brand editor. It returns a proposal and writes nothing: every token shows where it came from and how much to trust it, the contrast verdict beside the Accept button is computed by the same resolver the publish gate uses, and a human accepts before anything changes.',
+        files: ['src/app/(app)/admin/(top)/brands/brand-identities/actions.ts', 'src/components/builder/brand/BrandModule.tsx'],
+      },
+      {
+        title: 'The extraction method is still the weak one, and says so',
+        status: 'partial',
+        detail:
+          'Reading a URL still inspects the site’s declared stylesheet and Tailwind config, which returns framework defaults rather than the brand on any utility-framework site. That is why one brand came back as Tailwind’s orange-600 and slate-800. Confidence for that source is reported at 35 per cent and the panel says plainly that it is a starting point, so the weakness is visible instead of implied. Replacing it with computed-style sampling from a headless render is its own package.',
+        files: ['src/app/(app)/admin/(top)/brands/brand-identities/actions.ts'],
+      },
+      {
+        title: 'Stored palettes renamed, not destroyed',
+        status: 'shipped',
+        detail:
+          'The instruction was to report any deployment carrying a custom palette before dropping the data, and this workspace has no database access to run that report. The column is renamed instead: the live path is gone immediately because the collection no longer declares the field, while every stored palette survives and can be reviewed with one query. Dropping it now would delete the only record of what those deployments were displaying, which is exactly what is needed to check nothing regressed.',
+        files: ['src/migrations/20260729_200000_drop_deployment_theme.ts'],
+      },
+      {
+        title: 'Host-surface inheritance kept, and separated from theming',
+        status: 'shipped',
+        detail:
+          'A quiz inside a landing-page card still learns which opaque colour it sits on so its text is derived against the real backdrop. That is context being passed down, not a palette being invented, so it survives the removal under its own name rather than riding on the theme machinery.',
+        files: ['src/lib/quiz-theme.ts'],
+      },
+    ],
+    verification: [
+      {
+        label: 'Template selection and host surface',
+        state: 'verified',
+        detail:
+          '21 assertions. A leftover theme object on a deployment is ignored entirely rather than still being honoured. An invalid or blank surface leaves the brand untouched and returns the same object. A dark brand dropped into a light card adopts the light ground and re-derives its button text instead of staying black on black. The input brand is never mutated.',
+      },
+      {
+        label: 'Nothing left referencing the removed path',
+        state: 'verified',
+        detail:
+          'A repo-wide search for the palette field, the theme helper and the old generator returns nothing outside the migrations that manage the column.',
+      },
+      {
+        label: 'No structural drift in the edited builders',
+        state: 'verified',
+        detail:
+          'Brace and paren balance compared against the committed version of every edited file. This also corrected the checker itself: it was treating the // inside an https:// string as a comment, which had been producing phantom imbalances all session. With strings stripped first, every edited file balances exactly.',
+      },
+      {
+        label: 'Type check and browser',
+        state: 'not-run',
+        detail: 'No dependencies, database or generated types here, as always.',
+      },
+    ],
+    deployNotes: [
+      'Adds a migration that renames the deployment palette column. Run pnpm payload migrate after the build.',
+      'After deploying, review anything that had a custom palette: SELECT d.id, d.path, s.name, d.theme_overrides_removed_20260729 FROM funnel_quiz_deployments d LEFT JOIN sites s ON s.id = d.site_id WHERE d.theme_overrides_removed_20260729 IS NOT NULL;',
+      'A deployment that was relying on a custom palette will now render in its brand’s colours. That is the intended correction, but it is a visible change worth checking against the query above.',
+    ],
+    openIssues: [
+      'Brand Extraction still reads declared stylesheet values. Computed-style sampling from a headless render is the fix and has not been built.',
+      'The renamed column should be dropped once the stored palettes have been reviewed.',
+      'Deployments cannot yet choose mode, density or emphasis. Those are the legitimate per-deployment choices the framework allows, and only template selection exists today.',
+    ],
+  },
+  {
+    date: '2026-07-29',
     title: 'Brand colour gets one owner (P0-B)',
     summary:
       'First package of the restructure framework. Colour had three owners: the brand record, the per-deployment theme generator, and hardcoded values inside components. Three owners of one value produce arbitrary output, which is what the wrong Don’t Settle colours actually were. There is now one contract, one resolver, and a lint that stops the count going back up.',

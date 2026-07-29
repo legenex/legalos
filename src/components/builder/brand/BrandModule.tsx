@@ -7,7 +7,7 @@
 // CreateBrandModal, AIBrandWizard, body-section editors). Persistence and AI
 // are rewired from localStorage / direct Anthropic calls to server actions.
 
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Phone, ShieldCheck, Trophy, AlertCircle, Code2, CheckCircle2, Sparkles, Award, Star,
@@ -18,7 +18,7 @@ import {
   T, genId, brandShortName, FONT_OPTIONS,
   Btn, Input, Textarea, Select, Label, Pill, IconBtn, ConfirmDialog, Toast, PageHeader, EmptyState,
 } from '../ui'
-import { saveBrandIdentity, createBrandSite, deleteBrandSite, aiGenerateBrand } from '@/app/(app)/admin/(top)/brands/brand-identities/actions'
+import { saveBrandIdentity, createBrandSite, deleteBrandSite, aiGenerateBrand, proposeBrandTokens } from '@/app/(app)/admin/(top)/brands/brand-identities/actions'
 import {
   DESTINATION_KEYS, DESTINATION_LABELS, DESTINATION_HINTS, DEFAULT_PATHS, isSafeDestinationUrl,
 } from '@/lib/quiz-destinations'
@@ -367,6 +367,119 @@ const AIBrandWizard = ({ mode, onClose, onComplete }) => {
 // ============================================================================
 // BRAND EDITOR (full screen, 7 tabs)
 // ============================================================================
+/**
+ * Brand Extraction.
+ *
+ * Relocated here from the deployment editor, where it used to generate and
+ * apply a palette per deployment. That made it a third owner of colour and is
+ * why one brand's funnels could render in colours the brand record had never
+ * seen. It now PROPOSES to the brand, and a human accepts.
+ *
+ * Every token shows where it came from and how much to trust it, and the
+ * contrast verdict is computed by the same resolver the publish gate uses, so
+ * Accept is a decision made while looking at the result rather than a hopeful
+ * click followed by a landing page built on top of a bad palette.
+ */
+const BrandExtractionPanel = ({ onAccept }) => {
+  const [mode, setMode] = useState('url')
+  const [urlValue, setUrlValue] = useState('')
+  const [promptValue, setPromptValue] = useState('')
+  const [image, setImage] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [proposal, setProposal] = useState(null)
+  const fileRef = useRef(null)
+
+  const pickImage = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setError('')
+    const reader = new FileReader()
+    reader.onload = () => setImage({ name: file.name, base64: String(reader.result || ''), mediaType: file.type })
+    reader.onerror = () => setError('Could not read that file.')
+    reader.readAsDataURL(file)
+  }
+
+  const run = async () => {
+    setError(''); setProposal(null); setBusy(true)
+    try {
+      const res = await proposeBrandTokens({
+        source: mode,
+        value: mode === 'url' ? urlValue : mode === 'prompt' ? promptValue : '',
+        imageBase64: mode === 'image' ? image?.base64 : undefined,
+        imageMediaType: mode === 'image' ? image?.mediaType : undefined,
+      })
+      if (res.ok) setProposal(res.proposal)
+      else setError(res.error || 'Extraction failed.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Extraction failed.')
+    } finally { setBusy(false) }
+  }
+
+  const canRun = !busy && (mode === 'url' ? urlValue.trim() : mode === 'prompt' ? promptValue.trim() : image)
+  const MODES = [
+    { id: 'url', label: 'From a URL' },
+    { id: 'prompt', label: 'From a description' },
+    { id: 'image', label: 'From an image' },
+  ]
+
+  return <div style={{ padding: 14, backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 8, marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ fontSize: 13, color: T.text, fontWeight: 600 }}>Brand extraction</div>
+    <div style={{ fontSize: 11.5, color: T.textMute, lineHeight: 1.5 }}>
+      Proposes colours and fonts for this brand. Nothing is applied until you accept it, and every value shows where it came from.
+      Reading a URL currently inspects the site&apos;s declared stylesheet, which returns framework defaults on a Tailwind site, so treat that source as a starting point rather than an answer.
+    </div>
+
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      {MODES.map((m) => <button key={m.id} onClick={() => { setMode(m.id); setError(''); setProposal(null) }} style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11.5, fontWeight: 600, backgroundColor: mode === m.id ? T.bgElev2 : 'transparent', border: `1px solid ${mode === m.id ? T.primary : T.border}`, color: mode === m.id ? T.text : T.textMute, cursor: 'pointer' }}>{m.label}</button>)}
+    </div>
+
+    {mode === 'url' && <Input mono value={urlValue} onChange={(e) => setUrlValue(e.target.value)} placeholder="https://example.com" />}
+    {mode === 'prompt' && <Textarea value={promptValue} onChange={(e) => setPromptValue(e.target.value)} placeholder="Calm and clinical. Deep green, off-white cards, serif headlines." style={{ minHeight: 60 }} />}
+    {mode === 'image' && <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <Btn variant="secondary" size="sm" onClick={() => fileRef.current?.click()}>Choose image</Btn>
+      <span style={{ fontSize: 11.5, color: T.textMute }}>{image ? image.name : 'JPEG, PNG, GIF or WebP, under 3MB'}</span>
+      <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={pickImage} style={{ display: 'none' }} />
+    </div>}
+
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <Btn variant="primary" size="sm" icon={busy ? Loader2 : Sparkles} onClick={run} disabled={!canRun} style={!canRun ? { opacity: 0.5 } : {}}>{busy ? 'Reading...' : 'Propose tokens'}</Btn>
+      {error && <span style={{ fontSize: 11.5, color: T.danger }}>{error}</span>}
+    </div>
+
+    {proposal && <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 10, borderTop: `1px solid ${T.border}` }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 6 }}>
+        {Object.entries(proposal.tokens).map(([k, v]) => {
+          const ev = proposal.evidence?.[k]
+          const isColor = /^#/.test(String(v))
+          return <div key={k} style={{ padding: 8, backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 5 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {isColor && <span style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: String(v), border: `1px solid ${T.border}` }} />}
+              <span style={{ fontSize: 11, color: T.text, fontFamily: '"JetBrains Mono", monospace' }}>{k} {String(v)}</span>
+              {ev && <span style={{ marginLeft: 'auto', fontSize: 9.5, fontWeight: 700, color: ev.confidence >= 0.5 ? T.textMute : T.warning }}>{Math.round(ev.confidence * 100)}%</span>}
+            </div>
+            {ev && <div style={{ fontSize: 10, color: T.textLow, marginTop: 3, lineHeight: 1.35 }}>{ev.source}</div>}
+          </div>
+        })}
+      </div>
+
+      {proposal.rationale && <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.5 }}>{proposal.rationale}</div>}
+
+      <div style={{ padding: 10, backgroundColor: proposal.passes ? `${T.success}11` : `${T.danger}11`, border: `1px solid ${proposal.passes ? T.success : T.danger}`, borderRadius: 6 }}>
+        <div style={{ fontSize: 11.5, fontWeight: 600, color: proposal.passes ? T.success : T.danger, marginBottom: 6 }}>
+          {proposal.passes ? 'Contrast passes on every pair' : 'Contrast fails, this palette is not publishable as-is'}
+        </div>
+        {proposal.audit.filter((a) => !a.pass).map((a) => <div key={a.pair} style={{ fontSize: 10.5, color: T.danger }}>{a.pair}: {a.ratio}:1</div>)}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Btn variant="primary" size="sm" icon={CheckCircle2} onClick={() => { onAccept(proposal.tokens); setProposal(null) }}>Accept into this brand</Btn>
+        <Btn variant="ghost" size="sm" onClick={() => setProposal(null)}>Discard</Btn>
+      </div>
+    </div>}
+  </div>
+}
+
 const BrandEditor = ({ brand, isDraft, onSave, onBack }) => {
   const [draft, setDraft] = useState(brand)
   const [dirty, setDirty] = useState(isDraft || false)
@@ -448,6 +561,18 @@ const BrandEditor = ({ brand, isDraft, onSave, onBack }) => {
           )}
 
           {tab === 'colors' && (
+            <div>
+              <BrandExtractionPanel onAccept={(tokens) => {
+                // Proposals land on the funnel brand shape the editor edits.
+                // The canonical token columns are written by the normal save.
+                updColors({
+                  primary: tokens.primary,
+                  accent: tokens.accent,
+                  background: tokens.bg,
+                  cardBg: tokens.surface,
+                })
+                updTypo({ headlineFont: tokens.font_heading, bodyFont: tokens.font_body })
+              }} />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               {[['primary', 'Primary / CTA'], ['accent', 'Accent'], ['background', 'Background'], ['cardBg', 'Card Background'], ['textOnDark', 'Text on dark'], ['success', 'Success'], ['warning', 'Warning'], ['danger', 'Danger']].map(([k, lbl]) => (
                 <div key={k}>
@@ -458,6 +583,7 @@ const BrandEditor = ({ brand, isDraft, onSave, onBack }) => {
                   </div>
                 </div>
               ))}
+            </div>
             </div>
           )}
 

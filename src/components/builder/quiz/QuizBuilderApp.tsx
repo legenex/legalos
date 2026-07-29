@@ -27,14 +27,12 @@ import {
 } from '@/lib/quiz-graph'
 import {
   createQuiz, saveQuiz, cloneQuiz, deleteQuiz, setQuizArchived,
-  saveQuizDeployment, deleteQuizDeployment, generateDeploymentTheme,
+  saveQuizDeployment, deleteQuizDeployment,
 } from '@/app/(app)/admin/(top)/quizzes/actions'
 import { buildQuizEmbedSnippet, QUIZ_EMBED_INCOMPLETE } from '@/lib/quiz-embed'
-import { applyQuizTheme } from '@/lib/quiz-theme'
 import {
   DESTINATION_KEYS, DESTINATION_LABELS, resolveDestination, destinationOrigin, isSafeDestinationUrl,
 } from '@/lib/quiz-destinations'
-import { Sparkles, Link2, Type, Image as ImageIcon, RotateCcw } from 'lucide-react'
 
 /**
  * Save status indicator. The builder autosaves, so the useful signal is not "is
@@ -347,144 +345,6 @@ const DestinationsPanel = ({ draft, brand, onChange }) => {
   </div>
 }
 
-/**
- * AI theming for a deployment.
- *
- * The generated theme is stored on the DEPLOYMENT, never written back to the
- * brand, so restyling one deployment cannot repaint the brand's other funnels
- * or its site pages. Nothing is applied until the operator sees the palette and
- * accepts it, and clearing it returns the deployment to the brand's own colours
- * rather than to whatever the last generation produced.
- */
-const ThemePanel = ({ draft, brand, onApply, onClear }) => {
-  const [mode, setMode] = useState('url')
-  const [urlValue, setUrlValue] = useState('')
-  const [promptValue, setPromptValue] = useState('')
-  const [image, setImage] = useState(null) // { name, base64, mediaType }
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const [result, setResult] = useState(null)
-  const fileRef = useRef(null)
-
-  const active = draft.themeOverrides || null
-
-  const pickImage = (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setError('')
-    const reader = new FileReader()
-    reader.onload = () => setImage({ name: file.name, base64: String(reader.result || ''), mediaType: file.type })
-    reader.onerror = () => setError('Could not read that file.')
-    reader.readAsDataURL(file)
-  }
-
-  const generate = async () => {
-    setError('')
-    setResult(null)
-    setBusy(true)
-    try {
-      const res = await generateDeploymentTheme({
-        source: mode,
-        value: mode === 'url' ? urlValue : mode === 'prompt' ? promptValue : '',
-        imageBase64: mode === 'image' ? image?.base64 : undefined,
-        imageMediaType: mode === 'image' ? image?.mediaType : undefined,
-      })
-      if (res.ok) setResult(res.theme)
-      else setError(res.error || 'Theme generation failed.')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Theme generation failed.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const canGenerate = !busy && (mode === 'url' ? urlValue.trim() : mode === 'prompt' ? promptValue.trim() : image)
-
-  const Swatches = ({ theme }) => <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-    {Object.entries(theme.colors || {}).map(([k, v]) => <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 5 }}>
-      <span style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: v, border: `1px solid ${T.border}`, display: 'inline-block' }} />
-      <span style={{ fontSize: 10.5, color: T.textMute, fontFamily: '"JetBrains Mono", monospace' }}>{k} {v}</span>
-    </div>)}
-  </div>
-
-  const MODES = [
-    { id: 'url', label: 'From a URL', icon: Link2, hint: 'Reads the real stylesheet of a page and matches its palette.' },
-    { id: 'prompt', label: 'From a description', icon: Type, hint: 'Describe the feel you want in plain words.' },
-    { id: 'image', label: 'From an image', icon: ImageIcon, hint: 'Pulls the palette out of a screenshot, logo, or photo.' },
-  ]
-
-  return <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-    {active ? <div style={{ padding: 14, backgroundColor: T.bgElev, border: `1px solid ${T.primary}`, borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Pill color={T.primary}>THEME ACTIVE</Pill>
-        <span style={{ fontSize: 12, color: T.textMute }}>
-          {active.templateId ? `${active.templateId} template` : 'brand template'}
-          {active.source?.kind ? ` · from ${active.source.kind === 'image' ? 'an image' : active.source.kind === 'url' ? active.source.value : 'a description'}` : ''}
-        </span>
-        <div style={{ flex: 1 }} />
-        <Btn variant="ghost" size="xs" icon={RotateCcw} onClick={onClear}>Reset to brand</Btn>
-      </div>
-      <Swatches theme={active} />
-      {active.rationale && <div style={{ fontSize: 11.5, color: T.textLow, lineHeight: 1.5 }}>{active.rationale}</div>}
-    </div> : <div style={{ padding: 12, backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 8, fontSize: 12, color: T.textMute }}>
-      This deployment uses the brand&apos;s own colours and fonts. Generate a theme to give it a look of its own without touching the brand.
-    </div>}
-
-    <div>
-      <Label>Source</Label>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 8 }}>
-        {MODES.map((m) => {
-          const on = mode === m.id
-          const Icon = m.icon
-          return <button key={m.id} onClick={() => { setMode(m.id); setError(''); setResult(null) }} style={{ padding: 12, backgroundColor: on ? T.bgElev2 : T.bgElev, border: `1px solid ${on ? T.primary : T.border}`, borderRadius: 8, cursor: 'pointer', textAlign: 'left', color: T.text }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}><Icon size={13} /><span style={{ fontSize: 12.5, fontWeight: 600 }}>{m.label}</span></div>
-            <div style={{ fontSize: 11, color: T.textMute, lineHeight: 1.4 }}>{m.hint}</div>
-          </button>
-        })}
-      </div>
-    </div>
-
-    {mode === 'url' && <div><Label>Page URL</Label><Input mono value={urlValue} onChange={(e) => setUrlValue(e.target.value)} placeholder="https://example.com" /></div>}
-
-    {mode === 'prompt' && <div>
-      <Label>What should it look like?</Label>
-      <textarea value={promptValue} onChange={(e) => setPromptValue(e.target.value)} rows={4} placeholder="Calm and clinical. Deep green, off-white cards, serif headlines. Should read as a hospital intake form, not an ad."
-        style={{ width: '100%', padding: '10px 12px', backgroundColor: T.bg, color: T.text, border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 13, fontFamily: 'inherit', resize: 'vertical' }} />
-    </div>}
-
-    {mode === 'image' && <div>
-      <Label>Image</Label>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Btn variant="secondary" size="sm" icon={ImageIcon} onClick={() => fileRef.current?.click()}>Choose image</Btn>
-        <span style={{ fontSize: 11.5, color: T.textMute }}>{image ? image.name : 'JPEG, PNG, GIF or WebP, under 3MB'}</span>
-        <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={pickImage} style={{ display: 'none' }} />
-      </div>
-      {image && <img src={image.base64} alt="" style={{ marginTop: 10, maxHeight: 120, borderRadius: 6, border: `1px solid ${T.border}` }} />}
-    </div>}
-
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <Btn variant="primary" size="md" icon={busy ? Loader2 : Sparkles} onClick={generate} disabled={!canGenerate} style={!canGenerate ? { opacity: 0.5 } : {}}>
-        {busy ? 'Generating...' : 'Generate theme'}
-      </Btn>
-      {error && <span style={{ fontSize: 12, color: T.danger }}>{error}</span>}
-    </div>
-
-    {result && <div style={{ padding: 14, backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ fontSize: 13, color: T.text, fontWeight: 600 }}>Proposed theme · {result.templateId} template</div>
-      <Swatches theme={result} />
-      {result.typography && <div style={{ fontSize: 11.5, color: T.textMute, fontFamily: '"JetBrains Mono", monospace' }}>
-        headline: {result.typography.headlineFont || 'brand'} · body: {result.typography.bodyFont || 'brand'}
-      </div>}
-      {result.rationale && <div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.5 }}>{result.rationale}</div>}
-      <div style={{ display: 'flex', gap: 8 }}>
-        <Btn variant="primary" size="sm" icon={Check} onClick={() => { onApply(result); setResult(null) }}>Apply to this deployment</Btn>
-        <Btn variant="ghost" size="sm" onClick={() => setResult(null)}>Discard</Btn>
-      </div>
-      <div style={{ fontSize: 10.5, color: T.textLow }}>Applying sets the template and colours for this deployment only. Check the Preview afterwards: the template picker re-runs its contrast audit against the new colours and flags any pairing that would be hard to read.</div>
-    </div>}
-  </div>
-}
-
 const DeploymentEditor = ({ deployment, isDraft, quizzes, brands, onSave, onBack }) => {
   const [draft, setDraft] = useState(deployment)
   const [dirty, setDirty] = useState(isDraft || false)
@@ -497,11 +357,9 @@ const DeploymentEditor = ({ deployment, isDraft, quizzes, brands, onSave, onBack
   const updHeaderCta = (p) => updHeader({ ctaButton: { ...(draft.headerConfig?.ctaButton || {}), ...p } })
   const updFooter = (p) => update({ footerConfig: { ...draft.footerConfig, ...p } })
 
-  // The editor previews against the THEMED brand, not the raw one, so the
-  // template contrast audit below judges the colours that will actually ship
-  // rather than the brand's originals.
-  const rawBrand = brands.find((b) => b.id === draft.brandId)
-  const brand = rawBrand ? applyQuizTheme(rawBrand, draft.themeOverrides) : rawBrand
+  // The brand paints the quiz. A deployment picks a template; it never authors
+  // a colour, so what the contrast audit below judges IS what ships.
+  const brand = brands.find((b) => b.id === draft.brandId)
   const isOverriding = draft.bodySectionOverrides !== null && draft.bodySectionOverrides !== undefined
   const effectiveSections = isOverriding ? draft.bodySectionOverrides : (brand?.defaultBodySections || [])
   const toggleOverride = () => { if (isOverriding) update({ bodySectionOverrides: null }); else update({ bodySectionOverrides: JSON.parse(JSON.stringify(brand?.defaultBodySections || [])) }) }
@@ -519,7 +377,6 @@ const DeploymentEditor = ({ deployment, isDraft, quizzes, brands, onSave, onBack
   const tabs = [
     { id: 'basics', label: 'Basics' },
     { id: 'render', label: 'Render & Embed' },
-    { id: 'theme', label: `Theme${draft.themeOverrides ? ' · CUSTOM' : ''}` },
     { id: 'destinations', label: `Destinations${Object.keys(draft.destinationOverrides || {}).length ? ' · OVERRIDE' : ''}` },
     { id: 'chrome', label: 'Header / Footer', show: draft.renderMode === 'standalone' },
     { id: 'sections', label: `Body Sections${isOverriding ? ' · OVERRIDE' : ''}`, show: draft.renderMode === 'standalone' },
@@ -617,13 +474,6 @@ const DeploymentEditor = ({ deployment, isDraft, quizzes, brands, onSave, onBack
             </div>
           </>}
         </div>}
-
-        {tab === 'theme' && <ThemePanel
-          draft={draft}
-          brand={brand}
-          onApply={(theme) => update({ themeOverrides: theme, templateId: theme.templateId || draft.templateId })}
-          onClear={() => update({ themeOverrides: null })}
-        />}
 
         {tab === 'destinations' && <DestinationsPanel
           draft={draft}
