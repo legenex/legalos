@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import '../globals.css'
 import { resolveSiteByHost, isFallbackHost } from '@/lib/site-resolver'
+import { resolveBrandTokens } from '@/lib/brand/resolve-tokens'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,21 +30,33 @@ type Site = {
 // Per-Site brand tokens use distinct names (--site-*) so they don't collide with the
 // dark-theme app tokens (--color-*) defined in globals.css. When no Site is matched
 // (the LegalOS marketing fallback), no site tokens are emitted — the dark @theme wins.
+//
+// Every value comes from resolveBrandTokens. This function used to carry its own
+// `?? '#0B1F3A'` fallback on each variable, which meant a brand with no data
+// rendered as a plausible navy site rather than visibly failing — and a wrong
+// palette that looks deliberate is how wrong colours reach production.
+//
+// If the brand cannot resolve, we emit NOTHING and let the page render unstyled.
+// That is deliberate: unstyled is obviously broken, an invented palette is not.
+// The publish gate is what stops a site reaching that state in the first place.
 const siteStyleVars = (site: Site): string => {
-  const b = site?.brand
-  return `:root{
-    --site-primary:${b?.primary ?? '#0B1F3A'};
-    --site-accent:${b?.accent ?? '#E8B14B'};
-    --site-surface:${b?.surface ?? '#F7F5F0'};
-    --site-ink:${b?.ink ?? '#0E1116'};
-    --site-muted:${b?.muted ?? '#5C6470'};
-    --site-success:${b?.success ?? '#1F9D55'};
-    --site-warning:${b?.warning ?? '#E8B14B'};
-    --site-danger:${b?.danger ?? '#C03A2B'};
-    --site-font-heading:${b?.font_heading ?? 'Inter'},system-ui,sans-serif;
-    --site-font-body:${b?.font_body ?? 'Inter'},system-ui,sans-serif;
+  let resolved
+  try {
+    resolved = resolveBrandTokens(site?.brand as Parameters<typeof resolveBrandTokens>[0])
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[legalos] brand tokens unresolvable for site ${site?.id}:`,
+      err instanceof Error ? err.message : err,
+    )
+    return ''
   }
-  html.site-shell,html.site-shell body{background:var(--site-surface);color:var(--site-ink);font-family:var(--site-font-body);margin:0;}
+
+  // The page background comes from --site-bg. It used to come from
+  // --site-surface, which is why the migration copies surface into bg: the
+  // rendered background is unchanged, and surface goes back to meaning the card.
+  return `:root{${resolved.css}}
+  html.site-shell,html.site-shell body{background:var(--site-bg);color:var(--site-ink);font-family:var(--site-font-body);margin:0;}
   html.site-shell h1,html.site-shell h2,html.site-shell h3,html.site-shell h4,html.site-shell h5{font-family:var(--site-font-heading);color:var(--site-ink);}
   html.site-shell a{color:var(--site-primary);}
   `

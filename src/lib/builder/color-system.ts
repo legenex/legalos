@@ -57,7 +57,7 @@ export function rgbToHsl({ r, g, b }: RGB): [number, number, number] {
   return [h, s, l]
 }
 
-function hslToHex(h: number, s: number, l: number): string {
+export function hslToHex(h: number, s: number, l: number): string {
   h = ((h % 1) + 1) % 1
   s = clamp01(s)
   l = clamp01(l)

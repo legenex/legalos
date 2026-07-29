@@ -52,6 +52,98 @@ export const STATUS_LABEL: Record<ItemStatus, string> = {
 export const ENTRIES: BuildLogEntry[] = [
   {
     date: '2026-07-29',
+    title: 'Brand colour gets one owner (P0-B)',
+    summary:
+      'First package of the restructure framework. Colour had three owners: the brand record, the per-deployment theme generator, and hardcoded values inside components. Three owners of one value produce arbitrary output, which is what the wrong Don’t Settle colours actually were. There is now one contract, one resolver, and a lint that stops the count going back up.',
+    items: [
+      {
+        title: 'A written token contract',
+        status: 'shipped',
+        detail:
+          'Twelve colour tokens and five shape tokens, with four required: primary, call to action, page background, body text. The schema, the resolver, the brand editor and the lint all read this one list rather than keeping three copies in step by hand.',
+        files: ['src/lib/brand/tokens.ts'],
+      },
+      {
+        title: 'One resolver, and it refuses to guess',
+        status: 'shipped',
+        detail:
+          'resolveBrandTokens is now the only thing that turns a brand into CSS. A missing required token throws instead of falling back. The old layout carried a hardcoded fallback on every variable, so a brand with no data rendered as a plausible navy site rather than visibly failing, and a wrong palette that looks deliberate is exactly how wrong colour reaches production.',
+        files: ['src/lib/brand/resolve-tokens.ts', 'src/app/(public)/layout.tsx'],
+      },
+      {
+        title: 'Everything else is derived, never stored',
+        status: 'shipped',
+        detail:
+          'Tint and shade ramps, hover, active, focus and disabled states, and any text colour left blank, all recomputed on every resolve against the surface they will actually sit on. A stored derived value is a cache with no invalidation: it goes stale the moment someone edits the colour it came from.',
+        files: ['src/lib/brand/resolve-tokens.ts'],
+      },
+      {
+        title: 'Status colours stop being brand colours',
+        status: 'shipped',
+        detail:
+          'Success, warning, danger and info are now fixed and identical for every brand. A destructive action rendered in brand orange on one site and brand red on another teaches people to read colour as decoration, and the cost lands on whoever clicks Delete expecting Save. The old brand-scoped names still resolve, but they now point at the fixed values.',
+        files: ['src/lib/brand/tokens.ts'],
+      },
+      {
+        title: 'Schema and backfill, with nothing repainted',
+        status: 'shipped',
+        detail:
+          'Eleven new columns, backfilled so no live page changes appearance: the page background takes the value the old surface field was really being used for, the button colour takes primary because that is what every site already drew, and colours that only existed in the funnel brand JSON are promoted into the canonical columns. The derived tokens are deliberately left blank, because writing today’s guess into them would freeze it and defeat the contrast check.',
+        files: ['src/migrations/20260729_170000_brand_token_contract.ts', 'src/collections/Sites.ts'],
+      },
+      {
+        title: 'A lint that can actually be switched on',
+        status: 'shipped',
+        detail:
+          'pnpm lint:tokens fails when a public-render component gains a hardcoded colour. It runs as its own script because pnpm lint in this repo has no committed config and is not a working gate. Current count is 699 across 25 files, recorded as a baseline that may never go up: a gate that cannot be turned on today is not a gate, and a ratchet closes the gap without a 25-file rewrite first.',
+        files: ['scripts/lint-brand-tokens.mjs'],
+      },
+      {
+        title: 'The funnel brand map still has its own defaults',
+        status: 'partial',
+        detail:
+          'The public site path now goes through the resolver. The funnel path does not: the brand map that feeds the quiz, landing page and advertorial builders still applies its own fallback colours. That is the second half of this package and it is the next thing to do, because a template library built on top of it would inherit the split.',
+        files: ['src/lib/brand-map.ts'],
+      },
+    ],
+    verification: [
+      {
+        label: 'The resolver',
+        state: 'verified',
+        detail:
+          '90 assertions. Every required token throws when absent and is named in the error. Text derived for white, black and the exact Tailwind orange from the bug report all reach 4.5:1. A deliberately illegible brand fails the audit and names the failing pair rather than being silently corrected. Two different brands get byte-identical system colours. Dark mode changes the ground without changing the brand colour. One assertion scans the resolver’s own source for a reintroduced fallback, and a second proves that scan would catch one.',
+      },
+      {
+        label: 'The lint gate',
+        state: 'verified',
+        detail:
+          'Baseline recorded at 699, then a hardcoded colour was deliberately added to a public component to confirm the script exits non-zero, then reverted.',
+      },
+      {
+        label: 'Backfill against real data',
+        state: 'not-run',
+        detail:
+          'The migration is written to be idempotent and to preserve appearance, but it has not run against the production database. Worth checking one site’s rendered background before and after.',
+      },
+      {
+        label: 'Type check and browser',
+        state: 'not-run',
+        detail: 'No dependencies, database or generated types in this workspace, as always.',
+      },
+    ],
+    deployNotes: [
+      'Adds a migration that backfills brand columns. Run pnpm payload migrate after the build and before restarting.',
+      'Nothing should look different after this deploy. If a site does change appearance, that is a backfill problem worth reporting rather than a design change.',
+      'A site whose brand cannot resolve now renders unstyled instead of in an invented palette. That is intentional and visible on purpose.',
+    ],
+    openIssues: [
+      'Per-deployment theme overrides are still in place. The decision is to remove them and relocate the generator to Brand Identity as an accept-or-reject proposal; that is the next package.',
+      'The brand map used by the funnel builders still carries its own fallback colours, so the funnel path has not yet been consolidated onto the resolver.',
+      'The block renderer still sets --site-* per block from block metadata. That is a content-level override rather than a competing brand store, but it should be reviewed once templates land.',
+    ],
+  },
+  {
+    date: '2026-07-29',
     title: 'Landing pages go live, running the real quiz',
     summary:
       'Closes the one item left partial earlier today. A funnel landing page now serves on its own URL with its own link preview, and the quiz in its hero is the real deployment: the real flow, its own theme, its own destinations, and leads that arrive in the dashboard. Same page, several brands, each running its own quiz.',

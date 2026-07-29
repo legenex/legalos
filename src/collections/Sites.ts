@@ -98,14 +98,36 @@ export const Sites: CollectionConfig = {
       fields: [
         { name: 'logo_url', type: 'text' },
         { name: 'favicon_url', type: 'text' },
+        // --- Brand token contract (src/lib/brand/tokens.ts) -----------------
+        // These are the ONLY place a human types a colour. Everything else in
+        // the system reads them through resolveBrandTokens and derives the
+        // rest. Required: primary, cta, bg, ink. The optional ones are derived
+        // when blank rather than defaulted, so leaving one empty is a valid
+        // choice and not a hole.
         { name: 'primary', type: 'text', defaultValue: '#0B1F3A' },
+        { name: 'primary_ink', type: 'text', admin: { description: 'Blank derives a legible colour for text on primary.' } },
         { name: 'accent', type: 'text', defaultValue: '#E8B14B' },
-        { name: 'surface', type: 'text', defaultValue: '#F7F5F0' },
+        { name: 'accent_ink', type: 'text', admin: { description: 'Blank derives a legible colour for text on accent.' } },
+        { name: 'cta', type: 'text', admin: { description: 'The button colour. Required, even when it equals primary.' } },
+        { name: 'cta_ink', type: 'text', admin: { description: 'Blank derives a legible colour for button text.' } },
+        { name: 'bg', type: 'text', admin: { description: 'Page background. Required.' } },
+        { name: 'surface', type: 'text', defaultValue: '#F7F5F0', admin: { description: 'Cards and panels. Blank derives from the background.' } },
+        { name: 'surface_2', type: 'text', admin: { description: 'Nested panels and inputs. Blank derives from surface.' } },
         { name: 'ink', type: 'text', defaultValue: '#0E1116' },
-        { name: 'muted', type: 'text', defaultValue: '#5C6470' },
-        { name: 'success', type: 'text', defaultValue: '#1F9D55' },
-        { name: 'warning', type: 'text', defaultValue: '#E8B14B' },
-        { name: 'danger', type: 'text', defaultValue: '#C03A2B' },
+        { name: 'ink_muted', type: 'text', admin: { description: 'Secondary text. Blank derives a softer contrast.' } },
+        { name: 'border', type: 'text', admin: { description: 'Hairlines and dividers. Blank derives from the background.' } },
+        { name: 'radius', type: 'text', admin: { description: 'Corner radius in pixels, e.g. 8.' } },
+        { name: 'radius_lg', type: 'text', admin: { description: 'Larger radius for cards and modals.' } },
+        { name: 'shadow', type: 'text', admin: { description: 'A CSS box-shadow value.' } },
+        // Deprecated. `muted` is superseded by `ink_muted`; success / warning /
+        // danger are now fixed system colours emitted as --sys-*, identical for
+        // every brand, because a status colour that changes per brand teaches
+        // people to read colour as decoration. Retained only so existing rows
+        // keep their data until a later cleanup drops them.
+        { name: 'muted', type: 'text', defaultValue: '#5C6470', admin: { description: 'Deprecated. Use Secondary text.' } },
+        { name: 'success', type: 'text', defaultValue: '#1F9D55', admin: { description: 'Deprecated. Status colours are system-wide.' } },
+        { name: 'warning', type: 'text', defaultValue: '#E8B14B', admin: { description: 'Deprecated. Status colours are system-wide.' } },
+        { name: 'danger', type: 'text', defaultValue: '#C03A2B', admin: { description: 'Deprecated. Status colours are system-wide.' } },
         { name: 'font_heading', type: 'text', defaultValue: 'Inter' },
         { name: 'font_body', type: 'text', defaultValue: 'Inter' },
         { name: 'display_name', type: 'text', admin: { description: 'Brand display name shown across funnels. Defaults to Site name when blank.' } },
