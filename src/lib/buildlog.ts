@@ -52,6 +52,85 @@ export const STATUS_LABEL: Record<ItemStatus, string> = {
 export const ENTRIES: BuildLogEntry[] = [
   {
     date: '2026-07-29',
+    title: 'Hardcoded colour starts coming out of public pages',
+    summary:
+      'First real pass at the 311. The shared public stylesheet, the lead form and the quiz runtime now take every colour from a token. 119 down, 163 left, and the remainder is a different kind of work rather than more of the same.',
+    items: [
+      {
+        title: 'The shared public stylesheet is at zero',
+        status: 'shipped',
+        detail:
+          'All 104 hardcoded values in the CSS behind the public sections are gone. Alpha tints became a mix of the token they were tinting rather than a fixed rgba, so a brand recolour carries through them. The stylesheet also still carried fallback colours inside its variables, which is the fallback palette the contract forbids; those are gone, so a brand with no data now fails visibly instead of rendering in someone else\u2019s grey.',
+        files: ['src/components/blocks/bespoke-css.ts'],
+      },
+      {
+        title: 'Four errors the scripted pass introduced, caught and fixed',
+        status: 'shipped',
+        detail:
+          'A find-and-replace collapsed a two-stop gradient onto one colour, flattened two distinct navies into one, painted the page in the card colour so every card vanished, and put button text verified against one token onto a button painted with another. Each was found by reading the output rather than trusting the script, which is the reason to read the output.',
+        files: ['src/components/blocks/bespoke-css.ts'],
+      },
+      {
+        title: 'Lead form and quiz runtime tokenised',
+        status: 'shipped',
+        detail:
+          'The public lead form and the quiz page now use tokens for surfaces, hairlines, shadows and button text, and the error message uses the fixed system danger colour rather than a brand-scoped one. The same card-on-the-same-colour-as-its-section mistake was in the lead form and is fixed.',
+        files: ['src/components/blocks/LeadForm.tsx', 'src/components/public/quiz/QuizRuntime.tsx'],
+      },
+      {
+        title: 'New derived tokens, none of them authored',
+        status: 'shipped',
+        detail:
+          'Text that sits on the ink colour when ink is used as a surface, which is where hardcoded white usually hides in dark heroes and footers. A muted version of it. An elevation and scrim set, neutral by design because a drop shadow is a depth cue rather than an identity, but tokenised so components stop inventing their own alpha.',
+        files: ['src/lib/brand/resolve-tokens.ts'],
+      },
+      {
+        title: 'The admin page builder was being counted as public output',
+        status: 'shipped',
+        detail:
+          'Three page-builder components were in the public budget. Nothing under the public routes imports them, checked rather than assumed, so they moved to the uncounted admin scope. That is 29 of the reduction and it is a scope correction, not work.',
+        files: ['scripts/lint-brand-tokens.mjs'],
+      },
+      {
+        title: 'What is left is template work, not find and replace',
+        status: 'partial',
+        detail:
+          'The remaining 163 is concentrated in the landing-page renderer, the quiz templates and the block renderer. Their colours are not stray literals; they are the fixed palettes that define what each template looks like. Turning those into tokens is the template library itself, which is its own package, and doing it as a sweep now would produce templates that all look the same.',
+        files: ['src/components/builder/lp/render.tsx', 'src/components/builder/quiz/templates.tsx', 'src/components/blocks/BlockRenderer.tsx'],
+      },
+    ],
+    verification: [
+      {
+        label: 'Every token the CSS now depends on resolves',
+        state: 'verified',
+        detail:
+          '78 assertions across three brands including the reported bad palette and a deliberately hostile one. Each checks that all 22 referenced tokens are emitted, that text on the ink surface and text on the button both reach 4.5:1, that the gradient still has two distinguishable ends, and that a card is never the same colour as the page behind it.',
+      },
+      {
+        label: 'Neutral values were not quietly exempted',
+        state: 'verified',
+        detail:
+          '196 of the 282 were greyscale, and exempting them would have cut the number by two thirds without doing anything. They were not exempted: a grey used as text or as a surface is exactly the white-on-white risk, and only shadow and scrim alpha is genuinely brand independent. Those became tokens too.',
+      },
+      {
+        label: 'In a browser',
+        state: 'not-run',
+        detail:
+          'The public sections have not been rendered since the stylesheet was rewritten. This is the change most worth looking at directly: open a site page and check the hero, the buttons, the cards and the footer.',
+      },
+    ],
+    deployNotes: [
+      'No migration. This is a render change only.',
+      'The public sections should look the same. Colour now flows from the brand, so if anything shifted it is because that section was previously ignoring the brand.',
+      'The stylesheet uses color-mix for tints. It has been available in every major browser since 2023, but it is worth a glance on an older device if you have one.',
+    ],
+    openIssues: [
+      '163 hardcoded colours remain, almost all of them template palettes rather than stray literals. They come out as part of building the template library.',
+      'One tenant still has 125 in page components that should be CMS content rather than source code.',
+    ],
+  },
+  {
+    date: '2026-07-29',
     title: 'Deployments stop authoring colour (P0-C)',
     summary:
       'The third owner of colour is gone. A deployment could generate and store its own palette, so the brand said one thing and the deployment said another and whichever ran last won. Colour now has exactly one owner, and the generator that used to do the damage now proposes to the brand instead.',

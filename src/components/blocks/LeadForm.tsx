@@ -134,18 +134,18 @@ export function LeadForm({ block, site }: { block: LeadFormBlock; site: Site }) 
     <section
       id="quiz"
       style={{
-        background: 'var(--site-surface)',
+        background: 'var(--site-bg)',
         padding: '64px 0',
       }}
     >
       <div className="mx-auto px-6" style={{ maxWidth: 760 }}>
         <div
           style={{
-            background: '#fff',
+            background: 'var(--site-surface)',
             borderRadius: 16,
-            boxShadow: '0 20px 60px rgba(0,0,0,0.10)',
+            boxShadow: 'var(--site-shadow-lg)',
             padding: 40,
-            border: '1px solid rgba(0,0,0,0.05)',
+            border: '1px solid var(--site-hairline)',
           }}
         >
           {block.eyebrow ? (
@@ -168,7 +168,7 @@ export function LeadForm({ block, site }: { block: LeadFormBlock; site: Site }) 
             </h2>
           ) : null}
           {block.sub ? (
-            <p style={{ fontSize: 15, color: 'var(--site-muted)', marginTop: 10, lineHeight: 1.55 }}>{block.sub}</p>
+            <p style={{ fontSize: 15, color: 'var(--site-ink-muted)', marginTop: 10, lineHeight: 1.55 }}>{block.sub}</p>
           ) : null}
 
           <form ref={formRef} onSubmit={onSubmit} style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 12 }} noValidate>
@@ -194,7 +194,7 @@ export function LeadForm({ block, site }: { block: LeadFormBlock; site: Site }) 
             ))}
 
             {block.consent_md ? (
-              <p style={{ fontSize: 12, color: 'var(--site-muted)', lineHeight: 1.5, marginTop: 4 }}>{block.consent_md}</p>
+              <p style={{ fontSize: 12, color: 'var(--site-ink-muted)', lineHeight: 1.5, marginTop: 4 }}>{block.consent_md}</p>
             ) : null}
 
             <button
@@ -202,8 +202,8 @@ export function LeadForm({ block, site }: { block: LeadFormBlock; site: Site }) 
               disabled={pending}
               style={{
                 marginTop: 8,
-                background: 'var(--site-primary)',
-                color: '#fff',
+                background: 'var(--site-cta)',
+                color: 'var(--site-cta-ink)',
                 fontWeight: 800,
                 fontSize: 15,
                 padding: '16px 22px',
@@ -218,7 +218,7 @@ export function LeadForm({ block, site }: { block: LeadFormBlock; site: Site }) 
             </button>
 
             {error ? (
-              <p style={{ color: 'var(--site-danger, #C03A2B)', fontSize: 13, marginTop: 4 }} role="alert">
+              <p style={{ color: 'var(--sys-danger)', fontSize: 13, marginTop: 4 }} role="alert">
                 {error}
               </p>
             ) : null}
@@ -242,8 +242,8 @@ function Input({ name, placeholder, type = 'text', required }: { name: string; p
       required={required}
       style={{
         width: '100%',
-        background: '#fff',
-        border: '1px solid rgba(0,0,0,0.15)',
+        background: 'var(--site-surface)',
+        border: '1px solid var(--site-border)',
         borderRadius: 8,
         padding: '14px 16px',
         fontSize: 15,
@@ -310,8 +310,8 @@ function FieldEl({ field }: { field: FormFieldDef }) {
           rows={4}
           style={{
             width: '100%',
-            background: '#fff',
-            border: '1px solid rgba(0,0,0,0.15)',
+            background: 'var(--site-surface)',
+            border: '1px solid var(--site-border)',
             borderRadius: 8,
             padding: '14px 16px',
             fontSize: 15,
@@ -332,8 +332,8 @@ function FieldEl({ field }: { field: FormFieldDef }) {
           required={!!field.required}
           style={{
             width: '100%',
-            background: '#fff',
-            border: '1px solid rgba(0,0,0,0.15)',
+            background: 'var(--site-surface)',
+            border: '1px solid var(--site-border)',
             borderRadius: 8,
             padding: '14px 16px',
             fontSize: 15,
@@ -373,7 +373,7 @@ function FieldWrap({ label, children }: { label?: string; children: React.ReactN
   if (!label) return <>{children}</>
   return (
     <div>
-      <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: 'var(--site-muted)', marginBottom: 6 }}>{label}</label>
+      <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: 'var(--site-ink-muted)', marginBottom: 6 }}>{label}</label>
       {children}
     </div>
   )

@@ -52,6 +52,9 @@ const ADMIN = [
   /\/builder\/[^/]+\/[A-Za-z]*BuilderApp\.tsx$/,
   /\/builder\/lp\/LandingPagesApp\.tsx$/,
   /\/builder\/quiz\/(editors|config|seed-data)\.tsx?$/,
+  // The whole page-builder directory is the admin editing surface. Nothing in
+  // src/app/(public) imports from it; verified, not assumed.
+  /\/builder\/page-builder\//,
   /\/builder\/(ui|body-sections)\.tsx$/,
   /\/builder\/brand\/BrandModule\.tsx$/,
 ]

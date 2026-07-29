@@ -234,13 +234,32 @@ export const resolveBrandTokens = (
     }
   }
 
-  // 6. System colours: identical for every brand, by design.
+  // 6. Inverse pair: text that sits ON the ink colour when ink is used as a
+  //    SURFACE rather than as text. Dark heroes, footers and panels do exactly
+  //    that, and they are where hardcoded #ffffff usually hides. A literal white
+  //    is only correct while the brand's ink happens to be dark; derived, it
+  //    stays legible when a brand's ink is not.
+  const inkInverse = getSafeTextColor(ink).hex
+  vars['--site-ink-inverse'] = inkInverse
+  vars['--site-ink-inverse-muted'] = getSafeMutedColor(inkInverse, ink).hex
+
+  // Elevation and scrim. Neutral by design and identical for every brand: a
+  // drop shadow is a depth cue, not an identity. Tokenised anyway so components
+  // stop inventing their own alpha values and a future change lands in one file.
+  vars['--site-shadow-sm'] = '0 1px 2px rgba(0,0,0,0.06)'
+  vars['--site-shadow-md'] = '0 4px 6px -1px rgba(0,0,0,0.10), 0 2px 4px -2px rgba(0,0,0,0.10)'
+  vars['--site-shadow-lg'] = '0 20px 25px -5px rgba(0,0,0,0.10), 0 8px 10px -6px rgba(0,0,0,0.10)'
+  vars['--site-scrim'] = 'rgba(0,0,0,0.55)'
+  vars['--site-hairline'] = mode === 'dark' ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)'
+  vars['--site-tint'] = mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'
+
+  // 7. System colours: identical for every brand, by design.
   for (const [name, value] of Object.entries(SYSTEM_COLORS)) {
     vars[`--sys-${name}`] = value
     vars[`--sys-${name}-ink`] = getSafeTextColor(value).hex
   }
 
-  // 7. Legacy aliases, kept alive on purpose and in exactly one place.
+  // 8. Legacy aliases, kept alive on purpose and in exactly one place.
   //
   //    `--site-muted` is used in 22 components that predate this contract.
   //    `--site-success/warning/danger` used to be BRAND fields, which is what

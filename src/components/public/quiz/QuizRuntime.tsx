@@ -51,7 +51,11 @@ const INVISIBLE_NODE_TYPES = new Set(['decision', 'webhook', 'verification', 'tr
 // Page-level palette for the standalone chrome. Mirrors resolvePagePalette in
 // the builder preview so the live page and the preview shade identically.
 const resolvePagePalette = (brand, templateId) => {
-  const base = templateId === 'editorial' ? '#f5ecd9' : brand?.colors?.background || '#0a1a3a'
+  // The brand decides the ground. A template that wants a distinct paper tone
+  // asks for a step of the brand's own surface rather than naming a colour,
+  // which is what stops the editorial template looking identical for every
+  // brand that picks it.
+  const base = brand?.colors?.background || brand?.colors?.cardBg || 'var(--site-bg)'
   const text = getSafeTextColor(base).hex
   const muted = getSafeMutedColor(text, base).hex
   const cardSurface = deriveBrandSurface(brand?.colors?.cardBg || base, brand?.colors?.primary || base, { hueBlend: 0.05 })
@@ -436,7 +440,7 @@ export function QuizRuntime({
 
       <div style={{ position: 'relative' }}>
         {standalone && headerConfig ? (
-          <header style={{ padding: '14px 24px', borderBottom: `1px solid ${C.primary}33`, display: 'flex', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+          <header style={{ padding: '14px 24px', borderBottom: `1px solid ${C.primary}33`, display: 'flex', alignItems: 'center', backgroundColor: 'var(--site-tint)' }}>
             <div style={{ flex: 1 }}>
               {headerConfig.logoEnabled && brand.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -498,7 +502,7 @@ export function QuizRuntime({
           : null}
 
         {standalone && footerConfig ? (
-          <footer style={{ padding: '28px 24px', borderTop: `1px solid ${C.primary}22`, textAlign: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+          <footer style={{ padding: '28px 24px', borderTop: `1px solid ${C.primary}22`, textAlign: 'center', backgroundColor: 'var(--site-tint)' }}>
             {footerConfig.logoEnabled && brand.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={brand.logoUrl} alt={brand.displayName} style={{ height: footerConfig.logoSize || 32, marginBottom: 12 }} />
