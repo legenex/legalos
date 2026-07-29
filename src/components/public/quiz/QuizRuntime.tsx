@@ -42,6 +42,7 @@ import {
   captureAttribution, readTrustedFormCert, readJornayaLeadId, firePixelEvents, submitLead,
 } from '@/lib/lead-capture-client'
 import { splitQuizAnswers, isDeliverableContact } from '@/lib/quiz-lead'
+import { applyQuizTheme } from '@/lib/quiz-theme'
 
 // Node types that exist for the flow author, not for the visitor. They resolve
 // and advance without ever painting a question card.
@@ -59,10 +60,43 @@ const resolvePagePalette = (brand, templateId) => {
   return { base, text, muted, cardSurface, cardText, cardMuted, onPrimary: onPrimaryText(brand?.colors?.primary || base) }
 }
 
-export function QuizRuntime({ quiz, brand, deployment, site, embed = false }) {
+/**
+ * Narrowest an answer button can get before its label starts wrapping badly.
+ * Used to decide how many columns fit the space the card ACTUALLY has, which is
+ * not the same question as how wide the window is - a quiz card in a landing
+ * page hero is narrow on a wide desktop screen.
+ */
+const MIN_OPTION_WIDTH = 210
+
+export function QuizRuntime({
+  quiz,
+  brand: brandIn,
+  deployment,
+  site,
+  embed = false,
+  inline = false,
+  surfaceColor = null,
+  previewMode = false,
+}) {
   const customFields = quiz.customFields?.length ? quiz.customFields : SEED_CUSTOM_FIELDS
   const templateId = deployment?.templateId || 'minimal'
   const tc = getTemplateConfig(templateId)
+  // Both embed (iframe on someone else's site) and inline (a card inside one of
+  // our own landing pages) drop the page chrome. They differ only in that an
+  // embed also has to tell its parent frame how tall it is.
+  const chromeless = embed || inline
+
+  // When the quiz is dropped into a host surface - a landing-page hero card, a
+  // section with its own background - the host tells us the OPAQUE colour the
+  // quiz will sit on. Every text colour is then derived against that real
+  // backdrop instead of against the quiz's own page background, which is what
+  // keeps a dark-brand quiz readable inside a light landing page. This is the
+  // same "derive from the surface it actually sits on" rule the colour system
+  // enforces everywhere else; passing the host surface through is what lets it
+  // apply across the boundary.
+  const brand = surfaceColor
+    ? applyQuizTheme(brandIn, { colors: { background: surfaceColor, cardBg: surfaceColor } })
+    : brandIn
 
   const [stepIdx, setStepIdx] = useState(() => Math.max(entryStepIndex(quiz, null), 0))
   const [currentTier, setCurrentTier] = useState(null)
@@ -75,6 +109,11 @@ export function QuizRuntime({ quiz, brand, deployment, site, embed = false }) {
   const [submitState, setSubmitState] = useState('idle')
   const submittedRef = useRef(false)
   const rootRef = useRef(null)
+  const cardAreaRef = useRef(null)
+  // Width of the space the card has, not the window. Drives how many answer
+  // columns are shown, so the same quiz reads correctly full-page and squeezed
+  // into a landing-page hero.
+  const [cardWidth, setCardWidth] = useState(0)
   // Consecutive nodes resolved that the visitor never saw. Reset whenever a
   // real question renders; see the skip effect for why it is bounded.
   const autoAdvanceRef = useRef(0)
@@ -105,6 +144,14 @@ export function QuizRuntime({ quiz, brand, deployment, site, embed = false }) {
   const submitOnce = useCallback(async (values) => {
     if (submittedRef.current) return
     submittedRef.current = true
+
+    // Clicking through a builder preview must not create a lead. This is the
+    // one guard between "designing a landing page" and "a fake person in the
+    // dashboard, a fired pixel, and a webhook delivered to a buyer".
+    if (previewMode) {
+      setSubmitState('done')
+      return
+    }
 
     const { contact, quizAnswers } = splitQuizAnswers(values)
     if (!isDeliverableContact(contact)) {
@@ -151,7 +198,7 @@ export function QuizRuntime({ quiz, brand, deployment, site, embed = false }) {
       submittedRef.current = false
     }
     setSubmitState('done')
-  }, [quiz, site, deployment])
+  }, [quiz, site, deployment, previewMode])
 
   // ---------------------------------------------------------------------------
   // Flow advance
@@ -165,7 +212,7 @@ export function QuizRuntime({ quiz, brand, deployment, site, embed = false }) {
     // AI nodes run server-side: the prompt lives in the database and is looked
     // up from the deployment, so a visitor can never post an arbitrary prompt
     // to our Anthropic key.
-    if (node?.ai?.enabled && node.ai.outputField && deployment?.id) {
+    if (node?.ai?.enabled && node.ai.outputField && deployment?.id && !previewMode) {
       setBusy(true)
       try {
         const resp = await fetch('/api/legalos/quiz-ai', {
@@ -276,6 +323,19 @@ export function QuizRuntime({ quiz, brand, deployment, site, embed = false }) {
   }, [currentNode?.id])
 
   // ---------------------------------------------------------------------------
+  // Measure the card area so the answer grid fits its container
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const el = cardAreaRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const measure = () => setCardWidth(el.getBoundingClientRect().width)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // ---------------------------------------------------------------------------
   // Embed: report height to the parent frame
   // ---------------------------------------------------------------------------
   useEffect(() => {
@@ -304,27 +364,43 @@ export function QuizRuntime({ quiz, brand, deployment, site, embed = false }) {
   // ---------------------------------------------------------------------------
   const C = brand.colors
   const pagePal = resolvePagePalette(brand, templateId)
-  const standalone = !embed
+  const standalone = !chromeless
   const sections = deployment?.bodySectionOverrides || brand?.defaultBodySections || []
   const headerConfig = deployment?.headerConfig
   const footerConfig = deployment?.footerConfig
   const progress = quiz.steps.length ? Math.min(100, ((stepIdx + 1) / quiz.steps.length) * 100) : 0
+
+  // Destinations resolve deployment -> brand -> site page. Computed here and
+  // handed to the card so the card never has to know where a URL came from.
+  const destinationCtx = {
+    deployment: deployment?.destinationOverrides,
+    brand: brand?.urls,
+  }
+
+  // How many answer columns actually fit. The author's setting is the ceiling,
+  // never the floor: a two-column layout squeezed into a 320px landing-page
+  // card becomes one column rather than two unreadable ones.
+  const authorCols = currentNode?.answerColumns || (currentNode?.questionType === 'button_grid' ? 2 : 1)
+  const fitCols = cardWidth > 0 ? Math.max(1, Math.floor(cardWidth / MIN_OPTION_WIDTH)) : authorCols
+  const columns = Math.max(1, Math.min(authorCols, fitCols))
 
   const showSpinner =
     busy ||
     (currentNode && INVISIBLE_NODE_TYPES.has(currentNode.type)) ||
     (currentNode?.type === 'endpoint' && submitState === 'sending')
 
-  const pageBackground = embed ? 'transparent' : tc.pageBg(brand)
-  const pageOverlay = embed ? 'none' : tc.pageOverlay(brand)
-  const pagePattern = embed ? 'none' : tc.pagePattern(brand)
+  // Chromeless renders sit inside someone else's layout, so they contribute no
+  // background of their own and no page-height floor.
+  const pageBackground = chromeless ? 'transparent' : tc.pageBg(brand)
+  const pageOverlay = chromeless ? 'none' : tc.pageOverlay(brand)
+  const pagePattern = chromeless ? 'none' : tc.pagePattern(brand)
 
   return (
     <div
       ref={rootRef}
-      className="quiz-public-root"
+      className={inline ? 'quiz-public-root quiz-inline' : 'quiz-public-root'}
       style={{
-        minHeight: embed ? undefined : '100vh',
+        minHeight: chromeless ? undefined : '100vh',
         background: pageBackground,
         position: 'relative',
         fontFamily: `"${brand.typography.headlineFont}", system-ui, sans-serif`,
@@ -333,9 +409,23 @@ export function QuizRuntime({ quiz, brand, deployment, site, embed = false }) {
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .quiz-btn-outlined-box:hover { background-color: var(--quiz-primary) !important; }
+        /* Inline: the host already drew the card. Drawing a second one inside it
+           reads as a box in a box, so the quiz gives up its own surface and
+           borrows the host's. Colours are already derived against surfaceColor,
+           so removing the background here cannot strand text on the wrong tone. */
+        .quiz-inline .preview-card {
+          background: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+          backdrop-filter: none !important;
+          padding: 0 !important;
+          max-width: 100% !important;
+          margin: 0 !important;
+        }
         @media (max-width: 640px) {
           .quiz-public-root .preview-card { padding: 24px 18px !important; border-radius: 14px !important; margin: 16px 12px !important; }
           .quiz-public-root [style*="grid-template-columns"], .quiz-public-root [style*="gridTemplateColumns"] { grid-template-columns: 1fr !important; gap: 10px !important; }
+          .quiz-inline .preview-card { padding: 0 !important; margin: 0 !important; }
         }
       `}</style>
 
@@ -368,8 +458,8 @@ export function QuizRuntime({ quiz, brand, deployment, site, embed = false }) {
           </header>
         ) : null}
 
-        <main style={{ padding: embed ? '16px 12px' : '40px 20px' }}>
-          <div style={{ maxWidth: 760, margin: '0 auto' }}>
+        <main style={{ padding: chromeless ? (inline ? 0 : '16px 12px') : '40px 20px' }}>
+          <div ref={cardAreaRef} style={{ maxWidth: chromeless ? '100%' : 760, margin: '0 auto' }}>
             {quiz.steps.length > 1 ? (
               <div style={{ height: 4, backgroundColor: `${C.primary}22`, borderRadius: 999, marginBottom: 24, overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${progress}%`, backgroundColor: C.primary, transition: 'width 0.3s' }} />
@@ -392,6 +482,9 @@ export function QuizRuntime({ quiz, brand, deployment, site, embed = false }) {
                 totalSteps={quiz.steps.length}
                 onBack={goBack}
                 canGoBack={history.length > 0}
+                destinationCtx={destinationCtx}
+                columns={columns}
+                previewMode={previewMode}
               />
             ) : (
               <div style={{ padding: 48, textAlign: 'center', color: pagePal.text }}>

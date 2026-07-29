@@ -19,6 +19,9 @@ import {
   Btn, Input, Textarea, Select, Label, Pill, IconBtn, ConfirmDialog, Toast, PageHeader, EmptyState,
 } from '../ui'
 import { saveBrandIdentity, createBrandSite, deleteBrandSite, aiGenerateBrand } from '@/app/(app)/admin/(top)/brands/brand-identities/actions'
+import {
+  DESTINATION_KEYS, DESTINATION_LABELS, DESTINATION_HINTS, DEFAULT_PATHS, isSafeDestinationUrl,
+} from '@/lib/quiz-destinations'
 
 // ============================================================================
 // SEED BRAND (defaults for new + AI merge)
@@ -52,6 +55,9 @@ const buildSeedBrand = () => ({
     termsUrl: 'https://checkmyclaim.co/terms',
     defaultDisclaimer: 'Attorney advertising. Not a law firm.',
   },
+  // Destination URLs. Empty by default so a new brand falls back to the site's
+  // own pages rather than inheriting another brand's addresses.
+  urls: {},
   bgPattern: 'plus',
   bgColor: '#0a1a3a',
   defaultBodySections: [
@@ -373,6 +379,10 @@ const BrandEditor = ({ brand, isDraft, onSave, onBack }) => {
   const updTypo = (p) => update({ typography: { ...draft.typography, ...p } })
   const updContact = (p) => update({ contact: { ...draft.contact, ...p } })
   const updLegal = (p) => update({ legal: { ...draft.legal, ...p } })
+  // Destination URLs for this brand. Every quiz and funnel running under it
+  // resolves thank-you / DQ / legal links from here, so they are set once per
+  // brand instead of being typed into individual quiz nodes.
+  const updUrls = (p) => update({ urls: { ...(draft.urls || {}), ...p } })
 
   const sections = draft.defaultBodySections || []
   const addSection = (type) => { update({ defaultBodySections: [...sections, { id: genId('s'), type, enabled: true, config: {} }] }); setPickerOpen(false) }
@@ -388,6 +398,7 @@ const BrandEditor = ({ brand, isDraft, onSave, onBack }) => {
     { id: 'identity', label: 'Identity' }, { id: 'colors', label: 'Colors' },
     { id: 'typography', label: 'Typography' }, { id: 'contact', label: 'Contact' },
     { id: 'domains', label: 'Domains' }, { id: 'legal', label: 'Legal' },
+    { id: 'urls', label: 'URLs' },
     { id: 'sections', label: `Default Body Sections · ${sections.length}` },
   ]
 
@@ -511,6 +522,37 @@ const BrandEditor = ({ brand, isDraft, onSave, onBack }) => {
                 <div><Label>Privacy URL</Label><Input mono value={draft.legal.privacyUrl || ''} onChange={(e) => updLegal({ privacyUrl: e.target.value })} /></div>
                 <div><Label>Terms URL</Label><Input mono value={draft.legal.termsUrl || ''} onChange={(e) => updLegal({ termsUrl: e.target.value })} /></div>
               </div>
+            </div>
+          )}
+
+          {tab === 'urls' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ fontSize: 12.5, color: T.textMute, lineHeight: 1.55 }}>
+                Where this brand&apos;s funnels send people. Quiz nodes point at a destination by name, not by URL,
+                so the same quiz can run under several brands and each one sends its own traffic to its own pages.
+                A deployment can override any of these for one placement. Leave a field blank to use the site&apos;s
+                own page at that path.
+              </div>
+              {DESTINATION_KEYS.map((key) => (
+                <div key={key}>
+                  <Label>{DESTINATION_LABELS[key]}</Label>
+                  <Input
+                    mono
+                    value={(draft.urls || {})[key] || ''}
+                    onChange={(e) => updUrls({ [key]: e.target.value })}
+                    placeholder={DEFAULT_PATHS[key]}
+                  />
+                  <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 4 }}>
+                    {DESTINATION_HINTS[key]}
+                    {!(draft.urls || {})[key] && ` Currently using ${DEFAULT_PATHS[key]}.`}
+                  </div>
+                  {(draft.urls || {})[key] && !isSafeDestinationUrl((draft.urls || {})[key]) && (
+                    <div style={{ fontSize: 11, color: T.danger, marginTop: 4 }}>
+                      Not a usable link. Use a full https:// address or a path starting with /.
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
 

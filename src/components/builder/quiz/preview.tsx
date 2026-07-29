@@ -19,6 +19,7 @@ import {
 } from '@/lib/quiz-graph'
 import { getTemplateConfig, renderAnswerButton, renderProgressIndicator, renderHeader } from './templates'
 import { applyQuizTheme } from '@/lib/quiz-theme'
+import { resolveRedirectUrl } from '@/lib/quiz-destinations'
 import { onPrimaryText, getSafeTextColor, getSafeMutedColor, deriveBrandSurface } from '@/lib/builder/color-system'
 import { aiTestPrompt } from '@/app/(app)/admin/(top)/quizzes/actions'
 
@@ -189,7 +190,7 @@ export const SmartDatePicker = ({ value, onChange, color, theme = 'dark' }) => {
   </div>
 }
 
-export const PreviewQuestionCard = ({ node: rawNode, brand, customFields, onAnswer, fieldValues, templateId = 'minimal', stepIdx = 0, totalSteps = 1, onBack, canGoBack }) => {
+export const PreviewQuestionCard = ({ node: rawNode, brand, customFields, onAnswer, fieldValues, templateId = 'minimal', stepIdx = 0, totalSteps = 1, onBack, canGoBack, destinationCtx = null, columns = null, previewMode = false }) => {
   const node = applyDynamicContent(rawNode, fieldValues)
   const tc = getTemplateConfig(templateId)
   const C = brand.colors
@@ -214,14 +215,27 @@ export const PreviewQuestionCard = ({ node: rawNode, brand, customFields, onAnsw
   const showBack = node.showBackButton !== false && canGoBack
   const nextText = node.nextButtonText || 'Next →'
   const backText = node.backButtonText || '← Back'
-  const cols = node.answerColumns || (node.questionType === 'button_grid' ? 2 : 1)
+  // `columns` is the container-aware override: the runtime measures the space
+  // the card actually has and passes the count that fits. Falling back to the
+  // author's setting keeps the builder preview showing what they configured.
+  const cols = columns ?? node.answerColumns ?? (node.questionType === 'button_grid' ? 2 : 1)
 
+  // The address a redirect resolves to comes from the deployment, then the
+  // brand, then the site's own page - never from a URL typed into the node.
+  // See src/lib/quiz-destinations.ts for why.
+  const redirectUrl = resolveRedirectUrl(node.redirect, destinationCtx || {}, fieldValues || {})
+
+  // A preview must never navigate. Without this guard, opening the last step of
+  // a flow in the builder would throw the admin out of the builder and onto the
+  // partner's site - and it would do it 800ms later, so it would read as a
+  // random crash rather than a redirect.
   useEffect(() => {
-    if (node.type === 'endpoint' && node.redirect?.mode === 'immediate' && node.redirect?.url) {
-      const t = setTimeout(() => { try { window.location.href = interp(node.redirect.url) } catch {} }, 800)
+    if (previewMode) return
+    if (node.type === 'endpoint' && node.redirect?.mode === 'immediate' && redirectUrl) {
+      const t = setTimeout(() => { try { window.location.href = redirectUrl } catch {} }, 800)
       return () => clearTimeout(t)
     }
-  }, [node.id])
+  }, [node.id, redirectUrl, previewMode])
 
   // Derive from the ACTUAL resolved surface, not a hardcoded template-name
   // guess — so input field tints + the date picker theme follow the real
@@ -309,9 +323,10 @@ export const PreviewQuestionCard = ({ node: rawNode, brand, customFields, onAnsw
 
     {node.type === 'endpoint' && <div style={{ padding: 24, textAlign: 'center' }}>
       <div style={{ width: 60, height: 60, margin: '0 auto 16px', borderRadius: '50%', backgroundColor: `${C.primary}22`, color: C.primary, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CheckCircle2 size={32} /></div>
-      {node.redirect?.mode === 'immediate' && <div style={{ fontSize: 13, color: pal.textMute }}>Redirecting...</div>}
-      {node.redirect?.mode === 'button' && node.redirect?.url && <a href={interp(node.redirect.url)} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 8, padding: '14px 32px', backgroundColor: C.primary, color: primaryBtnText, borderRadius: 999, fontSize: 15, fontWeight: 600, textDecoration: 'none', fontFamily: cardFont }}>{node.redirect.buttonText || 'Continue'}</a>}
-      {(!node.redirect || node.redirect.mode === 'none') && <div style={{ fontSize: 13, color: pal.textMute }}>End of flow</div>}
+      {node.redirect?.mode === 'immediate' && redirectUrl && <div style={{ fontSize: 13, color: pal.textMute }}>{previewMode ? 'Would redirect here' : 'Redirecting...'}</div>}
+      {node.redirect?.mode === 'button' && redirectUrl && <a href={redirectUrl} rel="noreferrer" onClick={previewMode ? (e) => e.preventDefault() : undefined} style={{ display: 'inline-block', marginTop: 8, padding: '14px 32px', backgroundColor: C.primary, color: primaryBtnText, borderRadius: 999, fontSize: 15, fontWeight: 600, textDecoration: 'none', fontFamily: cardFont, cursor: previewMode ? 'default' : 'pointer' }}>{node.redirect.buttonText || 'Continue'}</a>}
+      {previewMode && redirectUrl && <div style={{ fontSize: 11, color: pal.textMute, marginTop: 10, fontFamily: '"JetBrains Mono", monospace', opacity: 0.8, wordBreak: 'break-all' }}>{redirectUrl}</div>}
+      {(!node.redirect || node.redirect.mode === 'none' || !redirectUrl) && <div style={{ fontSize: 13, color: pal.textMute }}>{node.headline ? '' : 'End of flow'}</div>}
     </div>}
 
     {(node.type === 'question' || node.type === 'form') && <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'clamp(18px, 3vw, 28px)', gap: 10 }}>
@@ -494,7 +509,7 @@ export const QuizPreviewView = ({ quiz, brand, deployment, onBackToBuilder, bran
           <div style={{ height: 4, backgroundColor: `${C.primary}22`, borderRadius: 999, marginBottom: 24, overflow: 'hidden' }}>
             <div style={{ height: '100%', width: `${(totalVisible / quiz.steps.length) * 100}%`, backgroundColor: C.primary, transition: 'width 0.3s' }} />
           </div>
-          {currentNode && isNodeVisible(currentNode) ? <PreviewQuestionCard node={currentNode} brand={effectiveBrand} customFields={customFields} onAnswer={handleAnswer} fieldValues={fieldValues} templateId={effectiveDeployment?.templateId || 'default'} stepIdx={stepIdx} totalSteps={quiz.steps.length} onBack={goBack} canGoBack={history.length > 0} /> :
+          {currentNode && isNodeVisible(currentNode) ? <PreviewQuestionCard node={currentNode} brand={effectiveBrand} customFields={customFields} onAnswer={handleAnswer} fieldValues={fieldValues} templateId={effectiveDeployment?.templateId || 'default'} stepIdx={stepIdx} totalSteps={quiz.steps.length} onBack={goBack} canGoBack={history.length > 0} destinationCtx={{ deployment: effectiveDeployment?.destinationOverrides, brand: effectiveBrand?.urls }} previewMode /> :
             currentNode ? <div style={{ minHeight: 200 }} /> :
             <div style={{ padding: 40, textAlign: 'center', color: pagePal.muted }}>End of quiz</div>}
         </div>

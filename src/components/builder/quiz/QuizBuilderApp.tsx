@@ -31,6 +31,9 @@ import {
 } from '@/app/(app)/admin/(top)/quizzes/actions'
 import { buildQuizEmbedSnippet, QUIZ_EMBED_INCOMPLETE } from '@/lib/quiz-embed'
 import { applyQuizTheme } from '@/lib/quiz-theme'
+import {
+  DESTINATION_KEYS, DESTINATION_LABELS, resolveDestination, destinationOrigin, isSafeDestinationUrl,
+} from '@/lib/quiz-destinations'
 import { Sparkles, Link2, Type, Image as ImageIcon, RotateCcw } from 'lucide-react'
 
 /**
@@ -303,6 +306,48 @@ const TrackingTab = ({ draft, update }) => {
 }
 
 /**
+ * Per-deployment destination overrides.
+ *
+ * Shows the URL each destination will ACTUALLY resolve to and where that value
+ * came from, rather than an empty box that hides an inherited value. An empty
+ * override field is not "no destination" - it means "use the brand's", and the
+ * panel says so, so nobody sets a redirect they think is unconfigured.
+ */
+const DestinationsPanel = ({ draft, brand, onChange }) => {
+  const overrides = draft.destinationOverrides || {}
+  const ctx = { deployment: overrides, brand: brand?.urls }
+
+  return <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div style={{ fontSize: 12.5, color: T.textMute, lineHeight: 1.55 }}>
+      Quiz nodes point at a destination by name, so this deployment can send traffic somewhere different
+      from the brand&apos;s default without editing the quiz. Leave a field blank to inherit.
+      {brand ? null : ' Pick a brand on the Basics tab to see what would be inherited.'}
+    </div>
+    {DESTINATION_KEYS.map((key) => {
+      const value = overrides[key] || ''
+      const resolved = resolveDestination(key, ctx)
+      const origin = destinationOrigin(key, ctx)
+      const invalid = value && !isSafeDestinationUrl(value)
+      return <div key={key}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+          <Label style={{ marginBottom: 0 }}>{DESTINATION_LABELS[key]}</Label>
+          <Pill color={origin === 'deployment' ? T.primary : origin === 'brand' ? T.info : T.textMute}>
+            {origin === 'deployment' ? 'THIS DEPLOYMENT' : origin === 'brand' ? 'FROM BRAND' : 'SITE DEFAULT'}
+          </Pill>
+        </div>
+        <Input mono value={value} onChange={(e) => onChange(key, e.target.value)} placeholder={resolved} />
+        <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 4, fontFamily: '"JetBrains Mono", monospace' }}>
+          resolves to {resolved}
+        </div>
+        {invalid ? <div style={{ fontSize: 11, color: T.danger, marginTop: 4 }}>
+          Not a usable link. Use a full https:// address or a path starting with /.
+        </div> : null}
+      </div>
+    })}
+  </div>
+}
+
+/**
  * AI theming for a deployment.
  *
  * The generated theme is stored on the DEPLOYMENT, never written back to the
@@ -475,6 +520,7 @@ const DeploymentEditor = ({ deployment, isDraft, quizzes, brands, onSave, onBack
     { id: 'basics', label: 'Basics' },
     { id: 'render', label: 'Render & Embed' },
     { id: 'theme', label: `Theme${draft.themeOverrides ? ' · CUSTOM' : ''}` },
+    { id: 'destinations', label: `Destinations${Object.keys(draft.destinationOverrides || {}).length ? ' · OVERRIDE' : ''}` },
     { id: 'chrome', label: 'Header / Footer', show: draft.renderMode === 'standalone' },
     { id: 'sections', label: `Body Sections${isOverriding ? ' · OVERRIDE' : ''}`, show: draft.renderMode === 'standalone' },
     { id: 'tracking', label: 'Tracking & Pixels' },
@@ -577,6 +623,17 @@ const DeploymentEditor = ({ deployment, isDraft, quizzes, brands, onSave, onBack
           brand={brand}
           onApply={(theme) => update({ themeOverrides: theme, templateId: theme.templateId || draft.templateId })}
           onClear={() => update({ themeOverrides: null })}
+        />}
+
+        {tab === 'destinations' && <DestinationsPanel
+          draft={draft}
+          brand={brand}
+          onChange={(key, value) => {
+            const next = { ...(draft.destinationOverrides || {}) }
+            if (value.trim()) next[key] = value
+            else delete next[key]
+            update({ destinationOverrides: Object.keys(next).length ? next : null })
+          }}
         />}
 
         {tab === 'chrome' && <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>

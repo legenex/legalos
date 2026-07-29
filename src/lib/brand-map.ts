@@ -115,6 +115,23 @@ export function siteToBrand(s: Record<string, unknown>, domainList: DomainLite[]
   }
   const legalResolved = mergeNested(legalFromSite, identity.legal as Record<string, unknown> | undefined)
 
+  // Destination URLs for this brand: where its quizzes and funnels send people
+  // (thank you, did-not-qualify, partners, legal pages). Stored under
+  // brand_identity.urls; privacy and terms fall back to the Site's own legal
+  // fields so a brand that only filled those in still resolves them, and
+  // anything still empty falls back to the site's built-in page at render time
+  // (see resolveDestination in quiz-destinations.ts).
+  const urlsFromIdentity = (identity.urls && typeof identity.urls === 'object'
+    ? (identity.urls as Record<string, unknown>)
+    : {}) as Record<string, unknown>
+  const urls: Record<string, string> = {}
+  for (const k of ['thank_you', 'dq', 'partners', 'privacy', 'terms', 'disclosures']) {
+    const v = urlsFromIdentity[k]
+    if (typeof v === 'string' && v.trim()) urls[k] = v.trim()
+  }
+  if (!urls.privacy && legalResolved.privacyUrl) urls.privacy = legalResolved.privacyUrl
+  if (!urls.terms && legalResolved.termsUrl) urls.terms = legalResolved.termsUrl
+
   // Top-level scalars: Site.brand wins, fall back to brand_identity, then
   // to a sensible default.
   const pick = (siteVal: string, identityKey: string, fallback = ''): string => {
@@ -140,6 +157,7 @@ export function siteToBrand(s: Record<string, unknown>, domainList: DomainLite[]
     contact: contactResolved,
     domains: [] as string[],
     legal: legalResolved,
+    urls,
     bgPattern: (typeof identity.bgPattern === 'string' && identity.bgPattern) || 'plus',
     bgColor: colorsResolved.background,
     defaultBodySections: Array.isArray(identity.defaultBodySections) ? (identity.defaultBodySections as unknown[]) : [],

@@ -51,6 +51,100 @@ export const STATUS_LABEL: Record<ItemStatus, string> = {
 
 export const ENTRIES: BuildLogEntry[] = [
   {
+    date: '2026-07-29',
+    title: 'The quiz stops belonging to one brand',
+    summary:
+      'A quiz was still carrying brand-specific URLs inside its own nodes, which meant deploying it for a second brand would have sent that brand’s traffic to the first brand’s pages. Destinations now live on the brand and the deployment, the quiz names them instead of addressing them, and the same flow renders correctly whether it is a full page, an iframe on someone else’s site, or a card inside a landing page.',
+    items: [
+      {
+        title: 'Nodes name a destination instead of a URL',
+        status: 'shipped',
+        detail:
+          'An endpoint node used to hold a typed-in address. It now picks from thank you, did not qualify, partner list, privacy, terms, disclosures, or a genuine one-off custom URL. The address resolves at render: the deployment’s override first, then the brand’s own URL, then the site’s existing page at that path. A node built before this change keeps its URL and keeps working, treated as custom.',
+        files: ['src/lib/quiz-destinations.ts', 'src/components/builder/quiz/editors.tsx'],
+      },
+      {
+        title: 'Brand identities own their URLs',
+        status: 'shipped',
+        detail:
+          'A URLs tab on every brand identity. Set the thank-you page once and every quiz that brand runs follows it. Blank means the site’s own page, and each field says which one that would be rather than leaving you guessing at an empty box.',
+        files: ['src/components/builder/brand/BrandModule.tsx', 'src/lib/brand-map.ts'],
+      },
+      {
+        title: 'Deployments can override any destination',
+        status: 'shipped',
+        detail:
+          'A Destinations tab on the deployment editor showing what each destination actually resolves to and whether that came from this deployment, the brand, or the site default. One placement can send traffic somewhere different without editing the quiz or the brand.',
+        files: ['src/components/builder/quiz/QuizBuilderApp.tsx', 'src/collections/FunnelQuizDeployments.ts'],
+      },
+      {
+        title: 'Destinations are validated as a security boundary',
+        status: 'shipped',
+        detail:
+          'A destination ends up in a link and in the browser’s address bar, so an admin-editable field that accepted anything would be script execution on a public page. Only https, http, site-relative paths, tel and mailto are accepted. Validation happens after the {{field}} substitution, not before, because a captured answer is attacker-controlled and would otherwise be able to smuggle in a scheme the template did not have.',
+        files: ['src/lib/quiz-destinations.ts'],
+      },
+      {
+        title: 'The quiz adapts to whatever it is placed in',
+        status: 'shipped',
+        detail:
+          'Inline mode drops the quiz’s own card so it does not draw a box inside the host’s box, and the host passes the opaque colour the quiz will sit on so every text colour is derived against the real backdrop. That is what keeps a dark-brand quiz readable inside a light landing page. The answer grid now measures the space it actually has rather than the width of the window, so a two-column layout squeezed into a narrow hero card becomes one column instead of two unreadable ones.',
+        files: ['src/components/public/quiz/QuizRuntime.tsx'],
+      },
+      {
+        title: 'Landing pages run the real quiz',
+        status: 'partial',
+        detail:
+          'The quiz card in the landing-page builder was a drawing of a quiz: a fake first question and a dead Continue button. It now runs the real flow, with the real routing, wearing the landing page’s colours. What is not done is serving a funnel landing page on a public URL: that needs the same public-route work quizzes just got, so today this is real in the builder and not yet reachable by a visitor.',
+        files: ['src/components/builder/lp/render.tsx'],
+      },
+      {
+        title: 'A builder preview can no longer create a real lead',
+        status: 'shipped',
+        detail:
+          'Putting the live runtime into the builder introduced the risk that clicking through a preview would write a lead, fire the pixels and deliver a webhook to a buyer. Preview mode blocks the submit, the AI call and the redirect, and it defaults to on, so a caller that forgets to declare itself live gets the safe behaviour rather than the expensive one.',
+        files: ['src/components/public/quiz/QuizRuntime.tsx', 'src/components/builder/quiz/preview.tsx'],
+      },
+      {
+        title: 'Rest of the Sites schema drift closed',
+        status: 'shipped',
+        detail:
+          'Brand URLs are stored in a column that no migration had ever created. Payload reads every declared column at startup, so a missing one takes the whole application down rather than failing a single query. That column and the twelve others in the same position are now created by a migration.',
+        files: ['src/migrations/20260729_090000_destinations_and_brand_drift.ts'],
+      },
+    ],
+    verification: [
+      {
+        label: 'Destination resolution and URL safety',
+        state: 'verified',
+        detail:
+          '49 assertions, including the property this change exists for: one shared quiz node resolves to a different thank-you page for each brand. Also covers rejecting javascript, data, vbscript and protocol-relative addresses, an unsafe override falling through to the brand rather than being used, legacy nodes with raw URLs still working, and a hostile answer being unable to smuggle a scheme in through interpolation.',
+      },
+      {
+        label: 'No structural drift in the edited builders',
+        state: 'verified',
+        detail:
+          'The brace and paren balance of every edited file was compared against its committed version to confirm the edits did not leave a block unclosed. The one file that moved was traced to the removed code, not to new code.',
+      },
+      {
+        label: 'Type check and browser',
+        state: 'not-run',
+        detail:
+          'Same as yesterday: no dependencies, database or generated types in this workspace. The landing-page quiz card and the destination pickers have not been clicked yet.',
+      },
+    ],
+    deployNotes: [
+      'Adds a migration. Run pnpm payload migrate after the build and before restarting.',
+      'Existing quizzes keep their typed-in redirect URLs and behave exactly as before. Move them onto named destinations when convenient; nothing breaks if you do not.',
+      'Set each brand’s URLs tab before relying on a named destination, or it falls back to the site’s own page at that path.',
+    ],
+    openIssues: [
+      'Funnel landing pages still have no public route, so the quiz inside one is real in the builder but not yet reachable by a visitor.',
+      'The landing-page builder does not yet pass a quiz deployment, so a quiz embedded there uses the brand’s destinations rather than a specific deployment’s overrides.',
+      'Advertorials were not touched. They have the same brandless-authoring shape and will need the same treatment.',
+    ],
+  },
+  {
     date: '2026-07-28',
     title: 'Quiz deployments become real pages',
     summary:

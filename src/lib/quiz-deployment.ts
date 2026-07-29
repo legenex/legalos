@@ -4,6 +4,7 @@ import config from '@payload-config'
 import { siteToBrand, type DomainLite } from './brand-map'
 import { applyQuizTheme, resolveQuizTemplateId, normalizeQuizTheme } from './quiz-theme'
 import { normalizeDeploymentPath } from './quiz-deployment-path'
+import { normalizeDestinations, type DestinationMap } from './quiz-destinations'
 
 export { normalizeDeploymentPath }
 
@@ -37,6 +38,7 @@ export type PublicQuizDeployment = {
   footerConfig: Record<string, unknown> | null
   bodySectionOverrides: unknown[] | null
   themeOverrides: unknown
+  destinationOverrides: DestinationMap
   utm: Record<string, unknown>
   pixels: Record<string, unknown>
 }
@@ -254,6 +256,7 @@ const resolveQuizDeploymentUncached = async (
       ? (doc.body_section_overrides as unknown[])
       : null,
     themeOverrides: normalizeQuizTheme(doc.theme_overrides),
+    destinationOverrides: normalizeDestinations(doc.destination_overrides),
     utm: (doc.utm ?? {}) as Record<string, unknown>,
     pixels: (doc.pixels ?? {}) as Record<string, unknown>,
   }

@@ -47,6 +47,11 @@ export const FunnelQuizDeployments: CollectionConfig = {
     // Site, so two deployments of the same quiz under one brand can look
     // completely different without either one editing the brand.
     { name: 'theme_overrides', type: 'json' },
+    // Per-deployment destination URLs (thank you, did-not-qualify, legal
+    // links). Overrides the brand's own URLs for this placement only. Quiz
+    // nodes reference a destination by name; see src/lib/quiz-destinations.ts
+    // for the deployment -> brand -> site-page cascade.
+    { name: 'destination_overrides', type: 'json' },
     { name: 'header_config', type: 'json' },
     { name: 'footer_config', type: 'json' },
     { name: 'body_section_overrides', type: 'json' },

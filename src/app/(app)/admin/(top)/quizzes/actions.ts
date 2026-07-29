@@ -164,6 +164,7 @@ export async function saveQuizDeployment(args: { deployment: Record<string, unkn
     status: dep.status || 'draft',
     embed_preview_bg: dep.embedPreviewBg || '',
     theme_overrides: dep.themeOverrides ?? null,
+    destination_overrides: dep.destinationOverrides ?? null,
     header_config: dep.headerConfig ?? {},
     footer_config: dep.footerConfig ?? {},
     body_section_overrides: dep.bodySectionOverrides ?? null,

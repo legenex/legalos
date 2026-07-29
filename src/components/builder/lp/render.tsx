@@ -14,6 +14,7 @@ import {
 import { T, genId, brandShortName } from '../ui'
 import { relativeLuminance } from '@/lib/builder/page-lint'
 import { onPrimaryText } from '@/lib/builder/color-system'
+import { QuizRuntime } from '@/components/public/quiz/QuizRuntime'
 
 // A template's canvas is "dark" when its luminance is below the midpoint.
 // Replaces the brittle canvas === '#0f172a' string-equality that only
@@ -270,76 +271,55 @@ const TemplateHeader = ({ section, tokens, brand, onEditSection }) => {
   )
 }
 
-const LPQuizEmbed = ({ quiz, brand, tokens, isDark, radius }) => {
+/**
+ * The quiz inside a landing page.
+ *
+ * This used to be a hand-drawn imitation of a quiz - a fake first question and
+ * a dead Continue button - which meant the landing page you designed and the
+ * quiz you built were two different things that only looked alike. It now runs
+ * the REAL quiz runtime in inline mode: the same flow, the same routing, the
+ * same lead delivery as the standalone deployment.
+ *
+ * The quiz adopts the LANDING PAGE's look rather than its own. `surfaceColor`
+ * is the card colour it will sit on, so every text colour is derived against
+ * the real backdrop, and inline mode drops the quiz's own card so there is no
+ * box inside a box. That is what "one flow, any brand style" means in practice:
+ * the flow is the quiz's, the appearance is the host's.
+ *
+ * The placeholder below is kept for the genuine empty case - no quiz attached
+ * yet - so the hero still composes while someone is designing it.
+ */
+// `preview` defaults to TRUE on purpose. This component is reached from the
+// builder's LivePreview today and could be reached from a public renderer
+// later; a caller that forgets to declare itself live gets the safe behaviour
+// (no lead written, no redirect followed) rather than the dangerous one.
+const LPQuizEmbed = ({ quiz, brand, tokens, isDark, radius, deployment = null, site = null, preview = true }) => {
   const visibleSteps = visibleStepsOf(quiz)
-  const [stepIdx, setStepIdx] = useState(0)
-  useEffect(() => { setStepIdx(0) }, [quiz?.id])
 
-  if (!quiz || visibleSteps.length === 0) {
+  if (quiz && visibleSteps.length > 0) {
     return (
-      <>
-        <div style={{ fontSize: 18, fontWeight: 700, color: tokens.text, marginBottom: 16, fontFamily: tokens.headlineFont }}>Start your case review</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-          <div style={{ padding: 11, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderRadius: 6, fontSize: 13, color: tokens.text }}>Were you in a car accident in the last 2 years?</div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1, textAlign: 'center', padding: 8, border: `1px solid ${brand.colors.primary}`, borderRadius: 6, color: brand.colors.primary, fontWeight: 600, fontSize: 13 }}>Yes</div>
-            <div style={{ flex: 1, textAlign: 'center', padding: 8, border: `1px solid ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'}`, borderRadius: 6, color: tokens.textMute, fontSize: 13 }}>No</div>
-          </div>
-        </div>
-        <button style={{ width: '100%', padding: 12, backgroundColor: brand.colors.primary, color: onPrimaryText(brand.colors.primary), border: 'none', borderRadius: radius, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Continue {'→'}</button>
-        <div style={{ textAlign: 'center', fontSize: 11, color: tokens.textMute, marginTop: 10 }}>Takes 60 seconds {'·'} 100% Free {'·'} No obligation</div>
-      </>
+      <QuizRuntime
+        quiz={quiz}
+        brand={brand}
+        deployment={deployment}
+        site={site}
+        inline
+        surfaceColor={tokens.surface}
+        previewMode={preview}
+      />
     )
   }
 
-  const currentStep = visibleSteps[stepIdx]
-  const shared = sharedNodeForStep(quiz, currentStep.key)
-  const nodes = nodesForStep(quiz, currentStep.key)
-  const node = shared || nodes[0]
-  const advance = (e) => { if (e) e.stopPropagation(); setStepIdx((i) => Math.min(i + 1, visibleSteps.length - 1)) }
-  const isFormNode = node.type === 'form'
-  const isEndpointNode = node.type === 'endpoint'
-  const isLast = stepIdx === visibleSteps.length - 1
-  const total = visibleSteps.length
-  const stepNum = stepIdx + 1
-  const progress = (stepNum / total) * 100
-
+  // No quiz attached yet: show the shape of one so the hero still composes
+  // while it is being designed. Deliberately static and clearly inert.
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <div style={{ fontSize: 10.5, fontWeight: 700, color: tokens.textMute, letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: '"JetBrains Mono", monospace' }}>Step {stepNum} of {total}</div>
-        <div style={{ fontSize: 10.5, color: tokens.textMute, fontFamily: '"JetBrains Mono", monospace' }}>{Math.round(progress)}%</div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: tokens.text, marginBottom: 16, fontFamily: tokens.headlineFont }}>Start your case review</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+        <div style={{ padding: 11, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderRadius: 6, fontSize: 13, color: tokens.text }}>Attach a quiz to this landing page to run it here.</div>
       </div>
-      <div style={{ width: '100%', height: 3, backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', borderRadius: 2, marginBottom: 18, overflow: 'hidden' }}>
-        <div style={{ width: `${progress}%`, height: '100%', backgroundColor: brand.colors.primary, transition: 'width 0.3s ease' }} />
-      </div>
-      <div style={{ fontSize: 18, fontWeight: 700, color: tokens.text, marginBottom: 6, fontFamily: tokens.headlineFont, lineHeight: 1.25 }}>{node.headline || node.question || currentStep.label}</div>
-      {node.subheadline && <div style={{ fontSize: 12.5, color: tokens.textMute, marginBottom: 14, lineHeight: 1.45 }}>{node.subheadline}</div>}
-      {!node.subheadline && <div style={{ height: 14 }} />}
-
-      {isFormNode ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-          {(node.formFields || []).slice(0, 3).map((f, i) => (
-            <div key={i} style={{ padding: '10px 12px', border: `1px solid ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'}`, borderRadius: 6, fontSize: 12, color: tokens.textMute, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)' }}>{f.placeholder || f.label}</div>
-          ))}
-        </div>
-      ) : isEndpointNode ? (
-        <div style={{ padding: 16, marginBottom: 14, backgroundColor: `${brand.colors.primary}14`, border: `1px solid ${brand.colors.primary}44`, borderRadius: 8, fontSize: 13, color: tokens.text, lineHeight: 1.5 }}>{node.endpointText || 'Your case has been submitted. An attorney will contact you shortly.'}</div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-          {((node.answers && node.answers.length > 0) ? node.answers : [{ label: 'Continue' }]).slice(0, 5).map((a, i) => (
-            <button key={i} onClick={advance} style={{ width: '100%', textAlign: 'left', padding: '11px 14px', backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.025)', border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`, borderRadius: 6, color: tokens.text, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: tokens.bodyFont, display: 'flex', alignItems: 'center', gap: 10, transition: 'all 0.15s' }}>
-              <span style={{ flex: 1 }}>{a.label}</span>
-              <ChevronRight size={14} />
-            </button>
-          ))}
-        </div>
-      )}
-
-      <button onClick={advance} style={{ width: '100%', padding: 12, backgroundColor: brand.colors.primary, color: onPrimaryText(brand.colors.primary), border: 'none', borderRadius: radius, fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: isLast ? 0.6 : 1 }} disabled={isLast}>
-        {isLast ? 'End of preview' : `Continue ${'→'}`}
-      </button>
-      <div style={{ textAlign: 'center', fontSize: 11, color: tokens.textMute, marginTop: 10 }}>Takes 60 seconds {'·'} 100% Free {'·'} No obligation</div>
+      <button style={{ width: '100%', padding: 12, backgroundColor: brand.colors.primary, color: onPrimaryText(brand.colors.primary), border: 'none', borderRadius: radius, fontWeight: 700, fontSize: 14, cursor: 'not-allowed', opacity: 0.6 }} disabled>Continue {'\u2192'}</button>
+      <div style={{ textAlign: 'center', fontSize: 11, color: tokens.textMute, marginTop: 10 }}>No quiz selected</div>
     </>
   )
 }

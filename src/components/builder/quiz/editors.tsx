@@ -17,6 +17,9 @@ import { T, Btn, Input, Textarea, Select, Label, Pill, IconBtn, ConfirmDialog } 
 import { NODE_CATEGORIES, findNodeTypeMeta, FIELD_TYPES, OPERATORS, HTTP_METHODS } from './config'
 import { VISIBLE_BY_DEFAULT, tierIsShared, isNodeVisible, genId, mkA, SEED_CUSTOM_FIELDS } from './seed-data'
 import { addTier, deleteTier, tierDeleteImpact, isRoutedOnly } from '@/lib/quiz-graph'
+import {
+  DESTINATION_KEYS, DESTINATION_LABELS, DESTINATION_HINTS, isSafeDestinationUrl,
+} from '@/lib/quiz-destinations'
 import { aiTestPrompt } from '@/app/(app)/admin/(top)/quizzes/actions'
 
 /**
@@ -423,6 +426,96 @@ export const AIEditor = ({ draft, customFields, update, onCreateCustomField }) =
   </div>
 }
 
+/**
+ * Where an endpoint node sends the visitor.
+ *
+ * A node names a DESTINATION, not a URL. The quiz is the flow and is meant to
+ * run under many brands; a URL typed in here would belong to whichever brand
+ * happened to be in mind at the time, and every other brand deploying this quiz
+ * would silently send its traffic to that brand's pages.
+ *
+ * The actual address comes from the deployment, then the brand, then the site's
+ * own page - see the Destinations tab on a deployment, and the URLs tab on a
+ * brand identity. 'Custom URL' stays available for a genuine one-off such as a
+ * partner postback, and is what a node built before this change already uses,
+ * so nothing existing changes behaviour.
+ */
+const RedirectEditor = ({ redirect, update }) => {
+  const kind = redirect.destination ?? 'custom'
+  const setRedirect = (p) => update({ redirect: { ...redirect, ...p } })
+
+  const MODES = [
+    { id: 'none', label: 'No redirect', hint: 'Show the end screen and stop here.' },
+    { id: 'button', label: 'Button linked to the destination', hint: 'The visitor chooses when to continue.' },
+    { id: 'immediate', label: 'Send them there on arrival', hint: 'Redirects as soon as the node is reached.' },
+  ]
+
+  const OPTIONS = [
+    ...DESTINATION_KEYS.map((k) => ({ id: k, label: DESTINATION_LABELS[k], hint: DESTINATION_HINTS[k] })),
+    { id: 'custom', label: 'Custom URL', hint: 'A one-off address for this node only. Not brand aware.' },
+  ]
+
+  const customInvalid =
+    kind === 'custom' && (redirect.url || '').trim() && !isSafeDestinationUrl((redirect.url || '').trim())
+
+  return <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div style={{ fontSize: 11.5, color: T.textMute, lineHeight: 1.5 }}>
+      Endpoint nodes can move the visitor on. Pick where they go by name; the address is set per brand and can be
+      overridden per deployment, so this quiz stays brand agnostic.
+    </div>
+
+    <div>
+      <Label>What happens here</Label>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {MODES.map((m) => {
+          const active = redirect.mode === m.id
+          return <button key={m.id} onClick={() => setRedirect({ mode: m.id })} style={{ padding: 12, textAlign: 'left', backgroundColor: active ? T.bgElev2 : T.bgElev, border: `1px solid ${active ? T.primary : T.border}`, borderRadius: 6, cursor: 'pointer', color: T.text, fontSize: 13, fontFamily: '"Inter", sans-serif' }}>
+            <div style={{ fontWeight: 600 }}>{m.label}</div>
+            <div style={{ fontSize: 11.5, color: T.textMute, marginTop: 2 }}>{m.hint}</div>
+          </button>
+        })}
+      </div>
+    </div>
+
+    {redirect.mode !== 'none' && <>
+      <div>
+        <Label>Destination</Label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 8 }}>
+          {OPTIONS.map((o) => {
+            const active = kind === o.id
+            return <button key={o.id} onClick={() => setRedirect({ destination: o.id })} style={{ padding: 11, textAlign: 'left', backgroundColor: active ? T.bgElev2 : T.bgElev, border: `1px solid ${active ? T.primary : T.border}`, borderRadius: 6, cursor: 'pointer', color: T.text }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600 }}>{o.label}</div>
+              <div style={{ fontSize: 11, color: T.textMute, marginTop: 2, lineHeight: 1.4 }}>{o.hint}</div>
+            </button>
+          })}
+        </div>
+      </div>
+
+      {kind === 'custom' ? <div>
+        <Label>Custom URL</Label>
+        <Input mono value={redirect.url || ''} onChange={(e) => setRedirect({ url: e.target.value })} placeholder="https://partner.com/success?lead_id={{lead_id}}" />
+        <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 4 }}>
+          Use {`{{field_key}}`} to drop a captured answer into the address.
+        </div>
+        {customInvalid ? <div style={{ fontSize: 11, color: T.danger, marginTop: 4 }}>
+          Not a usable link. Use a full https:// address or a path starting with /.
+        </div> : null}
+      </div> : <div style={{ padding: 10, backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 11.5, color: T.textMute, lineHeight: 1.5 }}>
+        The address for {DESTINATION_LABELS[kind]?.toLowerCase() || 'this destination'} comes from the brand, or from
+        the deployment when it overrides it. Set it on the brand identity&apos;s URLs tab, or on the deployment&apos;s
+        Destinations tab, and every quiz using it follows.
+      </div>}
+    </>}
+
+    {redirect.mode === 'button' && <div><Label>Button Text</Label><Input value={redirect.buttonText || 'Continue'} onChange={(e) => setRedirect({ buttonText: e.target.value })} /></div>}
+
+    {redirect.mode === 'immediate' && <div style={{ padding: 10, backgroundColor: `${T.warning}11`, border: `1px solid ${T.warning}66`, borderRadius: 6, fontSize: 11.5, color: T.warning, lineHeight: 1.5 }}>
+      The visitor is sent on as soon as they reach this node. The lead is delivered before the redirect fires, so
+      nothing is lost on a slow connection.
+    </div>}
+  </div>
+}
+
 export const NodeEditorModal = ({ node, quiz, customFields, onSave, onClose, onDelete, onRenameStep, onDuplicate, onCreateCustomField }) => {
   const [draft, setDraft] = useState(node)
   const [tab, setTab] = useState('content')
@@ -678,23 +771,7 @@ export const NodeEditorModal = ({ node, quiz, customFields, onSave, onClose, onD
 
           {tab === 'webhook' && <WebhookEditor draft={draft} update={update} customFields={customFields} onCreateCustomField={onCreateCustomField} />}
 
-          {tab === 'redirect' && <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ fontSize: 11.5, color: T.textMute, lineHeight: 1.5 }}>Endpoint nodes can redirect the user to an external URL. Choose how the redirect should happen.</div>
-            <div>
-              <Label>Redirect Mode</Label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {[{ id: 'none', label: 'No redirect (default thank you)' }, { id: 'button', label: 'Button linked to URL' }, { id: 'immediate', label: 'Immediate redirect on enter' }].map((m) => {
-                  const active = redirect.mode === m.id
-                  return <button key={m.id} onClick={() => update({ redirect: { ...redirect, mode: m.id } })} style={{ padding: 12, textAlign: 'left', backgroundColor: active ? T.bgElev2 : T.bgElev, border: `1px solid ${active ? T.primary : T.border}`, borderRadius: 6, cursor: 'pointer', color: T.text, fontSize: 13, fontFamily: '"Inter", sans-serif' }}>
-                    <div style={{ fontWeight: 600 }}>{m.label}</div>
-                  </button>
-                })}
-              </div>
-            </div>
-            {redirect.mode !== 'none' && <div><Label>Redirect URL</Label><Input mono value={redirect.url || ''} onChange={(e) => update({ redirect: { ...redirect, url: e.target.value } })} placeholder="https://partner.com/success?lead_id={{lead_id}}" /></div>}
-            {redirect.mode === 'button' && <div><Label>Button Text</Label><Input value={redirect.buttonText || 'Continue'} onChange={(e) => update({ redirect: { ...redirect, buttonText: e.target.value } })} /></div>}
-            {redirect.mode === 'immediate' && <div style={{ padding: 10, backgroundColor: `${T.warning}11`, border: `1px solid ${T.warning}66`, borderRadius: 6, fontSize: 11.5, color: T.warning }}>The user will be redirected immediately when they reach this node. Use {`{{field_key}}`} to interpolate captured field values into the URL.</div>}
-          </div>}
+          {tab === 'redirect' && <RedirectEditor redirect={redirect} update={update} />}
 
           {tab === 'visibility' && <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div style={{ padding: 14, backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 8 }}>
