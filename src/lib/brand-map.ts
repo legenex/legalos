@@ -16,7 +16,7 @@
 // quiz, LP, advertorial, and site page that points at that Site, even if
 // brand_identity still has an older value in its JSON blob.
 
-import { onPrimaryText } from './builder/color-system'
+import { resolveBrandTokens, MissingBrandTokenError } from './brand/resolve-tokens'
 
 export type DomainLite = { host: string; primary: boolean; status: string }
 
@@ -48,38 +48,79 @@ export function siteToBrand(s: Record<string, unknown>, domainList: DomainLite[]
     ? (s.brand_identity as Record<string, unknown>)
     : {}) as Record<string, unknown>
 
-  // Site.brand colours come first; brand_identity colours only fill empty
-  // slots. So editing Site.brand.primary always cascades.
-  const colorsFromSite: Record<string, string> = {
-    primary: str(brand.primary),
-    accent: str(brand.accent),
-    background: str(brand.ink),
-    cardBg: '',
-    textOnDark: '#ffffff',
-    success: str(brand.success),
-    warning: str(brand.warning),
-    danger: str(brand.danger),
+  // Colour comes from the canonical brand tokens through the one resolver.
+  //
+  // What this replaces was the reason quizzes did not look like their brand.
+  // Two bugs, both silent:
+  //
+  //   1. The page background was read from `brand.ink` - the BODY TEXT colour.
+  //      Ink is dark by definition, so every quiz rendered on a dark ground no
+  //      matter what the brand's actual background was.
+  //   2. `cardBg` was never populated at all, so it always fell through to a
+  //      hardcoded '#0d2447'. That plus a '#1d8df6' primary default meant any
+  //      brand with a sparse record rendered in Check My Claim's blue and navy.
+  //      Not "close to the wrong colour" - literally another brand's palette.
+  //
+  // brand_identity is no longer consulted for colour either. The token columns
+  // are the single store (the P0-B migration promoted the JSON values into
+  // them), and reading both is how two stores drift apart.
+  let tokens: ReturnType<typeof resolveBrandTokens> | null = null
+  let missingTokens: string[] = []
+  try {
+    tokens = resolveBrandTokens({
+      primary: str(brand.primary),
+      primary_ink: str(brand.primary_ink),
+      accent: str(brand.accent),
+      accent_ink: str(brand.accent_ink),
+      cta: str(brand.cta),
+      cta_ink: str(brand.cta_ink),
+      bg: str(brand.bg),
+      surface: str(brand.surface),
+      surface_2: str(brand.surface_2),
+      ink: str(brand.ink),
+      ink_muted: str(brand.ink_muted) || str(brand.muted),
+      border: str(brand.border),
+      font_heading: str(brand.font_heading),
+      font_body: str(brand.font_body),
+      radius: str(brand.radius),
+      radius_lg: str(brand.radius_lg),
+      shadow: str(brand.shadow),
+    })
+  } catch (err) {
+    missingTokens = err instanceof MissingBrandTokenError ? err.missing : ['primary']
+    // A brand with no colours set resolves to a TRUE NEUTRAL grey, no hue at
+    // all, deliberately.
+    // The builders need something to render, but an invented brand palette is
+    // the bug: grey reads as "this brand has no colours yet", where a blue
+    // would read as a finished brand that happens to be wrong. Even a blue-grey
+    // could pass for a deliberate choice, so the placeholder carries zero
+    // saturation. `incomplete` below is what the UI should surface.
+    tokens = resolveBrandTokens({ primary: '#737373', cta: '#737373', bg: '#f5f5f5', ink: '#171717' })
   }
-  const colors = mergeNested(colorsFromSite, identity.colors as Record<string, unknown> | undefined)
-  // Final defaults for anything still empty so renderers always have values.
-  const primaryResolved = colors.primary || '#1d8df6'
+
+  const v = tokens.vars
   const colorsResolved = {
-    primary: primaryResolved,
-    accent: colors.accent || colors.primary || '#1d8df6',
-    background: colors.background || '#0a1a3a',
-    cardBg: colors.cardBg || '#0d2447',
-    // textOnDark stays only as a legacy alias = "text on a known-dark
-    // surface". Templates no longer source text from it — they derive
-    // contrast-verified text via color-system.ts. Do not reintroduce it
-    // as a generic text color or white-on-white returns.
-    textOnDark: colors.textOnDark || '#ffffff',
-    // Contrast-safe text color for ON the primary (filled buttons/badges).
-    // Lets non-template consumers get a readable button-text color without
-    // recomputing. Computed via the same verifier the templates use.
-    onPrimary: onPrimaryText(primaryResolved),
-    success: colors.success || '#10b981',
-    warning: colors.warning || '#f59e0b',
-    danger: colors.danger || '#ef4444',
+    primary: v['--site-primary'],
+    accent: v['--site-accent'],
+    // The page ground and the card, from the tokens that actually mean those
+    // things rather than from the text colour.
+    background: v['--site-bg'],
+    cardBg: v['--site-surface'],
+    cta: v['--site-cta'],
+    ctaInk: v['--site-cta-ink'],
+    ink: v['--site-ink'],
+    inkMuted: v['--site-ink-muted'],
+    border: v['--site-border'],
+    // Legacy alias: "text on a known-dark surface". Now derived against the ink
+    // colour rather than assumed white, so it stays legible for a brand whose
+    // ink is light.
+    textOnDark: v['--site-ink-inverse'],
+    onPrimary: v['--site-primary-ink'],
+    // Status colours are system-wide. A brand does not get its own danger red,
+    // because a warning that changes colour per tenant stops meaning warning.
+    success: v['--sys-success'],
+    warning: v['--sys-warning'],
+    danger: v['--sys-danger'],
   }
 
   const typographyFromSite: Record<string, string> = {
@@ -153,6 +194,13 @@ export function siteToBrand(s: Record<string, unknown>, domainList: DomainLite[]
     faviconUrl: pick(str(brand.favicon_url), 'faviconUrl'),
     primaryDomain: primaryDomain || str(identity.primaryDomain),
     colors: colorsResolved,
+    // The full CSS variable map, so a renderer can hand the whole set to a
+    // style tag instead of picking values out one at a time.
+    tokens: tokens.vars,
+    contrast: tokens.audit,
+    /** True when the brand has no usable colours and is rendering as grey. */
+    incomplete: missingTokens.length > 0,
+    missingTokens,
     typography: typographyResolved,
     contact: contactResolved,
     domains: [] as string[],

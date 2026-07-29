@@ -13,6 +13,11 @@ import {
   darkestOf,
   onPrimaryText,
   auditColorPairs,
+  getSafeTextColor,
+  getSafeMutedColor,
+  parseHex,
+  rgbToHsl,
+  hslToHex,
 } from '@/lib/builder/color-system'
 
 // Each template exposes ONE `resolveColors(brand) -> ResolvedPalette` instead
@@ -24,6 +29,38 @@ import {
 //
 // `accent` helpers (cardBorder, stepBadgeColor, button styling) keep reading
 // brand.colors.primary/accent exactly as before.
+
+
+/**
+ * Editorial's "paper" and its hairline rule, derived from the brand.
+ *
+ * Paper is the brand's surface pushed light and warmed a touch toward the
+ * brand's own accent, so a navy brand gets an ivory sheet and a green brand
+ * gets a warmer stone one - both recognisably that brand, neither of them the
+ * same fixed cream every other tenant gets.
+ *
+ * The rule colour is the accent held back to a hairline weight, which is what
+ * the hardcoded gold was standing in for.
+ */
+const editorialPaper = (brand) => {
+  const base = brand?.colors?.cardBg || brand?.colors?.background
+  if (!base) return brand?.colors?.background || '#ffffff'
+  return deriveBrandSurface(lightenToPaper(base), brand?.colors?.accent || brand?.colors?.primary || base, { hueBlend: 0.04 })
+}
+
+const editorialRule = (brand) => {
+  const accent = brand?.colors?.accent || brand?.colors?.primary
+  if (!accent) return 'rgba(0,0,0,0.25)'
+  return getSafeMutedColor(getSafeTextColor(editorialPaper(brand)).hex, editorialPaper(brand)).hex
+}
+
+/** Push any colour up to a paper-like lightness without losing its hue. */
+const lightenToPaper = (hex) => {
+  const rgb = parseHex(hex)
+  if (!rgb) return '#f7f4ee'
+  const [h, sat] = rgbToHsl(rgb)
+  return hslToHex(h, Math.min(sat, 0.28), 0.94)
+}
 
 export const TEMPLATE_CONFIGS = {
   default: {
@@ -93,15 +130,25 @@ export const TEMPLATE_CONFIGS = {
     centered: true,
   },
   editorial: {
-    // Intentional fixed cream paper palette — brand only on accents. Text is
-    // still verified against the fixed surface.
-    resolveColors: (brand) =>
-      resolvePalette(brand, {
+    // A template expresses CHARACTER, not colour. Editorial's character is a
+    // serif face, a paper-like ground and restrained rules - none of which
+    // requires naming a colour. It used to hardcode a cream page and gold
+    // accents, which is why it looked identical for every brand that picked it
+    // and why "the quiz does not adopt the brand" was true no matter what the
+    // brand said.
+    //
+    // The paper is now the brand's own light surface, warmed slightly so it
+    // still reads as paper rather than as a plain white card. Warmth is a
+    // RELATIONSHIP to the brand colour, so it survives a rebrand.
+    resolveColors: (brand) => {
+      const paper = editorialPaper(brand)
+      return resolvePalette(brand, {
         strategy: 'light',
-        pageBg: '#f5ecd9',
+        pageBg: paper,
         cardSurface: 'transparent',
-        surfaceBase: '#f5ecd9',
-      }),
+        surfaceBase: paper,
+      })
+    },
     pageOverlay: () => 'none',
     pagePattern: () => 'none',
     cardBorder: () => '1px solid rgba(0,0,0,0.1)',
@@ -115,11 +162,11 @@ export const TEMPLATE_CONFIGS = {
     bodyFamily: () => '"Inter", "Helvetica Neue", sans-serif',
     buttonStyle: 'square-check',
     buttonRadius: 4,
-    buttonBorder: () => '1px solid #c9b88a',
+    buttonBorder: (brand) => `1px solid ${editorialRule(brand)}`,
     progressStyle: 'numeric',
     showStepBadge: true,
     stepBadgeFormat: (n, t) => `CASE INTAKE / STEP ${n} OF ${t}`,
-    stepBadgeColor: () => '#8b7a4e',
+    stepBadgeColor: (brand) => editorialRule(brand),
     showLockBadge: false,
     footerTrust: 'CONFIDENTIAL · 60 SECONDS · NO SPAM',
     centered: true,
@@ -244,7 +291,10 @@ export const getTemplateConfig = (templateId) => TEMPLATE_CONFIGS[templateId] ||
 export const auditQuizTemplateColors = (templateId, brand) => {
   const tc = getTemplateConfig(templateId)
   const pal = tc.resolveColors(brand)
-  const primary = brand?.colors?.primary || '#1d8df6'
+  // No fallback colour. An audit run against an invented primary reports on a
+  // brand that does not exist, which is worse than reporting nothing.
+  const primary = brand?.colors?.primary
+  if (!primary) return []
   const onPrimary = onPrimaryText(primary)
   return auditColorPairs([
     { label: 'Headline / answer text on card', fg: pal.text, bg: pal.surfaceBase, kind: 'text' },
@@ -323,8 +373,8 @@ export const renderProgressIndicator = (stepIdx, totalSteps, tc, brand) => {
     </div>
   }
   if (tc.progressStyle === 'bar-thick') {
-    return <div style={{ height: 6, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 999, marginBottom: 'clamp(20px, 4vw, 32px)', overflow: 'hidden' }}>
-      <div style={{ height: '100%', width: `${pct}%`, backgroundColor: '#fff', borderRadius: 999, transition: 'width 0.4s' }} />
+    return <div style={{ height: 6, backgroundColor: `${brand.colors.primary}26`, borderRadius: 999, marginBottom: 'clamp(20px, 4vw, 32px)', overflow: 'hidden' }}>
+      <div style={{ height: '100%', width: `${pct}%`, backgroundColor: brand.colors.primary, borderRadius: 999, transition: 'width 0.4s' }} />
     </div>
   }
   if (tc.progressStyle === 'orb-dots') {

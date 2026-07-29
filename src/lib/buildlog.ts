@@ -52,6 +52,78 @@ export const STATUS_LABEL: Record<ItemStatus, string> = {
 export const ENTRIES: BuildLogEntry[] = [
   {
     date: '2026-07-29',
+    title: 'Quizzes actually wear their brand now',
+    summary:
+      'The quiz preview barely reflected the brand, and the reason was not styling. The map that feeds every funnel builder was reading the page background out of the brand\u2019s body-text colour, never populating the card colour at all, and filling both gaps with Check My Claim\u2019s blue and navy. Any brand with a sparse record was rendering as a different brand.',
+    items: [
+      {
+        title: 'The page background was the text colour',
+        status: 'shipped',
+        detail:
+          'The funnel brand map took the quiz page ground from the brand\u2019s ink field, which is the body-text colour and is dark by definition. Every quiz therefore rendered on a dark ground regardless of what the brand said its background was. It now reads the background token, which is the field that means background.',
+        files: ['src/lib/brand-map.ts'],
+      },
+      {
+        title: 'Every brand\u2019s quiz card was Check My Claim navy',
+        status: 'shipped',
+        detail:
+          'The card colour was never populated, so it always fell through to a hardcoded navy, and the primary fell through to a hardcoded blue. Those two values are one specific tenant\u2019s palette. A brand that had not filled in every field was not approximately wrong, it was showing another brand\u2019s colours.',
+        files: ['src/lib/brand-map.ts'],
+      },
+      {
+        title: 'The map now goes through the one resolver',
+        status: 'shipped',
+        detail:
+          'Colour for the quiz, landing page and advertorial builders is resolved by the same function the public site uses, so the same brand cannot look like two different brands depending on which surface renders it. The brand JSON is no longer consulted for colour either: the token columns are the single store, and reading both is how two stores drift.',
+        files: ['src/lib/brand-map.ts'],
+      },
+      {
+        title: 'An unconfigured brand looks unconfigured',
+        status: 'shipped',
+        detail:
+          'A brand with no colours set now resolves to a grey with no hue at all, and carries a flag saying which tokens are missing. Grey reads as "nobody has set this yet"; a blue reads as a finished brand that happens to be wrong. Even a blue-tinted grey was too suggestive, so the placeholder has zero saturation.',
+        files: ['src/lib/brand-map.ts'],
+      },
+      {
+        title: 'The editorial template stopped ignoring the brand',
+        status: 'shipped',
+        detail:
+          'It hardcoded a cream page and gold accents, so it looked identical for every brand that chose it. Its paper is now the brand\u2019s own surface pushed to a paper lightness and warmed slightly toward the brand\u2019s accent, and its rules take the accent. The character survives, the colour comes from the brand: a navy brand gets an ivory sheet, a green brand gets a warmer stone one.',
+        files: ['src/components/builder/quiz/templates.tsx'],
+      },
+      {
+        title: 'The preview ignored the brand twice over',
+        status: 'shipped',
+        detail:
+          'The palette used by both the builder preview and the live page hardcoded cream for the editorial template and fell back to a navy for everything else, so a brand\u2019s background was discarded once by the template and again by the fallback. Both now ask the template for its ground, and the template derives it from the brand.',
+        files: ['src/components/builder/quiz/preview.tsx', 'src/components/public/quiz/QuizRuntime.tsx'],
+      },
+    ],
+    verification: [
+      {
+        label: 'Two brands produce two quizzes',
+        state: 'verified',
+        detail:
+          '62 assertions. Two brands with different palettes now differ on primary, accent, background and card, and no value of either resolves to any of the three Check My Claim colours that used to leak in. A light brand stays light instead of being forced dark. Text on the ground, on the primary and on the button all reach 4.5:1. Status colours stay identical across brands while brand colours do not. An empty brand is flagged incomplete, names its missing tokens, and resolves to a true neutral.',
+      },
+      {
+        label: 'On screen',
+        state: 'not-run',
+        detail:
+          'Worth opening two brands\u2019 quizzes side by side after deploying, and switching one of them to the editorial template to confirm the paper picks up its brand rather than the old cream.',
+      },
+    ],
+    deployNotes: [
+      'No migration.',
+      'Quiz previews will change appearance, and that is the point. A quiz that looked blue and navy under a brand that is neither was showing another tenant\u2019s palette.',
+      'A brand that renders grey is telling you its colour tokens are unset. Fill them in on the brand identity rather than reporting it as a bug.',
+    ],
+    openIssues: [
+      '157 hardcoded colours remain, concentrated in the landing-page renderer and the block renderer. The quiz templates are down to 26 and the rest of those are neutral scrims.',
+    ],
+  },
+  {
+    date: '2026-07-29',
     title: 'Hardcoded colour starts coming out of public pages',
     summary:
       'First real pass at the 311. The shared public stylesheet, the lead form and the quiz runtime now take every colour from a token. 119 down, 163 left, and the remainder is a different kind of work rather than more of the same.',

@@ -27,13 +27,14 @@ import { aiTestPrompt } from '@/app/(app)/admin/(top)/quizzes/actions'
 // card palette because page bg != card surface for minimal/compact. Editorial
 // uses a fixed cream page; everything else uses the brand background.
 const resolvePagePalette = (brand, templateId) => {
-  const base =
-    templateId === 'editorial' ? '#f5ecd9' : brand?.colors?.background || '#0a1a3a'
+  // The ground comes from the template's OWN resolver, which is brand-derived.
+  // This used to hardcode a cream page for the editorial template and fall back
+  // to a navy for everything else, so a brand's background was ignored twice
+  // over: once by the template and once by the fallback.
+  const tc = getTemplateConfig(templateId)
+  const base = tc.pageBg(brand)
   const text = getSafeTextColor(base).hex
   const muted = getSafeMutedColor(text, base).hex
-  // Inner cards (stat blocks, win cards) get a brand-hued surface near the
-  // page luminance, with their own verified text so nested content stays
-  // readable regardless of brand.
   const cardSurface = deriveBrandSurface(brand?.colors?.cardBg || base, brand?.colors?.primary || base, { hueBlend: 0.05 })
   const cardText = getSafeTextColor(cardSurface).hex
   const cardMuted = getSafeMutedColor(cardText, cardSurface).hex

@@ -51,11 +51,12 @@ const INVISIBLE_NODE_TYPES = new Set(['decision', 'webhook', 'verification', 'tr
 // Page-level palette for the standalone chrome. Mirrors resolvePagePalette in
 // the builder preview so the live page and the preview shade identically.
 const resolvePagePalette = (brand, templateId) => {
-  // The brand decides the ground. A template that wants a distinct paper tone
-  // asks for a step of the brand's own surface rather than naming a colour,
-  // which is what stops the editorial template looking identical for every
-  // brand that picks it.
-  const base = brand?.colors?.background || brand?.colors?.cardBg || 'var(--site-bg)'
+  // The ground comes from the template's OWN resolver, which is brand-derived.
+  // This used to hardcode a cream page for the editorial template and fall back
+  // to a navy for everything else, so a brand's background was ignored twice
+  // over: once by the template and once by the fallback.
+  const tc = getTemplateConfig(templateId)
+  const base = tc.pageBg(brand)
   const text = getSafeTextColor(base).hex
   const muted = getSafeMutedColor(text, base).hex
   const cardSurface = deriveBrandSurface(brand?.colors?.cardBg || base, brand?.colors?.primary || base, { hueBlend: 0.05 })
