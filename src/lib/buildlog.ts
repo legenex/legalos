@@ -52,6 +52,85 @@ export const STATUS_LABEL: Record<ItemStatus, string> = {
 export const ENTRIES: BuildLogEntry[] = [
   {
     date: '2026-07-29',
+    title: 'Landing pages go live, running the real quiz',
+    summary:
+      'Closes the one item left partial earlier today. A funnel landing page now serves on its own URL with its own link preview, and the quiz in its hero is the real deployment: the real flow, its own theme, its own destinations, and leads that arrive in the dashboard. Same page, several brands, each running its own quiz.',
+    items: [
+      {
+        title: 'A landing-page deployment is a real page',
+        status: 'shipped',
+        detail:
+          'The public router resolves a live landing-page deployment for the requested site and path and renders it through the same component the builder uses, with the click-to-edit affordances and preview framing switched off. One renderer rather than two is what stops a page looking one way in the builder and another way to a visitor.',
+        files: ['src/lib/lp-deployment.ts', 'src/app/(public)/[[...slug]]/page.tsx'],
+      },
+      {
+        title: 'The hero quiz is the real deployment, not a copy',
+        status: 'shipped',
+        detail:
+          'The landing page reaches its quiz through the same hydration a standalone quiz page uses, so it arrives with its own theme, its own destination overrides and live lead delivery. Answering it inside a landing page and answering it on its own URL now do exactly the same thing.',
+        files: ['src/lib/quiz-deployment.ts'],
+      },
+      {
+        title: 'A landing page cannot borrow another brand’s quiz',
+        status: 'shipped',
+        detail:
+          'The link between a landing page and its quiz is a bare text id with no foreign key behind it, so nothing in the database stopped brand A’s page pointing at brand B’s quiz. Since destinations now resolve from the deployment, that would have sent brand A’s leads to brand B’s pages. The resolver checks both belong to the same Site and refuses otherwise.',
+        files: ['src/lib/quiz-deployment.ts'],
+      },
+      {
+        title: 'Its own link preview',
+        status: 'shipped',
+        detail:
+          'Title, description, canonical and Open Graph tags built from the hero copy the author already wrote. Two brands running one landing page produce two different previews, so a pasted link says who it is from.',
+        files: ['src/lib/lp-deployment.ts'],
+      },
+      {
+        title: 'One path-ownership rule for every deployment type',
+        status: 'shipped',
+        detail:
+          'The check that stops a deployment claiming a path an authored page already serves is now shared by the quiz and landing-page resolvers instead of living inside one of them. It has to sit in the resolver rather than the router because the metadata pass runs before the router’s earlier steps, and a mismatch there means a crawler indexing a document no visitor sees.',
+        files: ['src/lib/public-path-claims.ts'],
+      },
+      {
+        title: 'Landing-page tables added to the migration chain',
+        status: 'shipped',
+        detail:
+          'Same drift the quiz tables had: declared by collections, created by no migration, present only where a development server pushed them. The public route reads them on every request. Four of the six funnel tables are now in the chain; the two advertorial tables stay out until something renders them.',
+        files: ['src/migrations/20260729_140000_funnel_lp_public_render.ts'],
+      },
+    ],
+    verification: [
+      {
+        label: 'Link preview generation',
+        state: 'verified',
+        detail:
+          '12 assertions, including one landing page under two brands producing two different titles, falling back to the page name when no hero copy exists, ignoring non-hero sections, length caps, and surviving null copy and junk in the stored sections array.',
+      },
+      {
+        label: 'Modules load and export what the router imports',
+        state: 'verified',
+        detail:
+          'Every new and refactored server module was imported with the database stubbed, confirming it parses and exposes the expected exports. The earlier destination and theme suites still apply unchanged, confirmed by diffing those files against the last commit.',
+      },
+      {
+        label: 'End to end in a browser',
+        state: 'not-run',
+        detail:
+          'Nothing here has been opened on a running server. Worth doing first: set a landing-page deployment live with a path, open it, complete the hero quiz, and confirm the lead appears under Leads with the right brand.',
+      },
+    ],
+    deployNotes: [
+      'Adds a migration. Run pnpm payload migrate after the build and before restarting.',
+      'A landing page serves only when the page itself is published and the deployment status is Live. Both are checked on every request.',
+      'If the hero quiz does not appear, check the deployment’s linked quiz belongs to the same brand: a cross-brand link is refused rather than rendered.',
+    ],
+    openIssues: [
+      'The landing-page renderer pulls its display font in with an @import inside a style block, which browsers ignore unless it comes first. It was harmless in the builder and is now on a public page; the font falls back rather than failing, but it should move into the document head.',
+      'Advertorials still have no public route. Same brandless-authoring shape, same treatment needed.',
+    ],
+  },
+  {
+    date: '2026-07-29',
     title: 'The quiz stops belonging to one brand',
     summary:
       'A quiz was still carrying brand-specific URLs inside its own nodes, which meant deploying it for a second brand would have sent that brand’s traffic to the first brand’s pages. Destinations now live on the brand and the deployment, the quiz names them instead of addressing them, and the same flow renders correctly whether it is a full page, an iframe on someone else’s site, or a card inside a landing page.',
@@ -93,9 +172,9 @@ export const ENTRIES: BuildLogEntry[] = [
       },
       {
         title: 'Landing pages run the real quiz',
-        status: 'partial',
+        status: 'shipped',
         detail:
-          'The quiz card in the landing-page builder was a drawing of a quiz: a fake first question and a dead Continue button. It now runs the real flow, with the real routing, wearing the landing page’s colours. What is not done is serving a funnel landing page on a public URL: that needs the same public-route work quizzes just got, so today this is real in the builder and not yet reachable by a visitor.',
+          'The quiz card in the landing-page builder was a drawing of a quiz: a fake first question and a dead Continue button. It now runs the real flow, with the real routing, wearing the landing page’s colours. Serving that landing page on a public URL followed in the entry above.',
         files: ['src/components/builder/lp/render.tsx'],
       },
       {
@@ -139,8 +218,6 @@ export const ENTRIES: BuildLogEntry[] = [
       'Set each brand’s URLs tab before relying on a named destination, or it falls back to the site’s own page at that path.',
     ],
     openIssues: [
-      'Funnel landing pages still have no public route, so the quiz inside one is real in the builder but not yet reachable by a visitor.',
-      'The landing-page builder does not yet pass a quiz deployment, so a quiz embedded there uses the brand’s destinations rather than a specific deployment’s overrides.',
       'Advertorials were not touched. They have the same brandless-authoring shape and will need the same treatment.',
     ],
   },
@@ -213,7 +290,7 @@ export const ENTRIES: BuildLogEntry[] = [
         title: 'Funnel tables added to the migration chain',
         status: 'partial',
         detail:
-          'The quiz and quiz-deployment tables had never been created by any migration; they existed only where a development server had pushed them automatically. Since the public page reads them on every request, that drift would have been a 500 on a customer-facing URL. The new migration creates them when absent and brings an existing copy up to shape when present. The four other funnel tables are still undocumented in the migration chain.',
+          'The quiz and quiz-deployment tables had never been created by any migration; they existed only where a development server had pushed them automatically. Since the public page reads them on every request, that drift would have been a 500 on a customer-facing URL. The new migration creates them when absent and brings an existing copy up to shape when present. The landing-page tables followed on 29 July; only the two advertorial tables remain outside the chain.',
         files: ['src/migrations/20260728_180000_funnel_quiz_public_render.ts'],
       },
     ],
@@ -262,7 +339,7 @@ export const ENTRIES: BuildLogEntry[] = [
     ],
     openIssues: [
       'Webhook and verification nodes still pass through without calling out. They were never implemented beyond a preview stub; the runtime advances past them rather than pretending they ran.',
-      'The four remaining funnel tables (advertorials, landing pages and their deployments) are still missing from the migration chain. That is the rest of finding F001.',
+      'The two advertorial tables are still missing from the migration chain. That is what remains of finding F001 after the quiz, landing-page and Sites columns were added on 28 and 29 July.',
       'The public runtime imports the builder preview components on purpose, so preview and live cannot drift. The cost is a larger JavaScript bundle on the public page than a purpose-built renderer would need.',
     ],
   },

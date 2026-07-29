@@ -12,6 +12,12 @@ import {
   type ResolvedQuizDeployment,
 } from '@/lib/quiz-deployment'
 import { QuizRuntime } from '@/components/public/quiz/QuizRuntime'
+import {
+  resolveLpDeployment,
+  lpDeploymentMeta,
+  type ResolvedLpDeployment,
+} from '@/lib/lp-deployment'
+import { LivePreview as LandingPageSections } from '@/components/builder/lp/render'
 import { renderTemplateVars, applyTemplateOverrides, deepRenderTemplateVars, type SiteForTemplate } from '@/lib/template-vars'
 import { resolvePhoneForPath } from '@/lib/resolve-phone'
 import { getCurrentUser } from '@/lib/auth'
@@ -106,10 +112,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const resolved = await resolveSiteByHost(host)
   if (!resolved?.siteId) return {}
 
+  // Quiz deployments and landing-page deployments are checked in the same order
+  // the body uses, so the tags always describe the document that gets served.
   const dep = await resolveQuizDeployment(Number(resolved.siteId), host, path, false)
-  if (!dep) return {}
+  const lp = dep ? null : await resolveLpDeployment(Number(resolved.siteId), host, path, false)
+  if (!dep && !lp) return {}
 
-  const meta = quizDeploymentMeta(dep)
+  const meta = dep ? quizDeploymentMeta(dep) : lpDeploymentMeta(lp!)
+  const brandName = dep ? dep.brand.displayName : lp!.brand.displayName
   const url = deploymentUrl(host, path)
   return {
     title: meta.title,
@@ -120,7 +130,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title: meta.title,
       description: meta.description,
       url,
-      siteName: dep.brand.displayName || undefined,
+      siteName: brandName || undefined,
       ...(meta.image ? { images: [{ url: meta.image }] } : {}),
     },
     twitter: {
@@ -355,7 +365,16 @@ export default async function PublicCatchAll({ params, searchParams }: Props) {
     return <RenderQuizDeployment resolved={quizDep} tc={tc} embed={embedMode} site={site} />
   }
 
-  // 6. Try BlogPosts under /blog/<slug>.
+  // 6. Try a funnel landing-page deployment. Resolved after quiz deployments so
+  // the order here matches generateMetadata's, which is what keeps the tags and
+  // the document in agreement when a path is somehow claimed by both.
+  const lpDep = await resolveLpDeployment(Number(siteId), host ?? '', path, isAdminPreview)
+  if (lpDep) {
+    const tc = await loadTrackingConfig(site.id)
+    return <RenderLpDeployment resolved={lpDep} tc={tc} site={site} />
+  }
+
+  // 7. Try BlogPosts under /blog/<slug>.
   if (path.startsWith('/blog/')) {
     const blogSlug = path.slice('/blog/'.length)
     const post = await payload.find({
@@ -633,6 +652,50 @@ function RenderQuizDeployment({
         deployment={resolved.deployment}
         site={{ slug: siteSlug, name: site.name ?? null }}
         embed={embed || resolved.deployment.renderMode === 'embed'}
+      />
+    </>
+  )
+}
+
+/**
+ * Render a funnel landing page as a public page.
+ *
+ * The sections come from the same renderer the builder uses, with `editable`
+ * off so the click-to-edit affordances and preview framing are gone. The hero's
+ * quiz is the REAL quiz deployment - `preview: false` is what switches it from
+ * "click through safely" to "this writes a lead" - and it is themed by its own
+ * deployment while deriving its text colours against the landing page's
+ * surface, so it reads as part of the page rather than pasted onto it.
+ */
+function RenderLpDeployment({
+  resolved,
+  tc,
+  site,
+}: {
+  resolved: ResolvedLpDeployment
+  tc: TrackingConfigShape | null
+  site: SiteForTemplate & { id: string | number; name?: string | null }
+}) {
+  const siteSlug = (site as { slug?: string }).slug ?? resolved.siteSlug
+  const quizCtx = resolved.quiz
+    ? {
+        deployment: resolved.quiz.deployment,
+        brand: resolved.quiz.brand,
+        site: { slug: siteSlug, name: site.name ?? null },
+        preview: false,
+      }
+    : null
+
+  return (
+    <>
+      <SiteScripts tc={tc} hasForm={Boolean(resolved.quiz)} />
+      <LandingPageSections
+        landingPage={resolved.landingPage}
+        brand={resolved.brand}
+        quiz={resolved.quiz?.quiz ?? null}
+        quizDepLabel={resolved.quiz?.deployment?.name ?? undefined}
+        editable={false}
+        quizCtx={quizCtx}
       />
     </>
   )

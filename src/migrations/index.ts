@@ -13,6 +13,7 @@ import * as migration_20260530_000000_locked_documents_media_rel from './2026053
 import * as migration_20260728_120000_funnel_quizzes_archive from './20260728_120000_funnel_quizzes_archive';
 import * as migration_20260728_180000_funnel_quiz_public_render from './20260728_180000_funnel_quiz_public_render';
 import * as migration_20260729_090000_destinations_and_brand_drift from './20260729_090000_destinations_and_brand_drift';
+import * as migration_20260729_140000_funnel_lp_public_render from './20260729_140000_funnel_lp_public_render';
 
 export const migrations = [
   {
@@ -89,5 +90,10 @@ export const migrations = [
     up: migration_20260729_090000_destinations_and_brand_drift.up,
     down: migration_20260729_090000_destinations_and_brand_drift.down,
     name: '20260729_090000_destinations_and_brand_drift',
+  },
+  {
+    up: migration_20260729_140000_funnel_lp_public_render.up,
+    down: migration_20260729_140000_funnel_lp_public_render.down,
+    name: '20260729_140000_funnel_lp_public_render',
   },
 ];

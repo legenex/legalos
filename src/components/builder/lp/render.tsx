@@ -324,7 +324,7 @@ const LPQuizEmbed = ({ quiz, brand, tokens, isDark, radius, deployment = null, s
   )
 }
 
-const TemplateHero = ({ section, tokens, brand, quizDepLabel, quiz, onEditSection }) => {
+const TemplateHero = ({ section, tokens, brand, quizDepLabel, quiz, onEditSection, quizCtx = null }) => {
   const c = section.copy || {}
   const isDark = tokensAreDark(tokens)
   return (
@@ -354,7 +354,16 @@ const TemplateHero = ({ section, tokens, brand, quizDepLabel, quiz, onEditSectio
             <div style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: T.success }} />
             <div style={{ fontSize: 11, fontWeight: 700, color: tokens.text, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{quizDepLabel || 'Free Case Check'}</div>
           </div>
-          <LPQuizEmbed quiz={quiz} brand={brand} tokens={tokens} isDark={isDark} radius={tokens.radius} />
+          <LPQuizEmbed
+            quiz={quiz}
+            brand={quizCtx?.brand || brand}
+            tokens={tokens}
+            isDark={isDark}
+            radius={tokens.radius}
+            deployment={quizCtx?.deployment || null}
+            site={quizCtx?.site || null}
+            preview={quizCtx ? quizCtx.preview !== false : true}
+          />
         </div>
       </div>
     </section>
@@ -642,22 +651,44 @@ export const PREVIEW_BRAND_DEFAULT = {
   legal: { copyright: '(c) 2026 Your Brand', tcpaText: '', privacyUrl: '', termsUrl: '', defaultDisclaimer: 'Brand disclaimer goes here.' },
 }
 
-export const LivePreview = ({ landingPage, brand, quizDepLabel, quiz, onEditSection }) => {
+/**
+ * Renders a landing page's sections.
+ *
+ * The same component serves the builder and the public page. `editable`
+ * (default true, because the builder is the long-standing caller) is what
+ * separates them: when false the click-to-edit handlers are never wired, the
+ * hover overlays are suppressed, and the framing that makes it read as a
+ * preview - rounded corners, drop shadow, border - is dropped so the page fills
+ * the viewport like a real page.
+ *
+ * One renderer rather than two is the point. A separate public renderer is how
+ * a landing page ends up looking one way in the builder and another way to a
+ * visitor.
+ */
+export const LivePreview = ({ landingPage, brand, quizDepLabel, quiz, onEditSection, editable = true, quizCtx = null }) => {
   const tpl = TEMPLATES.find((t) => t.id === landingPage.templateId) || TEMPLATES[0]
   const tk = tpl.tokens
   const previewBrand = brand || PREVIEW_BRAND_DEFAULT
+  const rootClass = editable ? 'lp-preview-root' : 'lp-preview-root lp-public-root'
+  const frame = editable
+    ? { borderRadius: 10, overflow: 'hidden', boxShadow: '0 8px 32px -12px rgba(0,0,0,0.4)', border: `1px solid ${T.border}` }
+    : { minHeight: '100vh' }
   return (
-    <div className="lp-preview-root" style={{ backgroundColor: tk.canvas, color: tk.text, fontFamily: tk.bodyFont, borderRadius: 10, overflow: 'hidden', boxShadow: '0 8px 32px -12px rgba(0,0,0,0.4)', border: `1px solid ${T.border}` }}>
+    <div className={rootClass} style={{ backgroundColor: tk.canvas, color: tk.text, fontFamily: tk.bodyFont, ...frame }}>
       {(landingPage.sections || []).filter((s) => s.isVisible !== false).map((section) => {
         const Renderer = SECTION_RENDERERS[section.type]
         if (!Renderer) return null
         const filled = { ...section, copy: fillAll(section.copy, previewBrand) }
-        return <Renderer key={section.id} section={filled} tokens={tk} brand={previewBrand} quizDepLabel={quizDepLabel} quiz={quiz} onEditSection={onEditSection} />
+        return <Renderer key={section.id} section={filled} tokens={tk} brand={previewBrand} quizDepLabel={quizDepLabel} quiz={quiz} onEditSection={editable ? onEditSection : undefined} quizCtx={quizCtx} />
       })}
       <style>{`
         .lp-preview-root section:hover .lp-section-overlay,
         .lp-preview-root header:hover .lp-section-overlay,
         .lp-preview-root footer:hover .lp-section-overlay { opacity: 1 !important; }
+        /* Public render: the section renderers carry an inline click-to-edit
+           cursor, so suppressing the affordance needs !important to beat it. */
+        .lp-public-root .lp-section-overlay { display: none !important; }
+        .lp-public-root section, .lp-public-root header, .lp-public-root footer { cursor: default !important; }
         @import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&display=swap');
         @media (max-width: 900px) {
           .lp-preview-root [style*="grid-template-columns: 1.2fr 1fr"],

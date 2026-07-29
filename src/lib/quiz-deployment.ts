@@ -5,6 +5,7 @@ import { siteToBrand, type DomainLite } from './brand-map'
 import { applyQuizTheme, resolveQuizTemplateId, normalizeQuizTheme } from './quiz-theme'
 import { normalizeDeploymentPath } from './quiz-deployment-path'
 import { normalizeDestinations, type DestinationMap } from './quiz-destinations'
+import { isClaimedByAuthoredContent, pathVariantsFor } from './public-path-claims'
 
 export { normalizeDeploymentPath }
 
@@ -62,24 +63,6 @@ export type ResolvedQuizDeployment = {
   siteSlug: string
 }
 
-/**
- * Paths the public router serves from SharedLegalTemplates before it ever looks
- * at a deployment. Kept in sync with isSharedTemplatePath in the router; a
- * deployment must not claim one, because the router would render the template
- * and the metadata would describe the quiz.
- */
-const SHARED_TEMPLATE_PATHS = new Set([
-  '/privacy',
-  '/privacy-policy',
-  '/terms',
-  '/terms-of-service',
-  '/partners',
-  '/submitted',
-  '/thanks',
-  '/tcpa',
-  '/disclosures',
-])
-
 const asArray = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
 
 const relId = (v: unknown): string =>
@@ -107,9 +90,7 @@ const resolveQuizDeploymentUncached = async (
   const payload = await getPayload({ config })
 
   // Path variants so an author who typed '/S/MVA' or 's/mva' still resolves.
-  const pathVariants = Array.from(
-    new Set([normalized, normalized.toLowerCase(), normalized.replace(/^\//, '')]),
-  )
+  const pathVariants = pathVariantsFor(normalized)
 
   let deps
   try {
@@ -136,59 +117,10 @@ const resolveQuizDeploymentUncached = async (
 
   if (deps.docs.length === 0) return null
 
-  // A deployment must never claim a path that an authored Page, a Landing Page,
-  // or a shared legal template already owns.
-  //
-  // This check lives HERE rather than in the router because the router is not
-  // the only caller: generateMetadata resolves deployments too, and it runs
-  // before any of the router's earlier steps have executed. Without this, a
-  // Page and a deployment sharing a path would render the Page while emitting
-  // the deployment's title and Open Graph tags - the document a crawler indexes
-  // would not be the document a visitor sees. Refusing the path at the resolver
-  // makes the two agree by construction.
-  //
-  // The cost is paid only when a deployment actually matched, which is rare.
-  if (SHARED_TEMPLATE_PATHS.has(normalized.toLowerCase())) return null
-
-  // Mirrors the router's own visibility rule exactly: only content the router
-  // would actually SERVE claims the path. A draft Page sitting at the same slug
-  // does not block a live deployment, because the router would not have served
-  // that Page either.
-  const nowIso = new Date().toISOString()
-  const [pageHit, lpHit] = await Promise.all([
-    payload.find({
-      collection: 'pages',
-      where: {
-        and: [
-          { site: { equals: siteId } },
-          { slug: { in: pathVariants } },
-          {
-            or: [
-              { status: { equals: 'published' } },
-              { and: [{ status: { equals: 'scheduled' } }, { publish_at: { less_than_equal: nowIso } }] },
-            ],
-          },
-        ],
-      },
-      limit: 1,
-      depth: 0,
-      overrideAccess: true,
-    }),
-    payload.find({
-      collection: 'landing-pages',
-      where: {
-        and: [
-          { site: { equals: siteId } },
-          { slug: { in: pathVariants } },
-          { status: { equals: 'published' } },
-        ],
-      },
-      limit: 1,
-      depth: 0,
-      overrideAccess: true,
-    }),
-  ])
-  if (pageHit.docs.length > 0 || lpHit.docs.length > 0) return null
+  // Authored content always wins the path. Shared with the landing-page
+  // resolver so both refuse the same set; see public-path-claims.ts for why
+  // this check cannot live in the router.
+  if (await isClaimedByAuthoredContent(payload, siteId, normalized)) return null
 
   // An explicit domain binding wins over a Site-wide match.
   const domainIds = Array.from(new Set(deps.docs.map((d) => relId(d.domain)).filter(Boolean)))
@@ -210,6 +142,24 @@ const resolveQuizDeploymentUncached = async (
       return h && h === reqHost
     }) ?? deps.docs[0]
 
+  return hydrateQuizDeployment(payload, doc as unknown as Record<string, unknown>, siteId, includeUnpublished)
+}
+
+/**
+ * Turn a raw deployment row into everything a renderer needs: its quiz, its
+ * brand with the theme applied, and its destination overrides.
+ *
+ * Split out from path resolution because a landing page reaches a quiz
+ * deployment by ID rather than by path, and both routes must produce an
+ * identical object. A second hydration path is how a quiz would end up themed
+ * one way on its own page and another way inside a landing page.
+ */
+const hydrateQuizDeployment = async (
+  payload: Awaited<ReturnType<typeof getPayload>>,
+  doc: Record<string, unknown>,
+  siteId: number,
+  includeUnpublished: boolean,
+): Promise<ResolvedQuizDeployment | null> => {
   const quizId = relId(doc.quiz)
   if (!quizId) return null
 
@@ -279,6 +229,34 @@ const resolveQuizDeploymentUncached = async (
     siteSlug: String(siteDoc.slug ?? ''),
   }
 }
+
+/**
+ * Resolve a quiz deployment by its id, for a landing page that embeds one.
+ *
+ * The quiz deployment must belong to the SAME Site as the landing page. The
+ * link is stored as a bare text id (the artifact's cross-reference style, with
+ * no foreign key behind it), so nothing at the database level stops a landing
+ * page for brand A pointing at a quiz deployment for brand B. Checking here is
+ * what prevents one brand's page from running another brand's quiz - and, with
+ * destinations now resolved from the deployment, sending its leads there too.
+ */
+export const resolveQuizDeploymentById = cache(async (
+  deploymentId: string,
+  siteId: number,
+  includeUnpublished: boolean,
+): Promise<ResolvedQuizDeployment | null> => {
+  if (!deploymentId) return null
+  const payload = await getPayload({ config })
+
+  const doc = await payload
+    .findByID({ collection: 'funnel-quiz-deployments', id: deploymentId, depth: 0, overrideAccess: true })
+    .catch(() => null)
+  if (!doc) return null
+  if (Number(relId(doc.site)) !== Number(siteId)) return null
+  if (!includeUnpublished && doc.status !== 'live') return null
+
+  return hydrateQuizDeployment(payload, doc as unknown as Record<string, unknown>, siteId, includeUnpublished)
+})
 
 /**
  * Request-scoped memo. generateMetadata and the page body both need the
