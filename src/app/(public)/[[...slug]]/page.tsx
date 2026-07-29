@@ -39,9 +39,17 @@ import CmcSb37List from '@/components/public/check-my-claim/Sb37List'
 // '/' is INTENTIONALLY omitted so the Home page falls through to the Pages
 // collection and its body_blocks render via BlockRenderer. This is what makes
 // the /admin Pages editor and the public Home page share a single source of
-// truth — what you save in /admin renders for visitors. The bespoke
-// CheckMyClaimHome component is kept in the codebase as the historical
-// reference for the design but no longer wired to a route.
+// truth — what you save in /admin renders for visitors.
+//
+// The bespoke CheckMyClaimHome component that used to live here was deleted:
+// an unrouted component kept "as a historical reference" is dead code, and git
+// is the reference. Its section designs live on in the BlockRenderer ports and
+// in bespoke-css.ts.
+//
+// The entries below are the same problem at an earlier stage. They are one
+// tenant's content living as source code, and they only render for that tenant
+// when no authored Page claims the path. They should be migrated into Pages or
+// SharedLegalTemplates for that Site and then deleted.
 const CMC_PAGES: Record<string, () => ReactNode> = {
   '/partnerlist': CmcPartnerList,
   '/partners': CmcPartnerList,

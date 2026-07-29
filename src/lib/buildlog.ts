@@ -95,8 +95,15 @@ export const ENTRIES: BuildLogEntry[] = [
         title: 'A lint that can actually be switched on',
         status: 'shipped',
         detail:
-          'pnpm lint:tokens fails when a public-render component gains a hardcoded colour. It runs as its own script because pnpm lint in this repo has no committed config and is not a working gate. Current count is 699 across 25 files, recorded as a baseline that may never go up: a gate that cannot be turned on today is not a gate, and a ratchet closes the gap without a 25-file rewrite first.',
+          'pnpm lint:tokens fails when public output gains a hardcoded colour. It runs as its own script because pnpm lint in this repo has no committed config and is not a working gate. It counts three scopes separately, because one number was hiding three different problems: render (311, the real debt, target zero), tenant (125, one brand’s pages living as source code, fixed by moving the content into the CMS and deleting the files), and admin (201, not counted at all, because builder chrome is fixed product UI and is supposed to look the same for every tenant). Budgets ratchet down and may never go up.',
         files: ['scripts/lint-brand-tokens.mjs'],
+      },
+      {
+        title: 'Deleted the largest offender outright',
+        status: 'shipped',
+        detail:
+          'The bespoke Check My Claim home component was the single worst file at 157 hardcoded colours, and nothing routed to it. It was being kept "as a historical reference for the design", which is another way of saying dead code: git is the reference, and its section designs already live on in the block renderer. Deleting it removed 157 violations at zero risk.',
+        files: ['src/app/(public)/[[...slug]]/page.tsx'],
       },
       {
         title: 'The funnel brand map still has its own defaults',
@@ -140,6 +147,8 @@ export const ENTRIES: BuildLogEntry[] = [
       'Per-deployment theme overrides are still in place. The decision is to remove them and relocate the generator to Brand Identity as an accept-or-reject proposal; that is the next package.',
       'The brand map used by the funnel builders still carries its own fallback colours, so the funnel path has not yet been consolidated onto the resolver.',
       'The block renderer still sets --site-* per block from block metadata. That is a content-level override rather than a competing brand store, but it should be reviewed once templates land.',
+      '311 hardcoded colours remain in code that paints public pages. Biggest: the bespoke section CSS (104), the landing-page renderer (65), the quiz preview and templates (64), the block renderer (32). Each one is a second owner of a colour the brand should decide.',
+      'One tenant still has 125 hardcoded colours across ten page components that exist only for that brand. The fix is to move that content into Pages or shared legal templates for the Site and delete the files, not to tokenise them in place.',
     ],
   },
   {
