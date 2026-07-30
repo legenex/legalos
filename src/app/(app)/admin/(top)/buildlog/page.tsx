@@ -322,7 +322,7 @@ export default async function BuildLogPage() {
         </p>
       </header>
 
-      <dl className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[var(--color-border)] border border-[var(--color-border)] rounded-xl overflow-hidden mb-8">
+      <dl className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[var(--color-border)] border border-[var(--color-border-strong)] rounded-xl overflow-hidden mb-8">
         {[
           { label: 'Entries', value: ENTRIES.length, tone: '' },
           { label: 'Items', value: allItems.length, tone: '' },
