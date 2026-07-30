@@ -1049,7 +1049,7 @@ const AdvertorialSettingsPanel = ({ advertorial, brands, onPatch, onClose }) => 
           <Select value={advertorial.defaultBrandId} onChange={(e) => onPatch({ defaultBrandId: e.target.value })}>
             {selectableOptions({
                 records: brands,
-                selectedId: brandId,
+                selectedId: advertorial.defaultBrandId,
                 toRecord: (b) => ({ id: b.id, label: b.displayName, status: b.status === 'archived' ? 'archived' : 'published' }),
               }).map((o) => <option key={o.id} value={o.id} disabled={o.disabled}>{o.label}{o.archived ? ' - ARCHIVED' : ''}</option>)}
           </Select>
@@ -1114,7 +1114,7 @@ const AdvDeploymentEditor = ({ deployment, isDraft, advertorials, brands, quizDe
             <option value="">- Select a brand -</option>
             {selectableOptions({
                 records: brands,
-                selectedId: brandId,
+                selectedId: draft.brandId,
                 toRecord: (b) => ({ id: b.id, label: `${b.displayName} - ${b.domains[0] || 'no domain'}`, status: b.status === 'archived' ? 'archived' : 'published' }),
               }).map((o) => <option key={o.id} value={o.id} disabled={o.disabled}>{o.label}{o.archived ? ' - ARCHIVED' : ''}</option>)}
           </Select>
@@ -1716,7 +1716,7 @@ const AdvPreviewView = ({ advertorial, brands, deployments, quizDeployments, qui
         <Select value={effectiveDeployment ? '' : selectedBrandId} onChange={(e) => { setSelectedBrandId(e.target.value); setSelectedDeploymentId(null); }} style={{ width: 200, padding: '5px 8px', fontSize: 11.5 }} disabled={!!effectiveDeployment}>
           {selectableOptions({
                 records: brands,
-                selectedId: brandId,
+                selectedId: selectedBrandId,
                 toRecord: (b) => ({ id: b.id, label: b.displayName, status: b.status === 'archived' ? 'archived' : 'published' }),
               }).map((o) => <option key={o.id} value={o.id} disabled={o.disabled}>{o.label}{o.archived ? ' - ARCHIVED' : ''}</option>)}
         </Select>

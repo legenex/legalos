@@ -697,7 +697,7 @@ export const LandingPageBuilder = ({ landingPage, brands, quizDeployments, quizz
               <option value="">No brand (placeholders)</option>
               {selectableOptions({
                 records: brands,
-                selectedId: draft.brandId,
+                selectedId: previewBrandId,
                 toRecord: (b) => ({ id: b.id, label: b.displayName, status: b.status === 'archived' ? 'archived' : 'published' }),
               }).map((o) => <option key={o.id} value={o.id} disabled={o.disabled}>{o.label}{o.archived ? ' - ARCHIVED' : ''}</option>)}
             </Select>
@@ -896,7 +896,7 @@ const LPPreviewModal = ({ previewState, landingPages, brands, lpDeployments, qui
             <Select value={brandOverride || brands[0]?.id || ''} onChange={(e) => setBrandOverride(e.target.value)} style={{ width: 200 }}>
               {selectableOptions({
                 records: brands,
-                selectedId: draft.brandId,
+                selectedId: brandOverride || brands[0]?.id || '',
                 toRecord: (b) => ({ id: b.id, label: b.displayName || b.name, status: b.status === 'archived' ? 'archived' : 'published' }),
               }).map((o) => <option key={o.id} value={o.id} disabled={o.disabled}>{o.label}{o.archived ? ' - ARCHIVED' : ''}</option>)}
             </Select>
