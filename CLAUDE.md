@@ -35,7 +35,7 @@ The bar above is the *what*; this is the *how*. On every task, work like a senio
 
 ## ⛔ READ-THIS-FIRST: Every push needs a manual server deploy
 
-**The user has explicitly asked to be reminded every single time.** Whenever you `git push` changes that touch `src/`, `package.json`, `next.config.mjs`, `tailwind.config.*`, `payload.config.ts`, `src/migrations/`, or anything that ends up in `.next/`, the **last block of your reply MUST be the SSH deploy commands** the user copy-pastes — starting with `git pull` and ending with `systemctl status`. The change is NOT live without it. Don't say "deploy to see it" without the block. Don't shorten the block. Don't omit it even if the previous reply already showed it. See the "MANDATORY" section below for the exact commands.
+**The user has explicitly asked to be reminded every single time.** Whenever you `git push` changes that touch `src/`, `package.json`, `next.config.mjs`, `tailwind.config.*`, `payload.config.ts`, `src/migrations/`, or anything that ends up in `.next/`, the **last block of your reply MUST be the SSH deploy commands** the user copy-pastes — starting with the Plesk fetch and ending with `systemctl status`. The change is NOT live without it. Don't say "deploy to see it" without the block. Don't shorten the block. Don't omit it even if the previous reply already showed it. See the "MANDATORY" section below for the exact commands.
 
 ---
 
@@ -43,7 +43,7 @@ The bar above is the *what*; this is the *how*. On every task, work like a senio
 
 **The flow is:** edit files in this local repo → `git commit && git push` → GitHub webhook fires → Plesk pulls into `/var/www/vhosts/legenex.com/os.legenex.com/` on `root@51.81.202.161` → **you must run `pnpm build && systemctl restart legalos-dev` on the server** → change is live at `https://os.legenex.com` once the build finishes.
 
-The `legalos-dev` systemd unit runs the **production build** (`pnpm start` against prebuilt `.next/`), not `pnpm dev`. There is no HMR. A `git pull` alone will not change what users see — the prebuilt `.next/` output has to be regenerated and the service restarted.
+The `legalos-dev` systemd unit runs the **production build** (`pnpm start` against prebuilt `.next/`), not `pnpm dev`. There is no HMR. A Plesk deploy alone will not change what users see — the prebuilt `.next/` output has to be regenerated and the service restarted.
 
 There is no Docker rebuild. There is no `scripts/deploy.sh` step (the file is retained as historical reference only).
 
@@ -53,7 +53,7 @@ There is no Docker rebuild. There is no `scripts/deploy.sh` step (the file is re
 - **ALWAYS commit + push to deploy.** That's the only mechanism that ships changes to the server.
 - **EVERY src/ change requires `pnpm build && systemctl restart legalos-dev` on the server after the push.** The webhook only pulls; it does not rebuild. Without the rebuild + restart, users keep seeing the old prebuilt output.
 - **SSH is used for the rebuild + restart, logs, and service state.** Use SSH for builds (`pnpm build`), restarts (`systemctl restart legalos-dev`), logs (`journalctl -u legalos-dev`), and one-off Plesk admin work. Never edit `src/` there.
-- **NEVER suggest `docker compose up app` or `bash scripts/deploy.sh`.** The Docker app container is stopped; the production flow is git pull → `pnpm build` → restart.
+- **NEVER suggest `docker compose up app` or `bash scripts/deploy.sh`.** The Docker app container is stopped; the production flow is Plesk fetch + deploy → `pnpm build` → restart.
 
 ### Standard operations
 
@@ -72,11 +72,12 @@ ssh root@51.81.202.161 'systemctl status legalos-dev --no-pager'
 
 After **any** `git push` you make that touches `src/`, `package.json`, `next.config.mjs`, `tailwind.config.*`, `payload.config.ts`, `src/migrations/`, or anything compiled into `.next/`, the **final block of your reply** must be the exact SSH commands below so the user can copy-paste them. This applies *every* time, even for a one-line fix, even if the previous reply already showed them, and even if you just want to say "deploy this and see if it works." The user has explicitly and repeatedly asked for this rule and gets stuck on the server without it.
 
-**Do not summarize.** Paste the exact 8-line block. **Do not say "run pnpm build" instead** — `pnpm build` alone is not enough; `git pull` must come first to fetch your commits, and `systemctl stop` must come before `pnpm build` to free `.next/` from the running process.
+**Do not summarize.** Paste the exact 8-line block. **Do not say "run pnpm build" instead** — `pnpm build` alone is not enough; the Plesk fetch and deploy must come first to bring your commits into the app directory, and `systemctl stop` must come before `pnpm build` to free `.next/` from the running process.
 
 ```
 cd /var/www/vhosts/legenex.com/os.legenex.com
-git pull
+plesk ext git --fetch -domain os.legenex.com -name legalos.git
+plesk ext git --deploy -domain os.legenex.com -name legalos.git
 systemctl stop legalos-dev
 pnpm install
 pnpm generate:importmap
@@ -85,8 +86,22 @@ systemctl start legalos-dev
 systemctl status legalos-dev --no-pager
 ```
 
+**`git pull` does not work here and never did.** The app directory is a Plesk
+*deployment target*, not a clone - it has no `.git`, so `git pull` exits with
+"not a git repository". The repository is bare at
+`/var/www/vhosts/legenex.com/git/legalos.git`, and Plesk moves code in two
+distinct steps that are easy to confuse:
+
+* `--fetch` pulls GitHub into the bare repo.
+* `--deploy` checks the bare repo out into the app directory.
+
+Running `--deploy` alone redeploys whatever was last fetched, which looks like a
+successful deploy of nothing. The webhook normally performs both on push; these
+commands are the manual path when it has not fired yet or you need it now.
+
 What each step does (most are fast no-ops if nothing changed):
-- `git pull` — fetch your new commits.
+- `plesk ext git --fetch` — pull GitHub into the bare repo.
+- `plesk ext git --deploy` — check the bare repo out into the app directory. Both are needed: `--deploy` on its own redeploys whatever was last fetched.
 - `pnpm install` — only runs if `package.json` changed; otherwise ~1s.
 - `pnpm generate:importmap` — regenerates the Payload admin import map (required before a prod build per CLAUDE.md).
 - `pnpm build` — production build (~60–90s, the slow step).
@@ -136,7 +151,7 @@ There is no test suite. **`pnpm typecheck` is the only working correctness gate.
 
 ## Deploy model
 
-A `git push` to `main` triggers Plesk's Git extension via webhook, which pulls into `/var/www/vhosts/legenex.com/os.legenex.com/` on the host. The `legalos-dev.service` systemd unit serves the **production build** (`pnpm start` against `.next/`) from that directory — there is no HMR and no auto-rebuild. After the pull, you must SSH in and run `pnpm build && systemctl restart legalos-dev` for the change to take effect.
+A `git push` to `main` triggers Plesk's Git extension via webhook, which fetches into the bare repo at `/var/www/vhosts/legenex.com/git/legalos.git` and checks it out into `/var/www/vhosts/legenex.com/os.legenex.com/`. That target directory is not a clone and has no `.git`. The `legalos-dev.service` systemd unit serves the **production build** (`pnpm start` against `.next/`) from that directory — there is no HMR and no auto-rebuild. After the pull, you must SSH in and run `pnpm build && systemctl restart legalos-dev` for the change to take effect.
 
 There is no container rebuild and no automatic migrate step. Rollback: `git revert && git push` (then rebuild + restart again).
 
