@@ -8,23 +8,7 @@
 // No AI calls. No schema validation surprises. Reliability is the point.
 
 import { load, type CheerioAPI, type Cheerio } from 'cheerio'
-
-/**
- * The subset of domhandler's Element this importer actually reads.
- *
- * Declared here rather than imported from 'domhandler'. That package is a
- * transitive dependency of cheerio and does not resolve under pnpm's strict
- * node_modules layout, and adding it as a direct dependency needs a lockfile
- * regeneration this environment cannot perform. Only `tagName`, `attribs` and
- * `type` are ever touched, and cheerio's `Cheerio<T>` is unconstrained, so a
- * structural type satisfies every use and states the real coupling honestly.
- */
-type Element = {
-  tagName: string
-  attribs?: Record<string, string>
-  type?: string
-}
-
+import type { Element } from 'domhandler'
 
 export type ImportedBlock = {
   blockType: 'custom_html'

@@ -20,24 +20,8 @@
 //      each card have a star icon? a numbered label? an icon-only heading?).
 
 import { load, type Cheerio, type CheerioAPI } from 'cheerio'
+import type { Element } from 'domhandler'
 import { extractBrandFromCss, buildBrandOverrideCss } from './extract-brand-tokens'
-
-/**
- * The subset of domhandler's Element this importer actually reads.
- *
- * Declared here rather than imported from 'domhandler'. That package is a
- * transitive dependency of cheerio and does not resolve under pnpm's strict
- * node_modules layout, and adding it as a direct dependency needs a lockfile
- * regeneration this environment cannot perform. Only `tagName`, `attribs` and
- * `type` are ever touched, and cheerio's `Cheerio<T>` is unconstrained, so a
- * structural type satisfies every use and states the real coupling honestly.
- */
-type Element = {
-  tagName: string
-  attribs?: Record<string, string>
-  type?: string
-}
-
 
 type Block = Record<string, unknown> & { blockType: string; note?: string }
 
