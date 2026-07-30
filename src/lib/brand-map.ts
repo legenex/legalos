@@ -18,7 +18,16 @@
 
 import { resolveBrandTokens, MissingBrandTokenError } from './brand/resolve-tokens'
 
-export type DomainLite = { host: string; primary: boolean; status: string }
+export type DomainLite = {
+  id: string
+  host: string
+  primary: boolean
+  status: string
+  /** Only a domain with an active certificate can serve a funnel over https. */
+  sslStatus: string
+  /** site | quiz | landing | advertorial | preview. Absent on older rows. */
+  kind?: string
+}
 
 const str = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : fallback)
 
@@ -224,7 +233,14 @@ export function buildBrandsFromSites(
     if (d.site == null) continue
     const sid = typeof d.site === 'object' ? Number((d.site as { id: unknown }).id) : Number(d.site)
     const arr = domainsBySite.get(sid) ?? []
-    arr.push({ host: String(d.host ?? ''), primary: Boolean(d.primary), status: typeof d.status === 'string' ? d.status : 'pending' })
+    arr.push({
+      id: String(d.id ?? ''),
+      host: String(d.host ?? ''),
+      primary: Boolean(d.primary),
+      status: typeof d.status === 'string' ? d.status : 'pending',
+      sslStatus: typeof d.ssl_status === 'string' ? d.ssl_status : 'pending',
+      kind: typeof d.kind === 'string' ? d.kind : undefined,
+    })
     domainsBySite.set(sid, arr)
   }
   return siteDocs.map((s) => siteToBrand(s, domainsBySite.get(Number(s.id)) ?? []))

@@ -30,6 +30,7 @@ import {
   saveQuizDeployment, deleteQuizDeployment,
 } from '@/app/(app)/admin/(top)/quizzes/actions'
 import { buildQuizEmbedSnippet, QUIZ_EMBED_INCOMPLETE } from '@/lib/quiz-embed'
+import { selectableOptions } from '@/lib/selectable'
 import {
   DESTINATION_KEYS, DESTINATION_LABELS, resolveDestination, destinationOrigin, isSafeDestinationUrl,
 } from '@/lib/quiz-destinations'
@@ -360,6 +361,30 @@ const DeploymentEditor = ({ deployment, isDraft, quizzes, brands, onSave, onBack
   // The brand paints the quiz. A deployment picks a template; it never authors
   // a colour, so what the contrast audit below judges IS what ships.
   const brand = brands.find((b) => b.id === draft.brandId)
+  // Pickers go through one helper so archived records are never offered and a
+  // saved reference to one is never silently dropped. See src/lib/selectable.ts.
+  const quizOptions = selectableOptions({
+    records: quizzes,
+    selectedId: draft.quizId,
+    toRecord: (q) => ({ id: q.id, label: q.name, status: q.isArchived ? 'archived' : q.isPublished ? 'published' : 'draft' }),
+  })
+
+  // Only a domain that is active AND holds an active certificate can serve a
+  // funnel. Anything else is offered disabled rather than hidden, so "why is my
+  // domain not in the list" has an answer on screen.
+  const brandDomains = (brands.find((b) => b.id === draft.brandId)?.__domains ?? [])
+  const domainOptions = selectableOptions({
+    records: brandDomains,
+    selectedId: draft.domain,
+    toRecord: (d) => ({
+      id: d.host,
+      label: `${d.host}${d.primary ? '  (primary)' : ''}${d.status !== 'active' ? `  - ${d.status}` : d.sslStatus !== 'active' ? '  - certificate pending' : ''}`,
+      status: 'published',
+      meta: { ready: d.status === 'active' && d.sslStatus === 'active' },
+    }),
+    isEligible: (_rec, d) => d.status === 'active' && d.sslStatus === 'active',
+  })
+
   const isOverriding = draft.bodySectionOverrides !== null && draft.bodySectionOverrides !== undefined
   const effectiveSections = isOverriding ? draft.bodySectionOverrides : (brand?.defaultBodySections || [])
   const toggleOverride = () => { if (isOverriding) update({ bodySectionOverrides: null }); else update({ bodySectionOverrides: JSON.parse(JSON.stringify(brand?.defaultBodySections || [])) }) }
@@ -407,11 +432,37 @@ const DeploymentEditor = ({ deployment, isDraft, quizzes, brands, onSave, onBack
 
         {tab === 'basics' && <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div><Label>Quiz</Label><Select value={draft.quizId} onChange={(e) => update({ quizId: e.target.value })}><option value="">- pick quiz -</option>{quizzes.map((q) => <option key={q.id} value={q.id}>{q.name}</option>)}</Select></div>
+            <div>
+              <Label>Quiz</Label>
+              <Select value={draft.quizId} onChange={(e) => update({ quizId: e.target.value })}>
+                <option value="">- pick quiz -</option>
+                {quizOptions.map((o) => <option key={o.id} value={o.id} disabled={o.disabled}>{o.label}{o.archived ? ' · ARCHIVED' : ''}</option>)}
+              </Select>
+              {quizOptions.some((o) => o.archived) && <div style={{ fontSize: 10.5, color: T.warning, marginTop: 4 }}>
+                This deployment points at an archived quiz. Restore it on the Quizzes tab, or pick another. It is kept here rather than dropped so the reference is not lost silently.
+              </div>}
+            </div>
             <div><Label>Brand</Label><Select value={draft.brandId} onChange={(e) => update({ brandId: e.target.value })}><option value="">- pick brand -</option>{brands.map((b) => <option key={b.id} value={b.id}>{b.displayName}</option>)}</Select></div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
-            <div><Label>Domain</Label><Input mono value={draft.domain} onChange={(e) => update({ domain: e.target.value })} placeholder="qualify.checkmyclaim.co" /></div>
+            <div>
+              <Label>Domain</Label>
+              {domainOptions.length > 0 ? (
+                <Select value={draft.domain} onChange={(e) => update({ domain: e.target.value })}>
+                  <option value="">- pick domain -</option>
+                  {domainOptions.map((o) => <option key={o.id} value={o.id} disabled={o.disabled}>{o.label}</option>)}
+                </Select>
+              ) : (
+                <div style={{ padding: 10, backgroundColor: T.bgElev, border: `1px solid ${T.warning}`, borderRadius: 6, fontSize: 11.5, color: T.warning }}>
+                  {draft.brandId
+                    ? <>This brand has no domain with an active certificate yet. <a href="/admin/brands/domains" style={{ color: T.info }}>Connect a domain</a>, then come back.</>
+                    : 'Pick a brand first. Domains are listed per brand.'}
+                </div>
+              )}
+              {domainOptions.some((o) => o.disabled) && <div style={{ fontSize: 10.5, color: T.warning, marginTop: 4 }}>
+                A domain shown greyed out is not ready to serve traffic. Publishing to it is blocked until its status and certificate are both active.
+              </div>}
+            </div>
             <div><Label>Path</Label><Input mono value={draft.path} onChange={(e) => update({ path: e.target.value })} placeholder="/s/mva" /></div>
           </div>
           <div><Label>Status</Label><Select value={draft.status} onChange={(e) => update({ status: e.target.value })}><option value="draft">Draft</option><option value="live">Live</option><option value="paused">Paused</option></Select></div>

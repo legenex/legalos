@@ -52,6 +52,64 @@ export const STATUS_LABEL: Record<ItemStatus, string> = {
 export const ENTRIES: BuildLogEntry[] = [
   {
     date: '2026-07-29',
+    title: 'Pickers stop offering things that cannot be used (P0-D)',
+    summary:
+      'The archived quiz you spotted in the deployment dropdown, and the free-text domain field next to it. Both are now real pickers over real records, through one helper, so the same mistake cannot be made screen by screen.',
+    items: [
+      {
+        title: 'Archived quizzes are no longer offered',
+        status: 'shipped',
+        detail:
+          'Archiving a quiz is a decision to stop using it, and a retired quiz sitting in the deployment dropdown is how it gets deployed again by accident. Pickers now return published and draft records only.',
+        files: ['src/lib/selectable.ts', 'src/components/builder/quiz/QuizBuilderApp.tsx'],
+      },
+      {
+        title: 'But a saved reference is never dropped silently',
+        status: 'shipped',
+        detail:
+          'Filtering alone would have created a worse bug. A deployment pointing at a quiz that was archived afterwards would find its value missing from the list, and the select would fall back to whatever came first, silently repointing a live deployment at a different quiz the next time anyone saved an unrelated field. The archived record is kept, disabled, labelled, with a line explaining what happened. A reference to something deleted entirely shows as missing rather than as an empty box.',
+        files: ['src/lib/selectable.ts'],
+      },
+      {
+        title: 'Domain is a picker, not a text box',
+        status: 'shipped',
+        detail:
+          'It was free text, so a typo produced a deployment bound to a host that does not exist and nothing said so until a visitor got a 404. It now lists the brand\u2019s own domains, and only one that is active with an active certificate can be chosen. A domain that is not ready is shown greyed out rather than hidden, so "why is my domain not in the list" has an answer on screen. A brand with no ready domain gets a link to connect one instead of an empty select.',
+        files: ['src/components/builder/quiz/QuizBuilderApp.tsx', 'src/lib/brand-map.ts'],
+      },
+      {
+        title: 'One helper, so this cannot drift per screen',
+        status: 'partial',
+        detail:
+          'The rules live in one place and the quiz and domain pickers use it. The remaining dropdowns across the admin still run their own queries and have not been converted yet.',
+        files: ['src/lib/selectable.ts'],
+      },
+    ],
+    verification: [
+      {
+        label: 'Picker rules',
+        state: 'verified',
+        detail:
+          '17 assertions. Archived records are absent, drafts are present, a saved reference to an archived record is kept and disabled, a dangling reference is surfaced rather than swallowed, only a fully ready domain is selectable, and a saved domain whose certificate lapsed is kept disabled while an unrelated unready one stays hidden. The last group asserts the property directly: whatever is currently saved is always present in the options.',
+      },
+      {
+        label: 'On screen',
+        state: 'not-run',
+        detail:
+          'Open a deployment and confirm the archived quiz is gone from the dropdown, and that the domain field is now a list of that brand\u2019s domains.',
+      },
+    ],
+    deployNotes: [
+      'No migration.',
+      'A deployment whose domain was typed by hand and does not match a Domain row will show as unset. Pick the right domain and save.',
+    ],
+    openIssues: [
+      'The publish gate is still not built, so nothing yet blocks publishing to a host that is not ready. The picker discourages it; only the gate will prevent it.',
+      'Other admin dropdowns still query directly and need converting to the shared helper.',
+    ],
+  },
+  {
+    date: '2026-07-29',
     title: 'One tenant\u2019s logo stops appearing on everyone\u2019s site',
     summary:
       'A new brand at getwhatyoureowed.co was showing the Check My Claim logo. Two bugs in the shared navigation, and a third in what a new brand starts life as. None of them was a styling problem.',
