@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { CheckCircle2, CircleDashed, CircleDot, FlaskConical, AlertTriangle, Terminal, Eye, ImageOff } from 'lucide-react'
+import { CheckCircle2, CircleDashed, CircleDot, FlaskConical, AlertTriangle, Terminal, Eye } from 'lucide-react'
 import { getCurrentUser } from '@/lib/auth'
 import {
   ENTRIES,
@@ -78,15 +78,6 @@ function Evidence({ evidence }: { evidence: BuildLogEvidence[] }) {
               >
                 {ev.path}
               </a>
-              {!ev.image ? (
-                <span
-                  title="Screenshot capture is not built yet. The steps below are the recipe it will drive."
-                  className="ml-auto inline-flex items-center gap-1 text-[10px] text-[var(--color-ink-muted)]"
-                >
-                  <ImageOff className="w-3 h-3" />
-                  no capture yet
-                </span>
-              ) : null}
             </div>
             {ev.steps?.length ? (
               <ol className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11.5px] text-[var(--color-ink-muted)]">
