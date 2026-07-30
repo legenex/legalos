@@ -1,7 +1,25 @@
 import { redirect } from 'next/navigation'
+import { getPayload } from 'payload'
+import config from '@payload-config'
 import { CheckCircle2, CircleDashed, CircleDot, FlaskConical, AlertTriangle, Terminal } from 'lucide-react'
 import { getCurrentUser } from '@/lib/auth'
-import { ENTRIES, STATUS_LABEL, type ItemStatus, type BuildLogEntry } from '@/lib/buildlog'
+import {
+  ENTRIES,
+  STATUS_LABEL,
+  inferArea,
+  buildLogEntryId,
+  buildLogItemId,
+  type ItemStatus,
+  type BuildLogEntry,
+  type BuildLogItem,
+} from '@/lib/buildlog'
+import { CommentThread, type BuildLogComment } from './CommentThread'
+
+type CommentIndex = {
+  byItem: Map<string, BuildLogComment[]>
+  byEntry: Map<string, BuildLogComment[]>
+  openTotal: number
+}
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -30,7 +48,16 @@ function StatusChip({ status }: { status: ItemStatus }) {
   )
 }
 
-function Entry({ entry }: { entry: BuildLogEntry }) {
+function Entry({
+  entry,
+  index,
+  userEmail,
+}: {
+  entry: BuildLogEntry
+  index: CommentIndex
+  userEmail: string
+}) {
+  const entryId = buildLogEntryId(entry)
   return (
     <section className="border-t border-[var(--color-border)] pt-8 mt-8 first:mt-0 first:border-t-0 first:pt-0">
       <header className="mb-5">
@@ -62,6 +89,9 @@ function Entry({ entry }: { entry: BuildLogEntry }) {
               ) : null}
               <h3 className="text-[15px] font-semibold text-white">{item.title}</h3>
               <StatusChip status={item.status} />
+              <span className="rounded-md border border-[var(--color-border)] px-2 py-0.5 text-[10.5px] text-[var(--color-ink-muted)] whitespace-nowrap">
+                {inferArea(item)}
+              </span>
             </div>
             <p className="text-[13.5px] text-[var(--color-ink-muted)] leading-relaxed max-w-[80ch]">
               {item.detail}
@@ -78,6 +108,13 @@ function Entry({ entry }: { entry: BuildLogEntry }) {
                 ))}
               </ul>
             ) : null}
+            <CommentThread
+              entryId={entryId}
+              itemId={buildLogItemId(entry, item)}
+              targetLabel={item.title}
+              comments={index.byItem.get(buildLogItemId(entry, item)) ?? []}
+              currentUserEmail={userEmail}
+            />
           </li>
         ))}
       </ol>
@@ -154,22 +191,115 @@ function Entry({ entry }: { entry: BuildLogEntry }) {
   )
 }
 
+/**
+ * Load every comment for the log in one query and group it in memory.
+ *
+ * The log is a fixed-size list of entries in code, so one read is cheaper and
+ * simpler than a query per item, and it means a comment whose item has since
+ * been renamed can still be found and shown as an orphan rather than silently
+ * dropped.
+ */
+async function loadComments(): Promise<CommentIndex> {
+  const byItem = new Map<string, BuildLogComment[]>()
+  const byEntry = new Map<string, BuildLogComment[]>()
+  let openTotal = 0
+
+  try {
+    const payload = await getPayload({ config })
+    const res = await payload.find({
+      collection: 'buildlog-comments',
+      limit: 1000,
+      sort: 'createdAt',
+      depth: 0,
+      overrideAccess: true,
+    })
+
+    const knownItemIds = new Set<string>()
+    for (const entry of ENTRIES) {
+      for (const item of entry.items) knownItemIds.add(buildLogItemId(entry, item))
+    }
+
+    for (const doc of res.docs as unknown as Array<Record<string, unknown>>) {
+      const itemId = doc.item_id ? String(doc.item_id) : ''
+      const comment: BuildLogComment = {
+        id: String(doc.id),
+        body: String(doc.body ?? ''),
+        status: doc.status === 'resolved' ? 'resolved' : 'open',
+        authorEmail: String(doc.author_email ?? ''),
+        createdAt: String(doc.createdAt ?? ''),
+        // A comment written against a title that no longer exists is shown with
+        // the title it was written against, rather than disappearing.
+        orphanOf: itemId && !knownItemIds.has(itemId) ? String(doc.target_label ?? 'a renamed item') : null,
+      }
+      if (comment.status === 'open') openTotal += 1
+
+      if (itemId) {
+        const list = byItem.get(itemId) ?? []
+        list.push(comment)
+        byItem.set(itemId, list)
+      } else {
+        const key = String(doc.entry_id ?? '')
+        const list = byEntry.get(key) ?? []
+        list.push(comment)
+        byEntry.set(key, list)
+      }
+    }
+  } catch {
+    // The table does not exist until the migration has run. An empty board is a
+    // better failure than a 500 on a page whose whole job is reporting state.
+  }
+
+  return { byItem, byEntry, openTotal }
+}
+
 export default async function BuildLogPage() {
   const me = await getCurrentUser()
   if (!me) redirect('/sign-in?next=/admin/buildlog')
 
+  const index = await loadComments()
+  const userEmail = me.email ?? ''
+
+  const allItems: BuildLogItem[] = ENTRIES.flatMap((e) => e.items)
+  const notShipped = allItems.filter((i) => i.status !== 'shipped').length
+  const notRun = ENTRIES.flatMap((e) => e.verification).filter((v) => v.state === 'not-run').length
+
   return (
     <div className="p-10 max-w-[1100px]">
-      <header className="mb-8">
+      <header className="mb-6">
         <h1 className="text-[28px] font-semibold tracking-tight text-white">Build log</h1>
         <p className="text-[var(--color-ink-muted)] text-[15px] mt-1 max-w-[75ch]">
-          What shipped, what is only partly done, and what was actually checked rather than assumed. Newest
-          first.
+          What shipped, what is only partly done, and what was actually checked rather than assumed. Comment on
+          any item and it stays attached to that decision. Newest first.
         </p>
       </header>
 
+      <dl className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[var(--color-border)] border border-[var(--color-border)] rounded-xl overflow-hidden mb-8">
+        {[
+          { label: 'Entries', value: ENTRIES.length, tone: '' },
+          { label: 'Items', value: allItems.length, tone: '' },
+          { label: 'Not shipped', value: notShipped, tone: notShipped > 0 ? 'text-amber-400' : '' },
+          { label: 'Open comments', value: index.openTotal, tone: index.openTotal > 0 ? 'text-amber-400' : '' },
+        ].map((s) => (
+          <div key={s.label} className="bg-[var(--color-surface-1)] px-4 py-3">
+            <dt className="text-[10.5px] font-mono uppercase tracking-wider text-[var(--color-ink-muted)]">
+              {s.label}
+            </dt>
+            <dd className={`text-[22px] font-semibold tabular-nums mt-0.5 ${s.tone || 'text-white'}`}>
+              {s.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      {notRun > 0 ? (
+        <p className="text-[12.5px] text-amber-300/90 mb-8 leading-relaxed max-w-[75ch]">
+          {notRun} verification {notRun === 1 ? 'check has' : 'checks have'} not been run. They are listed
+          against the entries below rather than summarised away, because an unrun check is not a passing one.
+        </p>
+      ) : null}
+
       {ENTRIES.map((entry, i) => (
-        <Entry key={`${entry.date}-${i}`} entry={entry} />
+        <Entry key={`${entry.date}-${i}`} entry={entry} index={index} userEmail={userEmail} />
       ))}
     </div>
   )

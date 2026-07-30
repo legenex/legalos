@@ -22,6 +22,8 @@ export type BuildLogItem = {
   detail: string
   /** Repo-relative paths a reader can open to see it. */
   files?: string[]
+  /** Overrides the area inferred from `files`. */
+  area?: Area
 }
 
 export type BuildLogVerification = {
@@ -49,7 +51,145 @@ export const STATUS_LABEL: Record<ItemStatus, string> = {
   open: 'Not started',
 }
 
+
+/**
+ * Areas of the system, used to filter the board.
+ *
+ * Derived from an item's own file paths rather than hand-tagged on 60-odd
+ * existing items: a tag typed by hand goes stale the moment the item is edited,
+ * where a path is the item's actual subject. An item can be given an explicit
+ * `area` when the inference gets it wrong.
+ */
+export const AREAS = [
+  'Brand',
+  'Quiz',
+  'Landing page',
+  'Public render',
+  'Domains',
+  'Leads',
+  'Data',
+  'Admin',
+] as const
+
+export type Area = (typeof AREAS)[number]
+
+const AREA_RULES: Array<[RegExp, Area]> = [
+  [/\/brand\/|brand-map|brand-identities|BrandModule|tokens\.ts/, 'Brand'],
+  [/quiz/i, 'Quiz'],
+  [/\/lp\/|landing/i, 'Landing page'],
+  [/migrations\/|collections\//, 'Data'],
+  [/lead/i, 'Leads'],
+  [/domain/i, 'Domains'],
+  [/\(public\)|components\/blocks|components\/public|bespoke-css/, 'Public render'],
+  [/\(app\)\/admin|scripts\//, 'Admin'],
+]
+
+export const inferArea = (item: BuildLogItem): Area => {
+  if (item.area) return item.area
+  const haystack = (item.files ?? []).join(' ')
+  for (const [re, area] of AREA_RULES) if (re.test(haystack)) return area
+  return 'Admin'
+}
+
+/** URL-safe slug. Stable across re-ordering; changes only if the text changes. */
+const slug = (text: string): string =>
+  text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+
+/**
+ * Stable anchors for comments.
+ *
+ * Derived from content, not from row ids or array positions: the log is code,
+ * so there is nothing to relate to, and an index-based id would reassign every
+ * comment the moment a new entry is added at the top. Renaming an item does
+ * orphan its comments, which is why the comment also stores the title it was
+ * written against.
+ */
+export const buildLogEntryId = (entry: BuildLogEntry): string => `${entry.date}--${slug(entry.title)}`
+
+export const buildLogItemId = (entry: BuildLogEntry, item: BuildLogItem): string =>
+  `${buildLogEntryId(entry)}--${slug(item.title)}`
+
 export const ENTRIES: BuildLogEntry[] = [
+  {
+    date: '2026-07-29',
+    title: 'The build log becomes the review surface',
+    summary:
+      'Rather than a second progress page, the existing board gained the review loop: every item can be commented on, comments persist against that specific decision, and each item is categorised so the board can be read by area instead of only by date.',
+    items: [
+      {
+        title: 'Comments, attached to the decision they are about',
+        status: 'shipped',
+        detail:
+          'Any item can be commented on, and the comment stays with that item rather than in a chat thread nobody can find next week. Threads collapse to a count so the board stays scannable, and an item with unanswered feedback shows its open count without being expanded.',
+        files: ['src/app/(app)/admin/(top)/buildlog/CommentThread.tsx'],
+      },
+      {
+        title: 'Stored in the database, not a file',
+        status: 'shipped',
+        detail:
+          'The agent-plan board keeps machine-written status in JSON files, which is the right weight for something cheap to regenerate. These are notes a person wrote about a decision, and losing them to a rebuilt server would be a real loss, so they go in the database where they are backed up, exportable and covered by the audit hooks.',
+        files: ['src/collections/BuildLogComments.ts', 'src/migrations/20260729_230000_buildlog_comments.ts'],
+      },
+      {
+        title: 'Comments survive a rename instead of vanishing',
+        status: 'shipped',
+        detail:
+          'Anchors are slugs derived from the log\u2019s own content, because the log is code and there is no row to relate to. That means renaming an item would orphan its comments, so the title the comment was written against is stored with it: an orphan is shown with its original target rather than silently disappearing.',
+        files: ['src/lib/buildlog.ts'],
+      },
+      {
+        title: 'Items are categorised by area',
+        status: 'shipped',
+        detail:
+          'Each item carries an area - brand, quiz, landing page, public render, domains, leads, data, admin - inferred from its own file paths rather than hand-tagged across sixty-odd existing items. A tag typed by hand goes stale when the item is edited; a path is the item\u2019s actual subject. An explicit area can override the inference.',
+        files: ['src/lib/buildlog.ts'],
+      },
+      {
+        title: 'A summary that leads with what is not done',
+        status: 'shipped',
+        detail:
+          'Counts of entries, items, items not shipped, and open comments, with the last two in amber when they are non-zero. Unrun verification checks are called out above the entries rather than summarised away, because an unrun check is not a passing one.',
+        files: ['src/app/(app)/admin/(top)/buildlog/page.tsx'],
+      },
+      {
+        title: 'Screenshots of each section',
+        status: 'open',
+        detail:
+          'Not built. It needs a headless browser on the server, a capture job and image storage, which is a real dependency I cannot install or test from here. The comment loop works without it, so it ships first and capture follows once the dependency can be verified on the server.',
+      },
+    ],
+    verification: [
+      {
+        label: 'Anchors are stable',
+        state: 'verified',
+        detail:
+          'All 63 item ids are unique with no collisions, and an id is unchanged when entries are reordered - which matters because a new entry is added at the top every time, and an index-based id would reassign every existing comment.',
+      },
+      {
+        label: 'Degrades before the migration runs',
+        state: 'verified',
+        detail:
+          'The comment read is wrapped so a missing table renders an empty board rather than a 500. A page whose job is reporting state should not itself be the thing that is down.',
+      },
+      {
+        label: 'In the browser',
+        state: 'not-run',
+        detail: 'Nothing here has been clicked. Post a comment, resolve it, reopen it, and delete one.',
+      },
+    ],
+    deployNotes: [
+      'Adds a migration for the comments table. Run pnpm payload migrate after the build.',
+      'Until that migration runs the board renders normally with no comments, rather than erroring.',
+    ],
+    openIssues: [
+      'Screenshot capture per section is not built. It needs a headless browser on the server.',
+      'Comments cannot yet be filtered to just the open ones, and there is no notification when one is added.',
+    ],
+  },
   {
     date: '2026-07-29',
     title: 'Pickers stop offering things that cannot be used (P0-D)',

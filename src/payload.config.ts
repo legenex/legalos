@@ -24,6 +24,7 @@ import { Numbers } from './collections/Numbers'
 import { TrackingConfigs } from './collections/TrackingConfigs'
 import { Media } from './collections/Media'
 import { AuditLog } from './collections/AuditLog'
+import { BuildLogComments } from './collections/BuildLogComments'
 import { IntegrationConfig } from './globals/IntegrationConfig'
 
 const filename = fileURLToPath(import.meta.url)
@@ -69,6 +70,7 @@ export default buildConfig({
     TrackingConfigs,
     Media,
     AuditLog,
+    BuildLogComments,
   ],
   globals: [IntegrationConfig],
   secret: process.env.PAYLOAD_SECRET ?? 'dev-secret-change-me',

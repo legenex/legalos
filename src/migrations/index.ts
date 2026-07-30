@@ -16,6 +16,7 @@ import * as migration_20260729_090000_destinations_and_brand_drift from './20260
 import * as migration_20260729_140000_funnel_lp_public_render from './20260729_140000_funnel_lp_public_render';
 import * as migration_20260729_170000_brand_token_contract from './20260729_170000_brand_token_contract';
 import * as migration_20260729_200000_drop_deployment_theme from './20260729_200000_drop_deployment_theme';
+import * as migration_20260729_230000_buildlog_comments from './20260729_230000_buildlog_comments';
 
 export const migrations = [
   {
@@ -107,5 +108,10 @@ export const migrations = [
     up: migration_20260729_200000_drop_deployment_theme.up,
     down: migration_20260729_200000_drop_deployment_theme.down,
     name: '20260729_200000_drop_deployment_theme',
+  },
+  {
+    up: migration_20260729_230000_buildlog_comments.up,
+    down: migration_20260729_230000_buildlog_comments.down,
+    name: '20260729_230000_buildlog_comments',
   },
 ];
