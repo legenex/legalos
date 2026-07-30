@@ -703,7 +703,11 @@ function RenderLpDeployment({
         quiz={resolved.quiz?.quiz ?? null}
         quizDepLabel={resolved.quiz?.deployment?.name ?? undefined}
         editable={false}
-        quizCtx={quizCtx}
+        // The landing-page renderer is a ported artifact carrying @ts-nocheck, so
+        // its prop types are inferred from default values rather than declared:
+        // `quizCtx = null` infers as `null`. The cast documents that the shape is
+        // enforced by the resolver above, not by this component's signature.
+        quizCtx={quizCtx as never}
       />
     </>
   )

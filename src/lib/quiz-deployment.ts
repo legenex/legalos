@@ -186,9 +186,12 @@ const hydrateQuizDeployment = async (
     overrideAccess: true,
   })
   const domainList: DomainLite[] = domRes.docs.map((d) => ({
+    id: String(d.id ?? ''),
     host: String(d.host ?? ''),
     primary: Boolean(d.primary),
     status: typeof d.status === 'string' ? d.status : 'pending',
+    sslStatus: typeof d.ssl_status === 'string' ? d.ssl_status : 'pending',
+    kind: typeof d.kind === 'string' ? d.kind : undefined,
   }))
 
   const deployment: PublicQuizDeployment = {

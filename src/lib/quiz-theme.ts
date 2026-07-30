@@ -56,7 +56,13 @@ export const withHostSurface = <B extends SurfacedBrand>(brand: B, surfaceColor:
   if (!brand) return brand
   if (typeof surfaceColor !== 'string' || !HEX.test(surfaceColor.trim())) return brand
   const surface = surfaceColor.trim()
-  const colors = { ...brand.colors, background: surface, cardBg: surface }
-  colors.onPrimary = onPrimaryText(colors.primary)
-  return { ...brand, colors }
+  const colors: Record<string, string> = {
+    ...brand.colors,
+    background: surface,
+    cardBg: surface,
+    // Recomputed here rather than assigned afterwards: the spread narrows the
+    // object to the keys it can see, and a later assignment would not type.
+    onPrimary: onPrimaryText(brand.colors.primary),
+  }
+  return { ...brand, colors } as B
 }

@@ -44,7 +44,7 @@ export async function addBuildLogComment(args: {
         target_label: args.targetLabel || null,
         body,
         status: 'open',
-        author: user.id,
+        author: Number(user.id),
         author_email: user.email ?? null,
       },
       user,
