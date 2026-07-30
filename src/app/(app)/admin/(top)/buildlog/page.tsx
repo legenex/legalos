@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { CheckCircle2, CircleDashed, CircleDot, FlaskConical, AlertTriangle, Terminal } from 'lucide-react'
+import { CheckCircle2, CircleDashed, CircleDot, FlaskConical, AlertTriangle, Terminal, Eye, ImageOff } from 'lucide-react'
 import { getCurrentUser } from '@/lib/auth'
 import {
   ENTRIES,
@@ -12,6 +12,7 @@ import {
   type ItemStatus,
   type BuildLogEntry,
   type BuildLogItem,
+  type BuildLogEvidence,
 } from '@/lib/buildlog'
 import { CommentThread, type BuildLogComment } from './CommentThread'
 
@@ -45,6 +46,62 @@ function StatusChip({ status }: { status: ItemStatus }) {
       <Icon className="w-3 h-3" />
       {STATUS_LABEL[status]}
     </span>
+  )
+}
+
+
+/**
+ * Where to look, and eventually a picture of it.
+ *
+ * Most of what ships lives behind an interaction rather than at a URL - the
+ * redirect editor is a tab inside a modal inside the quiz builder - so the
+ * steps are the primary content and the image is the extra. A reader can follow
+ * the recipe today; a capture job will drive the same recipe later and fill in
+ * `image`.
+ */
+function Evidence({ evidence }: { evidence: BuildLogEvidence[] }) {
+  return (
+    <div className="mt-3 flex flex-col gap-2">
+      {evidence.map((ev) => (
+        <div key={`${ev.path}-${ev.label}`} className="rounded-lg border border-[var(--color-border)] bg-black/20 overflow-hidden">
+          {ev.image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={ev.image} alt={ev.label} className="block w-full border-b border-[var(--color-border)]" />
+          ) : null}
+          <div className="p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Eye className="w-3 h-3 text-[var(--color-ink-muted)] shrink-0" />
+              <span className="text-[12.5px] font-medium text-white">{ev.label}</span>
+              <a
+                href={ev.path}
+                className="font-mono text-[10.5px] text-sky-400 hover:text-sky-300 underline underline-offset-2"
+              >
+                {ev.path}
+              </a>
+              {!ev.image ? (
+                <span
+                  title="Screenshot capture is not built yet. The steps below are the recipe it will drive."
+                  className="ml-auto inline-flex items-center gap-1 text-[10px] text-[var(--color-ink-muted)]"
+                >
+                  <ImageOff className="w-3 h-3" />
+                  no capture yet
+                </span>
+              ) : null}
+            </div>
+            {ev.steps?.length ? (
+              <ol className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11.5px] text-[var(--color-ink-muted)]">
+                {ev.steps.map((step, i) => (
+                  <li key={step} className="inline-flex items-center gap-1.5">
+                    {i > 0 ? <span className="text-[var(--color-border)]">&rsaquo;</span> : null}
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -108,6 +165,7 @@ function Entry({
                 ))}
               </ul>
             ) : null}
+            {item.evidence?.length ? <Evidence evidence={item.evidence} /> : null}
             <CommentThread
               entryId={entryId}
               itemId={buildLogItemId(entry, item)}

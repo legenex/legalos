@@ -24,6 +24,32 @@ export type BuildLogItem = {
   files?: string[]
   /** Overrides the area inferred from `files`. */
   area?: Area
+  /** Where to go and what to click to see this change. */
+  evidence?: BuildLogEvidence[]
+}
+
+/**
+ * Where to see a change with your own eyes.
+ *
+ * `path` is a real admin or public route. `steps` are the clicks needed to get
+ * from there to the thing, because most of what ships lives behind an
+ * interaction: the redirect editor, for example, is a tab inside a modal inside
+ * the quiz builder. A capture job pointed at a bare URL would photograph the
+ * quizzes list and file it as evidence for a screen it does not show, which is
+ * worse than no screenshot at all.
+ *
+ * So the recipe comes first and the image second: the steps are useful to a
+ * human today, and they are exactly the script a headless browser will need to
+ * drive when capture is built. `image` stays empty until then.
+ */
+export type BuildLogEvidence = {
+  label: string
+  /** Route to open. Relative, e.g. '/admin/quizzes'. */
+  path: string
+  /** Clicks from that route to the thing itself. Omit when the route IS the thing. */
+  steps?: string[]
+  /** Filled in by the capture job once it exists. */
+  image?: string
 }
 
 export type BuildLogVerification = {
@@ -126,6 +152,13 @@ export const ENTRIES: BuildLogEntry[] = [
         detail:
           'Any item can be commented on, and the comment stays with that item rather than in a chat thread nobody can find next week. Threads collapse to a count so the board stays scannable, and an item with unanswered feedback shows its open count without being expanded.',
         files: ['src/app/(app)/admin/(top)/buildlog/CommentThread.tsx'],
+        evidence: [
+          {
+            label: 'This board',
+            path: '/admin/buildlog',
+            steps: ['Any item, Comment'],
+          },
+        ],
       },
       {
         title: 'Stored in the database, not a file',
@@ -156,10 +189,17 @@ export const ENTRIES: BuildLogEntry[] = [
         files: ['src/app/(app)/admin/(top)/buildlog/page.tsx'],
       },
       {
-        title: 'Screenshots of each section',
+        title: 'Where to look, on every item worth looking at',
+        status: 'shipped',
+        detail:
+          'Sixteen items now carry a route and the clicks needed to reach the thing itself. That matters more than it sounds: most of what ships lives behind an interaction rather than at a URL, so the redirect editor is a tab inside a modal inside the quiz builder. A capture job pointed at a bare route would photograph the quizzes list and file it as evidence for a screen it does not show, which is worse than no screenshot. The recipe comes first because a reader can follow it today, and it is exactly the script a headless browser will drive later.',
+        files: ['src/lib/buildlog.ts', 'src/app/(app)/admin/(top)/buildlog/page.tsx'],
+      },
+      {
+        title: 'Screenshots themselves',
         status: 'open',
         detail:
-          'Not built. It needs a headless browser on the server, a capture job and image storage, which is a real dependency I cannot install or test from here. The comment loop works without it, so it ships first and capture follows once the dependency can be verified on the server.',
+          'Not built. The slot is rendered and every recipe is written, so capture is now a job that walks the recipes and fills in an image rather than a feature that has to be designed. It still needs a headless browser and image storage on the server, which is a dependency I cannot install or test from here.',
       },
     ],
     verification: [
@@ -202,6 +242,18 @@ export const ENTRIES: BuildLogEntry[] = [
         detail:
           'Archiving a quiz is a decision to stop using it, and a retired quiz sitting in the deployment dropdown is how it gets deployed again by accident. Pickers now return published and draft records only.',
         files: ['src/lib/selectable.ts', 'src/components/builder/quiz/QuizBuilderApp.tsx'],
+        evidence: [
+          {
+            label: 'The quiz picker',
+            path: '/admin/quizzes',
+            steps: ['Deployments tab', 'Open a deployment', 'Basics tab, Quiz field'],
+          },
+          {
+            label: 'Where quizzes get archived',
+            path: '/admin/quizzes',
+            steps: ['Archived tab'],
+          },
+        ],
       },
       {
         title: 'But a saved reference is never dropped silently',
@@ -216,6 +268,13 @@ export const ENTRIES: BuildLogEntry[] = [
         detail:
           'It was free text, so a typo produced a deployment bound to a host that does not exist and nothing said so until a visitor got a 404. It now lists the brand\u2019s own domains, and only one that is active with an active certificate can be chosen. A domain that is not ready is shown greyed out rather than hidden, so "why is my domain not in the list" has an answer on screen. A brand with no ready domain gets a link to connect one instead of an empty select.',
         files: ['src/components/builder/quiz/QuizBuilderApp.tsx', 'src/lib/brand-map.ts'],
+        evidence: [
+          {
+            label: 'The domain picker',
+            path: '/admin/quizzes',
+            steps: ['Deployments tab', 'Open a deployment', 'Basics tab, Domain field'],
+          },
+        ],
       },
       {
         title: 'One helper, so this cannot drift per screen',
@@ -346,6 +405,13 @@ export const ENTRIES: BuildLogEntry[] = [
         detail:
           'It hardcoded a cream page and gold accents, so it looked identical for every brand that chose it. Its paper is now the brand\u2019s own surface pushed to a paper lightness and warmed slightly toward the brand\u2019s accent, and its rules take the accent. The character survives, the colour comes from the brand: a navy brand gets an ivory sheet, a green brand gets a warmer stone one.',
         files: ['src/components/builder/quiz/templates.tsx'],
+        evidence: [
+          {
+            label: 'Template picker at real brand colours',
+            path: '/admin/quizzes',
+            steps: ['Deployments tab', 'Open a deployment', 'Render & Embed tab, Visual Template'],
+          },
+        ],
       },
       {
         title: 'The preview ignored the brand twice over',
@@ -353,6 +419,13 @@ export const ENTRIES: BuildLogEntry[] = [
         detail:
           'The palette used by both the builder preview and the live page hardcoded cream for the editorial template and fell back to a navy for everything else, so a brand\u2019s background was discarded once by the template and again by the fallback. Both now ask the template for its ground, and the template derives it from the brand.',
         files: ['src/components/builder/quiz/preview.tsx', 'src/components/public/quiz/QuizRuntime.tsx'],
+        evidence: [
+          {
+            label: 'The quiz preview',
+            path: '/admin/quizzes',
+            steps: ['Open a quiz', 'Preview'],
+          },
+        ],
       },
     ],
     verification: [
@@ -476,6 +549,13 @@ export const ENTRIES: BuildLogEntry[] = [
         detail:
           'It is now Brand Extraction, on the brand editor. It returns a proposal and writes nothing: every token shows where it came from and how much to trust it, the contrast verdict beside the Accept button is computed by the same resolver the publish gate uses, and a human accepts before anything changes.',
         files: ['src/app/(app)/admin/(top)/brands/brand-identities/actions.ts', 'src/components/builder/brand/BrandModule.tsx'],
+        evidence: [
+          {
+            label: 'Brand extraction',
+            path: '/admin/brands/brand-identities',
+            steps: ['Open a brand', 'Open the Colors tab', 'The extraction panel sits above the colour fields'],
+          },
+        ],
       },
       {
         title: 'The extraction method is still the weak one, and says so',
@@ -727,6 +807,13 @@ export const ENTRIES: BuildLogEntry[] = [
         detail:
           'An endpoint node used to hold a typed-in address. It now picks from thank you, did not qualify, partner list, privacy, terms, disclosures, or a genuine one-off custom URL. The address resolves at render: the deployment’s override first, then the brand’s own URL, then the site’s existing page at that path. A node built before this change keeps its URL and keeps working, treated as custom.',
         files: ['src/lib/quiz-destinations.ts', 'src/components/builder/quiz/editors.tsx'],
+        evidence: [
+          {
+            label: 'The destination picker',
+            path: '/admin/quizzes',
+            steps: ['Open any quiz', 'Click a node in the flow grid', 'Open the Redirect tab'],
+          },
+        ],
       },
       {
         title: 'Brand identities own their URLs',
@@ -734,6 +821,13 @@ export const ENTRIES: BuildLogEntry[] = [
         detail:
           'A URLs tab on every brand identity. Set the thank-you page once and every quiz that brand runs follows it. Blank means the site’s own page, and each field says which one that would be rather than leaving you guessing at an empty box.',
         files: ['src/components/builder/brand/BrandModule.tsx', 'src/lib/brand-map.ts'],
+        evidence: [
+          {
+            label: 'The brand URLs tab',
+            path: '/admin/brands/brand-identities',
+            steps: ['Open a brand', 'Open the URLs tab'],
+          },
+        ],
       },
       {
         title: 'Deployments can override any destination',
@@ -741,6 +835,13 @@ export const ENTRIES: BuildLogEntry[] = [
         detail:
           'A Destinations tab on the deployment editor showing what each destination actually resolves to and whether that came from this deployment, the brand, or the site default. One placement can send traffic somewhere different without editing the quiz or the brand.',
         files: ['src/components/builder/quiz/QuizBuilderApp.tsx', 'src/collections/FunnelQuizDeployments.ts'],
+        evidence: [
+          {
+            label: 'Per-deployment destinations',
+            path: '/admin/quizzes',
+            steps: ['Deployments tab', 'Open a deployment', 'Open the Destinations tab'],
+          },
+        ],
       },
       {
         title: 'Destinations are validated as a security boundary',
@@ -824,6 +925,13 @@ export const ENTRIES: BuildLogEntry[] = [
           'src/app/(public)/[[...slug]]/page.tsx',
           'src/components/public/quiz/QuizRuntime.tsx',
         ],
+        evidence: [
+          {
+            label: 'A live deployment',
+            path: '/admin/quizzes',
+            steps: ['Deployments tab', "Copy a live deployment's domain and path", 'Open it in a new tab'],
+          },
+        ],
       },
       {
         ref: '9',
@@ -852,6 +960,13 @@ export const ENTRIES: BuildLogEntry[] = [
         detail:
           'The old snippet pointed at cdn.legenex.com/q.js, a file that has never existed, so pasting it did nothing while looking finished. The loader is now served from the deployment’s own domain, creates the iframe from the address in the snippet, forwards the host page’s campaign parameters so embedded leads keep their attribution, and resizes the frame as the visitor moves through the quiz. When a deployment has no domain or path yet the builder says so instead of handing out a snippet that cannot work.',
         files: ['src/app/(public)/q.js/route.ts', 'src/lib/quiz-embed.ts'],
+        evidence: [
+          {
+            label: 'The embed snippet',
+            path: '/admin/quizzes',
+            steps: ['Deployments tab', 'Open a deployment', 'Render & Embed tab', 'Set render mode to Embed'],
+          },
+        ],
       },
       {
         ref: '12',
@@ -942,6 +1057,13 @@ export const ENTRIES: BuildLogEntry[] = [
         detail:
           'The step list and the tier grid were two separate scroll containers, so a question drifted out of line with its own nodes. They are now one grid where a step and its variants are siblings in the same row, which makes misalignment impossible rather than fixed. Explicit up and down buttons sit alongside drag.',
         files: ['src/components/builder/quiz/builder.tsx', 'src/lib/quiz-graph.ts'],
+        evidence: [
+          {
+            label: 'The flow grid',
+            path: '/admin/quizzes',
+            steps: ['Open a quiz'],
+          },
+        ],
       },
       {
         ref: '2',
@@ -966,6 +1088,13 @@ export const ENTRIES: BuildLogEntry[] = [
         detail:
           'Every place that references a field can create a missing one in place: dropdown sources, answer mappings, decision conditions, webhook response mappings, AI input and output, dynamic content, and the insert-variable picker. Names are validated centrally, so a duplicate or malformed key is refused rather than written.',
         files: ['src/components/builder/quiz/editors.tsx', 'src/lib/quiz-graph.ts'],
+        evidence: [
+          {
+            label: 'Inline field creation',
+            path: '/admin/quizzes',
+            steps: ['Open a quiz', 'Click a node', 'Answers, then any field dropdown'],
+          },
+        ],
       },
       {
         ref: '5',
@@ -974,6 +1103,13 @@ export const ENTRIES: BuildLogEntry[] = [
         detail:
           'A toggle inside the node marks a question reachable by routing only. Sequential advance skips it, and also skips steps with no variant for the visitor’s tier, so a half-built row falls through to the next question instead of dead-ending. The editor warns when an optional step has no route into it.',
         files: ['src/components/builder/quiz/editors.tsx', 'src/lib/quiz-graph.ts'],
+        evidence: [
+          {
+            label: 'The optional toggle',
+            path: '/admin/quizzes',
+            steps: ['Open a quiz', 'Click a node', 'Visibility & Tiers tab'],
+          },
+        ],
       },
       {
         ref: '6',
@@ -982,6 +1118,13 @@ export const ENTRIES: BuildLogEntry[] = [
         detail:
           'The always-on leave prompt is replaced by a real save state: saved, pending, saving, failed. Back exits silently when nothing is outstanding, flushes a pending write, and only interrupts when a save actually failed. Explicit Save button in the top bar, plus the keyboard shortcut.',
         files: ['src/components/builder/quiz/QuizBuilderApp.tsx'],
+        evidence: [
+          {
+            label: 'The builder top bar',
+            path: '/admin/quizzes',
+            steps: ['Open a quiz', 'Top right of the builder'],
+          },
+        ],
       },
       {
         ref: '7',
@@ -1000,6 +1143,13 @@ export const ENTRIES: BuildLogEntry[] = [
         files: [
           'src/app/(app)/admin/(top)/quizzes/actions.ts',
           'src/migrations/20260728_120000_funnel_quizzes_archive.ts',
+        ],
+        evidence: [
+          {
+            label: 'The Archived tab',
+            path: '/admin/quizzes',
+            steps: ['Archived tab'],
+          },
         ],
       },
       {
