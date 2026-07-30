@@ -12,6 +12,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { AlertCircle, AlertTriangle, Archive, ArrowRight, BookOpen, Calendar, Check, ChevronLeft, ChevronRight, Copy, Edit3, Eye, FileEdit, FileSearch, FileText, FileWarning, GripVertical, Hash, Heading1, Heading2, ImageIcon, List, ListChecks, ListOrdered, Loader2, MousePointer, Newspaper, Phone, Plus, Power, PowerOff, Quote, Rocket, Save, ScrollText, Search, Settings, ShieldAlert, Sparkles, Tag, Trash2, User, Wand2, X } from 'lucide-react'
 import { T, genId, brandShortName, Btn, Input, Textarea, Select, Label, Pill, IconBtn, ConfirmDialog, Toast, Modal, PageHeader } from '../ui'
 import { resolveTokens } from '../lp/render'
+import { selectableOptions } from '@/lib/selectable'
 import { advDefaultBottomSection, advSlugify } from './seed-data'
 import {
   createAdvertorial as svCreateAdvertorial,
@@ -1046,7 +1047,11 @@ const AdvertorialSettingsPanel = ({ advertorial, brands, onPatch, onClose }) => 
         <div>
           <Label>Default brand (for preview)</Label>
           <Select value={advertorial.defaultBrandId} onChange={(e) => onPatch({ defaultBrandId: e.target.value })}>
-            {brands.map(b => <option key={b.id} value={b.id}>{b.displayName}</option>)}
+            {selectableOptions({
+                records: brands,
+                selectedId: brandId,
+                toRecord: (b) => ({ id: b.id, label: b.displayName, status: b.status === 'archived' ? 'archived' : 'published' }),
+              }).map((o) => <option key={o.id} value={o.id} disabled={o.disabled}>{o.label}{o.archived ? ' - ARCHIVED' : ''}</option>)}
           </Select>
         </div>
       </div>
@@ -1107,7 +1112,11 @@ const AdvDeploymentEditor = ({ deployment, isDraft, advertorials, brands, quizDe
           <Label>Brand</Label>
           <Select value={draft.brandId || ''} onChange={(e) => patch({ brandId: e.target.value, quizDeploymentId: '' })}>
             <option value="">- Select a brand -</option>
-            {brands.map(b => <option key={b.id} value={b.id}>{b.displayName} · {b.domains[0]}</option>)}
+            {selectableOptions({
+                records: brands,
+                selectedId: brandId,
+                toRecord: (b) => ({ id: b.id, label: `${b.displayName} - ${b.domains[0] || 'no domain'}`, status: b.status === 'archived' ? 'archived' : 'published' }),
+              }).map((o) => <option key={o.id} value={o.id} disabled={o.disabled}>{o.label}{o.archived ? ' - ARCHIVED' : ''}</option>)}
           </Select>
           {brand && <div style={{ fontSize: 11.5, color: T.textMute, marginTop: 6, fontFamily: '"JetBrains Mono", monospace' }}>{brand.domains.join(', ')} · {brand.contact.callNumber}</div>}
         </div>
@@ -1705,7 +1714,11 @@ const AdvPreviewView = ({ advertorial, brands, deployments, quizDeployments, qui
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <span style={{ fontSize: 11, color: T.textMute }}>Brand:</span>
         <Select value={effectiveDeployment ? '' : selectedBrandId} onChange={(e) => { setSelectedBrandId(e.target.value); setSelectedDeploymentId(null); }} style={{ width: 200, padding: '5px 8px', fontSize: 11.5 }} disabled={!!effectiveDeployment}>
-          {brands.map(b => <option key={b.id} value={b.id}>{b.displayName}</option>)}
+          {selectableOptions({
+                records: brands,
+                selectedId: brandId,
+                toRecord: (b) => ({ id: b.id, label: b.displayName, status: b.status === 'archived' ? 'archived' : 'published' }),
+              }).map((o) => <option key={o.id} value={o.id} disabled={o.disabled}>{o.label}{o.archived ? ' - ARCHIVED' : ''}</option>)}
         </Select>
       </div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>

@@ -142,6 +142,84 @@ export const buildLogItemId = (entry: BuildLogEntry, item: BuildLogItem): string
 export const ENTRIES: BuildLogEntry[] = [
   {
     date: '2026-07-30',
+    title: 'Closing the not-shipped list',
+    summary:
+      'Six items on the board were not shipped. Three are now closed, one of which turned out to have been done days ago and never updated. The other three are named honestly below rather than padded out.',
+    items: [
+      {
+        title: 'F001 is closed',
+        status: 'shipped',
+        detail:
+          'The last two funnel tables, for advertorials and their deployments, are now created by a migration. All six exist in the chain, which matters more for these two than the others: Payload reads every declared column at startup, so a missing table takes the whole application down rather than failing one query, and the advertorial builder touches them the moment anyone opens that screen.',
+        files: ['src/migrations/20260730_120000_funnel_advertorial_tables.ts'],
+      },
+      {
+        title: 'Archived brands are no longer offered anywhere',
+        status: 'shipped',
+        detail:
+          'A live instance of the same bug as the archived quiz. A Site can be archived, but every dropdown that listed brands kept offering it, so a funnel could be built for a brand that had been deliberately retired. The brand pickers in the landing-page and advertorial builders now go through the shared helper, and the brand object carries the Site\u2019s own status so the helper can see it.',
+        files: ['src/lib/brand-map.ts', 'src/components/builder/lp/LandingPagesApp.tsx', 'src/components/builder/advertorial/AdvertorialBuilderApp.tsx'],
+        evidence: [
+          { label: 'Brand picker', path: '/admin/landing-pages', steps: ['Deployments tab', 'Open one', 'Brand field'] },
+        ],
+      },
+      {
+        title: 'One board item was stale, not open',
+        status: 'shipped',
+        detail:
+          'The funnel brand map was listed as still carrying its own fallback colours. It stopped doing that on 29 July when quizzes were fixed to wear their brand; nobody updated the item. Checked against the code rather than trusted: there are no colour fallbacks left in it. A board that reports work as outstanding when it is done is as misleading as one that reports the reverse.',
+        files: ['src/lib/brand-map.ts'],
+      },
+      {
+        title: 'Screenshots, and the extraction method, share one blocker',
+        status: 'open',
+        detail:
+          'Both need a headless browser on the server. Capture has to drive the admin UI, and rebuilding brand extraction properly means sampling computed styles from a rendered page rather than reading declared stylesheet values. Neither is close to done, and doing one makes the other much cheaper, so they should be taken together rather than separately.',
+      },
+      {
+        title: 'The remaining hardcoded colour is the template library',
+        status: 'partial',
+        detail:
+          '157 values, almost all of them the fixed palettes that define what each template looks like rather than stray literals. Converting them is the template library itself, and sweeping them without building it would leave every template looking the same. It stays open deliberately until that work starts.',
+        files: ['src/components/builder/lp/render.tsx', 'src/components/builder/quiz/templates.tsx'],
+      },
+    ],
+    verification: [
+      {
+        label: 'All six funnel tables in the chain',
+        state: 'verified',
+        detail:
+          'Each table name was searched for across the migration directory rather than assumed from the file titles. All six now have a CREATE TABLE behind them.',
+      },
+      {
+        label: 'The brand map really had been fixed',
+        state: 'verified',
+        detail:
+          'Searched for fallback colour patterns in the brand map before marking the item shipped. None remain; it resolves through the shared resolver.',
+      },
+      {
+        label: 'A missing import caught before it shipped',
+        state: 'verified',
+        detail:
+          'The first pass replaced the brand pickers but skipped adding the import, because the guard checked for a symbol the replacement had just introduced. Both files would have failed to build. Found by grepping for the import rather than trusting the edit reported success.',
+      },
+      {
+        label: 'In the browser',
+        state: 'not-run',
+        detail: 'The converted pickers have not been opened. Archive a Site and confirm it disappears from the brand dropdowns.',
+      },
+    ],
+    deployNotes: [
+      'Adds a migration for the advertorial tables. Run pnpm payload migrate after the build.',
+      'If a brand vanishes from a dropdown after this, check whether its Site is archived. That is the intended behaviour.',
+    ],
+    openIssues: [
+      'Screenshot capture and computed-style brand extraction both need a headless browser on the server, and should be built together.',
+      '157 hardcoded colours remain in the template palettes, to be closed by the template library.',
+    ],
+  },
+  {
+    date: '2026-07-30',
     title: 'The build log becomes the review surface',
     summary:
       'Rather than a second progress page, the existing board gained the review loop: every item can be commented on, comments persist against that specific decision, and each item is categorised so the board can be read by area instead of only by date.',
@@ -278,9 +356,9 @@ export const ENTRIES: BuildLogEntry[] = [
       },
       {
         title: 'One helper, so this cannot drift per screen',
-        status: 'partial',
+        status: 'shipped',
         detail:
-          'The rules live in one place and the quiz and domain pickers use it. The remaining dropdowns across the admin still run their own queries and have not been converted yet.',
+          'Closed. The brand pickers in the landing-page and advertorial builders now go through the same helper, which means an archived brand is no longer offered anywhere. That was a live instance of the same bug: a Site can be archived, but every dropdown listing brands kept offering it, so a funnel could be built for a brand that had been deliberately retired.',
         files: ['src/lib/selectable.ts'],
       },
     ],
@@ -672,9 +750,9 @@ export const ENTRIES: BuildLogEntry[] = [
       },
       {
         title: 'The funnel brand map still has its own defaults',
-        status: 'partial',
+        status: 'shipped',
         detail:
-          'The public site path now goes through the resolver. The funnel path does not: the brand map that feeds the quiz, landing page and advertorial builders still applies its own fallback colours. That is the second half of this package and it is the next thing to do, because a template library built on top of it would inherit the split.',
+          'Closed. The brand map now resolves through the same function the public site uses, with no fallbacks of its own. It was fixed the same day as part of making quizzes wear their brand, and this item simply had not been updated to say so.',
         files: ['src/lib/brand-map.ts'],
       },
     ],
@@ -989,9 +1067,9 @@ export const ENTRIES: BuildLogEntry[] = [
       },
       {
         title: 'Funnel tables added to the migration chain',
-        status: 'partial',
+        status: 'shipped',
         detail:
-          'The quiz and quiz-deployment tables had never been created by any migration; they existed only where a development server had pushed them automatically. Since the public page reads them on every request, that drift would have been a 500 on a customer-facing URL. The new migration creates them when absent and brings an existing copy up to shape when present. The landing-page tables followed on 29 July; only the two advertorial tables remain outside the chain.',
+          'Closed. All six funnel tables are now created by migrations: the quiz pair on 28 July, the landing-page pair on 29 July, and the advertorial pair today. That is the end of the F001 drift, together with the Sites columns added on 29 July.',
         files: ['src/migrations/20260728_180000_funnel_quiz_public_render.ts'],
       },
     ],

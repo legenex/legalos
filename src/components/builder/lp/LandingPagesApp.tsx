@@ -9,6 +9,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { selectableOptions } from '@/lib/selectable'
 import {
   Rocket, Eye, Edit3, Copy, Power, PowerOff, Trash2, EyeOff, Layers, Sparkles, Save,
   X, Plus, Check, Loader2, Palette, ChevronRight, MoveUp, MoveDown, Plug,
@@ -694,7 +695,11 @@ export const LandingPageBuilder = ({ landingPage, brands, quizDeployments, quizz
             <Label style={{ marginBottom: 8 }}>Preview as</Label>
             <Select value={previewBrandId || ''} onChange={(e) => setPreviewBrandId(e.target.value || null)}>
               <option value="">No brand (placeholders)</option>
-              {brands.map((b) => <option key={b.id} value={b.id}>{b.displayName}</option>)}
+              {selectableOptions({
+                records: brands,
+                selectedId: draft.brandId,
+                toRecord: (b) => ({ id: b.id, label: b.displayName, status: b.status === 'archived' ? 'archived' : 'published' }),
+              }).map((o) => <option key={o.id} value={o.id} disabled={o.disabled}>{o.label}{o.archived ? ' - ARCHIVED' : ''}</option>)}
             </Select>
             <div style={{ fontSize: 10.5, color: T.textMute, marginTop: 6, lineHeight: 1.5 }}>The page is brandless. Pick a brand here just to see how it will render. Brand and domain attach at deploy time.</div>
             {previewBrandId && (
@@ -790,7 +795,11 @@ const LPDeploymentEditor = ({ deployment, landingPages, brands, domains, quizDep
               <Label>Brand</Label>
               <Select value={draft.brandId || ''} onChange={(e) => setDraft({ ...draft, brandId: e.target.value, domain: '', quizDeploymentId: '' })}>
                 <option value="">Pick a brand</option>
-                {brands.map((b) => <option key={b.id} value={b.id}>{b.displayName}</option>)}
+                {selectableOptions({
+                records: brands,
+                selectedId: draft.brandId,
+                toRecord: (b) => ({ id: b.id, label: b.displayName, status: b.status === 'archived' ? 'archived' : 'published' }),
+              }).map((o) => <option key={o.id} value={o.id} disabled={o.disabled}>{o.label}{o.archived ? ' - ARCHIVED' : ''}</option>)}
               </Select>
             </div>
             <div>
@@ -885,7 +894,11 @@ const LPPreviewModal = ({ previewState, landingPages, brands, lpDeployments, qui
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 11, color: T.textMute, fontFamily: '"JetBrains Mono", monospace', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Preview as</span>
             <Select value={brandOverride || brands[0]?.id || ''} onChange={(e) => setBrandOverride(e.target.value)} style={{ width: 200 }}>
-              {brands.map((b) => <option key={b.id} value={b.id}>{b.displayName || b.name}</option>)}
+              {selectableOptions({
+                records: brands,
+                selectedId: draft.brandId,
+                toRecord: (b) => ({ id: b.id, label: b.displayName || b.name, status: b.status === 'archived' ? 'archived' : 'published' }),
+              }).map((o) => <option key={o.id} value={o.id} disabled={o.disabled}>{o.label}{o.archived ? ' - ARCHIVED' : ''}</option>)}
             </Select>
           </div>
         )}

@@ -194,6 +194,11 @@ export function siteToBrand(s: Record<string, unknown>, domainList: DomainLite[]
     id: `site_${id}`,
     siteId: id,
     siteSlug: str(s.slug),
+    // The Site's lifecycle status, so a picker can refuse an archived brand the
+    // same way it refuses an archived quiz. Without this every dropdown that
+    // lists brands offered archived ones, which is how a funnel gets built for
+    // a brand that was deliberately retired.
+    status: str(s.status, 'active'),
     name: str(s.name),
     displayName: pick(str(brand.display_name), 'displayName', str(s.name)),
     shortName: pick(str(brand.short_name), 'shortName'),
