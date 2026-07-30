@@ -68,7 +68,7 @@ export function extractBlocksFromHtml(
   html: string,
   externalCss?: string,
 ): ImportResult {
-  const $ = load(html, { decodeEntities: false })
+  const $ = load(html)
 
   const title =
     $('title').first().text().trim().slice(0, 120) ||

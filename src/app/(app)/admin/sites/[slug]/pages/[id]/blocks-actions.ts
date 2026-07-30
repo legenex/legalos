@@ -43,7 +43,7 @@ export async function savePageBodyBlocks(args: {
       collection: 'pages',
       id: args.pageId,
       overrideAccess: true,
-    })) as Record<string, unknown>
+    })) as unknown as Record<string, unknown>
     if (!src) return { ok: false, error: 'page not found' }
     const siteRel = src.site as { id?: number } | number | undefined
     const siteId =

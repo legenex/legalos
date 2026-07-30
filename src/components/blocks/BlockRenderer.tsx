@@ -89,12 +89,12 @@ function styleOverridesFor(meta: BlockMetaEntry | undefined): Record<string, str
     ;(style as Record<string, string>)['--site-primary'] = meta.accent_color
     ;(style as Record<string, string>)['--site-accent'] = meta.accent_color
   }
-  if (meta.align && meta.align !== '') style.textAlign = meta.align
-  if (meta.padding_top && meta.padding_top !== '') {
+  if (meta.align) style.textAlign = meta.align
+  if (meta.padding_top) {
     const px = PAD_PX[meta.padding_top]
     if (px !== undefined) style.paddingTop = px
   }
-  if (meta.padding_bottom && meta.padding_bottom !== '') {
+  if (meta.padding_bottom) {
     const px = PAD_PX[meta.padding_bottom]
     if (px !== undefined) style.paddingBottom = px
   }

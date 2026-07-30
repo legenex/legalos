@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import type { Metadata } from 'next'
 import { headers } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
-import { getPayload } from 'payload'
+import { getPayload, type Where } from 'payload'
 import config from '@payload-config'
 import { resolveSiteByHost, isFallbackHost } from '@/lib/site-resolver'
 import {
@@ -259,7 +259,7 @@ export default async function PublicCatchAll({ params, searchParams }: Props) {
   // to 'any non-archived status' so draft / scheduled / paused content also
   // renders — that's the whole point of the Preview button in the builder.
   const nowIso = new Date().toISOString()
-  const publishedOrLive = isAuthedAdminPreview
+  const publishedOrLive: Where = isAuthedAdminPreview
     ? { status: { not_equals: 'archived' } }
     : {
         or: [

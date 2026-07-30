@@ -431,7 +431,7 @@ export function detectBlockFromSectionHtml(html: string): {
   // for the first structural element. If the section is itself a body-direct
   // <section>/<nav>/<footer>, take that as the target; otherwise fall back to
   // the wrapping <body> so detectors that walk down still see the markup.
-  const $ = load(`<body>${html}</body>`, { decodeEntities: false })
+  const $ = load(`<body>${html}</body>`)
   // Strip script tags up front so detectors don't accidentally match against
   // their content. Style tags are kept — they don't affect detector logic
   // and removing them would mutate the original markup.
@@ -451,7 +451,7 @@ export function detectBlockFromSectionHtml(html: string): {
 }
 
 export function extractStructuredFromHtml(html: string, externalCss?: string): ImportResult {
-  const $ = load(html, { decodeEntities: false })
+  const $ = load(html)
 
   const title =
     cleanText($('title').first().text()).slice(0, 120) ||
