@@ -141,7 +141,7 @@ export const buildLogItemId = (entry: BuildLogEntry, item: BuildLogItem): string
 
 export const ENTRIES: BuildLogEntry[] = [
   {
-    date: '2026-07-29',
+    date: '2026-07-30',
     title: 'The build log becomes the review surface',
     summary:
       'Rather than a second progress page, the existing board gained the review loop: every item can be commented on, comments persist against that specific decision, and each item is categorised so the board can be read by area instead of only by date.',
@@ -231,7 +231,7 @@ export const ENTRIES: BuildLogEntry[] = [
     ],
   },
   {
-    date: '2026-07-29',
+    date: '2026-07-30',
     title: 'Pickers stop offering things that cannot be used (P0-D)',
     summary:
       'The archived quiz you spotted in the deployment dropdown, and the free-text domain field next to it. Both are now real pickers over real records, through one helper, so the same mistake cannot be made screen by screen.',
@@ -308,7 +308,7 @@ export const ENTRIES: BuildLogEntry[] = [
     ],
   },
   {
-    date: '2026-07-29',
+    date: '2026-07-30',
     title: 'One tenant\u2019s logo stops appearing on everyone\u2019s site',
     summary:
       'A new brand at getwhatyoureowed.co was showing the Check My Claim logo. Two bugs in the shared navigation, and a third in what a new brand starts life as. None of them was a styling problem.',
