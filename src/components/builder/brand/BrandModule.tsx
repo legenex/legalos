@@ -26,76 +26,61 @@ import {
 // ============================================================================
 // SEED BRAND (defaults for new + AI merge)
 // ============================================================================
-const buildSeedBrand = () => ({
-  id: 'brand_cmc',
-  name: 'CheckMyClaim',
-  displayName: 'Check My Claim',
+/**
+ * A genuinely blank brand.
+ *
+ * This used to return Check My Claim: its display name, phone number,
+ * copyright line, privacy and terms URLs, domains, colours and fonts. Creating
+ * a "new brand" overrode the name and left everything else, so every brand
+ * started life as a copy of one tenant and stayed that way in any field nobody
+ * happened to edit.
+ *
+ * It also seeded fabricated social proof - named people, cities and settlement
+ * amounts - into the default body sections. On a legal marketing site that is
+ * not a branding mistake, it is invented evidence, so the sections now start
+ * empty and the operator adds their own.
+ *
+ * Colours are left blank on purpose. The brand map resolves an unset brand to a
+ * neutral grey and flags it incomplete, which reads as "not configured yet".
+ * Seeding a plausible palette here would put us straight back to a brand that
+ * looks finished and is wrong.
+ */
+const buildBlankBrand = () => ({
+  id: '',
+  name: '',
+  displayName: '',
   tagline: '',
   logoUrl: '',
   logoUrlDark: '',
   faviconUrl: '',
   colors: {
-    primary: '#1d8df6',
-    accent: '#1d8df6',
-    background: '#0a1a3a',
-    cardBg: '#0d2447',
-    textOnDark: '#ffffff',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
+    primary: '',
+    accent: '',
+    background: '',
+    cardBg: '',
+    textOnDark: '',
+    success: '',
+    warning: '',
+    danger: '',
   },
-  typography: { headlineFont: 'Fredoka', bodyFont: 'Fredoka', baseSize: 'md' },
-  contact: { callNumber: '(833) 754-0124', callCtaText: 'CLICK HERE TO CALL', callCtaStyle: 'pill' },
-  domains: ['checkmyclaim.co', 'qualify.checkmyclaim.co'],
+  typography: { headlineFont: 'Inter', bodyFont: 'Inter', baseSize: 'md' },
+  contact: { callNumber: '', callCtaText: 'CLICK HERE TO CALL', callCtaStyle: 'pill' },
+  domains: [],
   legal: {
-    copyright: '© 2026 Check My Claim. All rights reserved.',
+    // Templated, not copied. {{brand.displayName}} resolves per brand at render,
+    // so this text is correct for whoever uses it instead of naming a tenant.
+    copyright: '(c) {{year}} {{brand.displayName}}. All rights reserved.',
     tcpaText:
       'By submitting this form, I agree to be contacted by {{brand.displayName}} and its partner attorneys via phone, SMS, and email regarding my claim.',
-    privacyUrl: 'https://checkmyclaim.co/privacy',
-    termsUrl: 'https://checkmyclaim.co/terms',
+    privacyUrl: '',
+    termsUrl: '',
     defaultDisclaimer: 'Attorney advertising. Not a law firm.',
   },
-  // Destination URLs. Empty by default so a new brand falls back to the site's
-  // own pages rather than inheriting another brand's addresses.
   urls: {},
   bgPattern: 'plus',
-  bgColor: '#0a1a3a',
-  defaultBodySections: [
-    { id: 's_call', type: 'CallCTA', enabled: true, config: { headline: "If you'd prefer to speak to someone right away, please call:" } },
-    {
-      id: 's_trust',
-      type: 'TrustBlock',
-      enabled: true,
-      config: {
-        headline: "We'll Never Stop Fighting For You",
-        subheadline: 'We work with only the best attorneys to get you the compensation you deserve.',
-        bullets: [
-          { icon: 'Trophy', text: 'Vetted attorneys with proven track records' },
-          { icon: 'CheckCircle2', text: 'Thousands of successful claims nationwide' },
-          { icon: 'Sparkles', text: 'Personalized legal care for every client' },
-          { icon: 'ShieldCheck', text: '100% commitment to your success' },
-        ],
-        statsCard: { label: 'TOTAL CLIENT WINS', value: '50,000+', badge: '$50M+ Recovered', description: 'Successful claims resolved nationwide, with millions recovered for clients' },
-        ctaText: 'Get Your Free Claim Check',
-      },
-    },
-    {
-      id: 's_wins',
-      type: 'RecentWins',
-      enabled: true,
-      config: {
-        headline: 'Millions Recovered for Clients Just Like You',
-        subheadline: 'We connect you with high-performing attorneys who know how to win cases and get you what you deserve.',
-        wins: [
-          { amount: '$132,700', name: 'Mike P, 31', location: 'Memphis, TN' },
-          { amount: '$197,500', name: 'John M, 54', location: 'Tampa, FL' },
-          { amount: '$114,600', name: 'Sarah J, 43', location: 'Los Angeles, CA' },
-        ],
-        ctaText: 'Claim Checker Now',
-      },
-    },
-    { id: 's_disclaimer', type: 'Disclaimer', enabled: true, config: { useDefault: true, customText: '' } },
-  ],
+  bgColor: '',
+  // Empty on purpose. See the note above about fabricated social proof.
+  defaultBodySections: [],
 })
 
 // ============================================================================
@@ -301,7 +286,7 @@ const AIBrandWizard = ({ mode, onClose, onComplete }) => {
       if (!res.ok) throw new Error(res.error)
       setProgress('Building brand...')
       const parsed = res.brand || {}
-      const seed = buildSeedBrand()
+      const seed = buildBlankBrand()
       const built = {
         ...seed,
         id: genId('brand'),
@@ -714,7 +699,7 @@ const BrandIdentitiesView = ({ brands, domains, onCreate, onUpdate, onDelete, on
   const [createPickerOpen, setCreatePickerOpen] = useState(false)
 
   const newBlankBrand = () => {
-    const b = { ...buildSeedBrand(), id: genId('brand'), name: 'New Brand', displayName: 'New Brand', domains: [], defaultBodySections: [], siteId: null }
+    const b = { ...buildBlankBrand(), id: genId('brand'), name: 'New Brand', displayName: 'New Brand', siteId: null }
     onCreate(b)
     onOpenEditor(b.id, true)
   }

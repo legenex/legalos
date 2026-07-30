@@ -52,6 +52,64 @@ export const STATUS_LABEL: Record<ItemStatus, string> = {
 export const ENTRIES: BuildLogEntry[] = [
   {
     date: '2026-07-29',
+    title: 'One tenant\u2019s logo stops appearing on everyone\u2019s site',
+    summary:
+      'A new brand at getwhatyoureowed.co was showing the Check My Claim logo. Two bugs in the shared navigation, and a third in what a new brand starts life as. None of them was a styling problem.',
+    items: [
+      {
+        title: 'The nav read a field that does not exist',
+        status: 'shipped',
+        detail:
+          'It looked for the logo at the top level of the Site record. The logo lives on the brand. So the lookup was always empty and setting a logo in the brand editor did nothing, which is why there appeared to be nowhere to add one.',
+        files: ['src/components/blocks/BlockRenderer.tsx'],
+      },
+      {
+        title: 'And fell through to a hardcoded Check My Claim logo',
+        status: 'shipped',
+        detail:
+          'The final fallback was a fixed URL to one tenant\u2019s logo file. With the brand lookup always empty, every site that had not overridden the logo on the block itself landed on it. The fallback is now the site\u2019s own name as a wordmark, styled from the brand tokens: a brand with no logo should look like a brand with no logo, not like a different company.',
+        files: ['src/components/blocks/BlockRenderer.tsx', 'src/components/blocks/bespoke-css.ts'],
+      },
+      {
+        title: 'A new brand was a copy of Check My Claim',
+        status: 'shipped',
+        detail:
+          'Creating a brand seeded that tenant\u2019s display name, phone number, copyright line, privacy and terms URLs, domains, colours and fonts. The create action overrode the name and left the rest, so every brand started as a copy and stayed one in any field nobody happened to edit. A new brand is now genuinely blank, and blank colours resolve to the neutral grey that reads as unconfigured.',
+        files: ['src/components/builder/brand/BrandModule.tsx'],
+      },
+      {
+        title: 'Fabricated evidence was being seeded into new sites',
+        status: 'shipped',
+        detail:
+          'The brand seed carried named people, cities and settlement amounts, and the starter home page carried claims of tens of thousands of claimants reviewed and billions recovered. Those were auto-inserted into legal advertising for a brand that had not yet reviewed a single claim. Both are gone. What remains describes how the service works rather than what it has achieved.',
+        files: ['src/components/builder/brand/BrandModule.tsx', 'src/seed/home-blocks.ts'],
+      },
+    ],
+    verification: [
+      {
+        label: 'No tenant asset left in shared code',
+        state: 'verified',
+        detail:
+          'A repo-wide search for that logo URL now returns only the check-my-claim page components, which are that tenant\u2019s own files and are already tracked separately for deletion.',
+      },
+      {
+        label: 'On screen',
+        state: 'not-run',
+        detail:
+          'Worth loading getwhatyoureowed.co after deploying. Expect either that brand\u2019s own logo if one is set, or its name as a wordmark. If the Check My Claim logo is still there, it is saved into that page\u2019s navigation block and needs clearing in the page builder rather than in code.',
+      },
+    ],
+    deployNotes: [
+      'No migration.',
+      'A site with no brand logo will show its name as a wordmark. Set the logo on the brand identity and every page for that brand picks it up.',
+      'Existing pages whose navigation block has a logo saved into it keep that logo. The block override still wins, which is correct, but it means an imported page may need clearing by hand.',
+    ],
+    openIssues: [
+      'The starter home page still ships headline copy written for a mass-tort brand. It reads as generic today but should become vertical-aware.',
+    ],
+  },
+  {
+    date: '2026-07-29',
     title: 'Quizzes actually wear their brand now',
     summary:
       'The quiz preview barely reflected the brand, and the reason was not styling. The map that feeds every funnel builder was reading the page background out of the brand\u2019s body-text colour, never populating the card colour at all, and filling both gaps with Check My Claim\u2019s blue and navy. Any brand with a sparse record was rendering as a different brand.',

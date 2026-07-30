@@ -252,20 +252,37 @@ function MarkdownLite({ source }: { source: string }) {
 /*                                Nav Header                                  */
 /* -------------------------------------------------------------------------- */
 
-// Brand logo URL: per-block override > Site.logo_url > fallback wordmark.
+/**
+ * Brand logo: per-block override, then the brand's own logo, then a wordmark.
+ *
+ * Two bugs lived here and together they put one tenant's logo on every site.
+ *
+ *   1. The Site lookup read `site.logo_url`, a top-level field that does not
+ *      exist. The logo lives at `site.brand.logo_url`. So a brand's configured
+ *      logo was never read - setting it in the brand editor did nothing.
+ *   2. The final fallback was a hardcoded URL to Check My Claim's logo. With
+ *      step 1 always undefined, every site that had not overridden the logo on
+ *      the block fell straight through to it.
+ *
+ * The fallback is now the site's own name as a wordmark. A brand with no logo
+ * should look like a brand with no logo, not like a different company.
+ */
 function NavHeader({ block, ctx }: { block: Block; ctx: RenderContext }) {
   const links = (get<Array<{ label: string; href: string }>>(block, 'links') ?? []) as Array<{ label: string; href: string }>
   const ctaLabel = get<string>(block, 'cta_label')
   const ctaHref = get<string>(block, 'cta_href') ?? '#'
-  const logoUrl =
-    get<string>(block, 'logo_url') ??
-    (ctx.site as { logo_url?: string }).logo_url ??
-    'https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/699c8efa75d8857518d34273/440596289_PrimaryLogo_CheckMyClaim.png'
+  const brandLogo = (ctx.site as { brand?: { logo_url?: string | null } }).brand?.logo_url
+  const logoUrl = get<string>(block, 'logo_url') || brandLogo || null
+  const siteName = ctx.site.name ?? 'Home'
   return (
     <nav className="navbar">
       <div className="navbar__inner">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={logoUrl} alt={ctx.site.name ?? 'Site logo'} className="navbar__logo" />
+        {logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logoUrl} alt={siteName} className="navbar__logo" />
+        ) : (
+          <span className="navbar__wordmark">{siteName}</span>
+        )}
         <div className="navbar__links">
           {links.map((l, i) => (
             <a key={i} href={l.href} className="navbar__link">

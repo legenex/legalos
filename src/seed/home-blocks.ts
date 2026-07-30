@@ -76,10 +76,15 @@ export const CHECK_A_CASE_HOME: Block[] = [
   },
   LEAD_FORM,
   {
+    // Starter content ships only claims that are true for every brand by
+    // construction. It used to seed "50,000+ claimants reviewed" and
+    // "$2.4B+ recovered" into every new site, which is unverifiable evidence
+    // auto-inserted into legal advertising for a brand that had not yet
+    // reviewed a single claim. The two that remain are statements about how the
+    // service works rather than about results, so they are safe to seed; add
+    // your own figures once you have them.
     blockType: 'trust_strip',
     items: [
-      { value: '50,000+', label: 'Claimants reviewed' },
-      { value: '$2.4B+', label: 'Recovered for clients' },
       { value: '$0', label: 'Out of pocket cost' },
       { value: '24/7', label: 'Case intake' },
     ],
