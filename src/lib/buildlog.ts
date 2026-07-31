@@ -257,6 +257,19 @@ export const ENTRIES: BuildLogEntry[] = [
         ],
       },
       {
+        title: 'The DNS and certificate setup is real, but half the traffic to the live brand is being dropped',
+        status: 'open',
+        detail:
+          'Checked because the provisioning could plausibly have been theatre. It is not: the DNS check really queries Cloudflare over DNS-over-HTTPS for A, CNAME and TXT records, the Plesk API answers with genuine server data, no dev skip flag is set, and the runtime is production so the skip-DNS escape hatch is correctly unreachable. The data behind it is the problem. getwhatyoureowed.co, the only publicly working brand, resolves to two addresses: this server, and 162.255.119.42, which refuses connections outright. Eleven of twenty live lookups returned the dead one first, so roughly half of all visitors cannot reach the site at all, and paid traffic is being spent on it. Separately, none of the four preview domains has a usable certificate: they resolve here and answer, but a real browser fails the handshake, which makes every preview URL unusable in the one place it is meant to be used. Their ssl_status reads unknown, which is honest, while their status reads active, which is not. lp.checkmyclaim.co resolves here, fails TLS, and is attached to no Site at all. dont-settle.co has no A record and is correctly marked pending. The second address on the live brand is a registrar change and is not mine to make.',
+        files: ['src/lib/dns-check.ts', 'src/lib/plesk/provision-domain.ts', 'src/lib/ssl-poll.ts'],
+        evidence: [
+          {
+            label: 'Where domains are verified',
+            path: '/admin/brands/domains',
+          },
+        ],
+      },
+      {
         title: 'The handbook claim about preview domains was wrong',
         status: 'shipped',
         detail:
@@ -306,6 +319,12 @@ export const ENTRIES: BuildLogEntry[] = [
         state: 'verified',
         detail:
           'All six domains, all six live deployments, and ten paths on the one reachable Site were requested directly at the app on port 3000, which isolates the application from nginx. Two breaks were found and are recorded as an open item. The lead endpoint was probed with invalid payloads: it returns 400 and writes no row. The leads table still holds zero rows.',
+      },
+      {
+        label: 'DNS, certificates and the Plesk API checked against reality',
+        state: 'verified',
+        detail:
+          'Every domain was resolved through the same Cloudflare DNS-over-HTTPS endpoint the app uses, then each returned address was connected to individually to see whether it actually serves the site. Certificates were checked without skipping validation, which is what exposed the preview domains: they answer when validation is skipped and fail when it is not. The Plesk API was called directly and returned real server data rather than a stub.',
       },
       {
         label: 'A lead has been captured end to end',
