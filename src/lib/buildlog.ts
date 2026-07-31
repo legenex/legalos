@@ -244,11 +244,11 @@ export const ENTRIES: BuildLogEntry[] = [
         files: ['package.json', 'next.config.mjs'],
       },
       {
-        title: 'Walking the live flows found two real breaks',
-        status: 'open',
+        title: 'Walking the live flows found two real breaks, both now fixed',
+        status: 'shipped',
         detail:
           'Every public path was walked against the running server rather than reasoned about. Two things are wrong and neither is visible from the admin. First, a Site is created in draft, and the public route returns 404 for a draft Site on every path including its own preview domain, so two of the three Sites here are entirely unreachable and four of their six deployments marked live serve nothing. Nothing in the builder says why. Second, generateMetadata returns an empty object for anything that is not a quiz or landing-page deployment, so every authored page, including the home page and all the legal pages, ships with no title tag, no description, no canonical and no social tags. Both are recorded here rather than fixed in the same pass, because one changes public visibility and the other changes what search engines see, and those are the owner’s calls.',
-        files: ['src/app/(public)/[[...slug]]/page.tsx', 'src/collections/Sites.ts'],
+        files: ['src/app/(public)/[[...slug]]/page.tsx'],
         evidence: [
           {
             label: 'Where a Site is set live',
@@ -260,7 +260,7 @@ export const ENTRIES: BuildLogEntry[] = [
         title: 'The DNS and certificate setup is real, but half the traffic to the live brand is being dropped',
         status: 'open',
         detail:
-          'Checked because the provisioning could plausibly have been theatre. It is not: the DNS check really queries Cloudflare over DNS-over-HTTPS for A, CNAME and TXT records, the Plesk API answers with genuine server data, no dev skip flag is set, and the runtime is production so the skip-DNS escape hatch is correctly unreachable. The data behind it is the problem. getwhatyoureowed.co, the only publicly working brand, resolves to two addresses: this server, and 162.255.119.42, which refuses connections outright. Eleven of twenty live lookups returned the dead one first, so roughly half of all visitors cannot reach the site at all, and paid traffic is being spent on it. Separately, none of the four preview domains has a usable certificate: they resolve here and answer, but a real browser fails the handshake, which makes every preview URL unusable in the one place it is meant to be used. Their ssl_status reads unknown, which is honest, while their status reads active, which is not. lp.checkmyclaim.co resolves here, fails TLS, and is attached to no Site at all. dont-settle.co has no A record and is correctly marked pending. The second address on the live brand is a registrar change and is not mine to make.',
+          'Checked because the provisioning could plausibly have been theatre. It is not: the DNS check really queries Cloudflare over DNS-over-HTTPS for A, CNAME and TXT records, the Plesk API answers with genuine server data, no dev skip flag is set, and the runtime is production so the skip-DNS escape hatch is correctly unreachable. The data behind it is the problem. getwhatyoureowed.co, the only publicly working brand, resolves to two addresses: this server, and 162.255.119.42, which refuses connections outright. Eleven of twenty live lookups returned the dead one first, so roughly half of all visitors cannot reach the site at all, and paid traffic is being spent on it. Separately, none of the four preview domains has a usable certificate: they resolve here and answer, but a real browser fails the handshake, which makes every preview URL unusable in the one place it is meant to be used. Their ssl_status reads unknown, which is honest, while their status reads active, which is not. lp.checkmyclaim.co resolves here, fails TLS, and is attached to no Site at all. dont-settle.co has no A record and is correctly marked pending. The second address on the live brand is a registrar change and is not mine to make. The preview certificates trace to a root cause in code: creating a Site writes its preview Domain row with status active without ever calling Plesk, so the row asserts a state nothing established. Fixing that means either provisioning each preview host or, better, one wildcard certificate for the whole preview namespace, which is an infrastructure change on live domains and needs the owner to choose.',
         files: ['src/lib/dns-check.ts', 'src/lib/plesk/provision-domain.ts', 'src/lib/ssl-poll.ts'],
         evidence: [
           {
