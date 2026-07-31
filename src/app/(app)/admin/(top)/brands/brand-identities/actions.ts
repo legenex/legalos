@@ -544,7 +544,11 @@ export async function proposeBrandTokens(args: {
       // Render the page and sample what it actually painted. Reading declared
       // stylesheet values instead returns whatever the framework declared, in
       // declaration order, which on a Tailwind site is Tailwind's palette.
-      const rendered = await extractBrandFromRender(value).catch(() => null)
+      let renderError: string | null = null
+      const rendered = await extractBrandFromRender(value).catch((err: unknown) => {
+        renderError = err instanceof Error ? err.message : String(err)
+        return null
+      })
       let host: string
 
       if (rendered) {
@@ -578,7 +582,22 @@ export async function proposeBrandTokens(args: {
             evidence[k] = { confidence: 0.35, source: `declared in ${bundle.host}'s stylesheet` }
           }
         }
-        notes.push('That site could not be rendered, so these came from its stylesheet rather than from what it paints. Check them closely.')
+        // Blaming the site for a missing browser would send someone to debug
+        // the wrong thing, so the two causes are told apart and the server-side
+        // one is logged where an operator will actually see it.
+        const browserMissing = /Executable doesn't exist|browserType\.launch|Cannot find module 'playwright'|please run the following command/i.test(
+          renderError || '',
+        )
+        if (browserMissing) {
+          console.error('[brand-extract] the rendering browser is unavailable:', renderError)
+          notes.push(
+            'The rendering browser is not available on this server, so these came from the stylesheet instead of from what the page paints. That is a server configuration problem, not a problem with this site, and the values below are the weaker kind of evidence.',
+          )
+        } else {
+          notes.push(
+            'That site could not be rendered, so these came from its stylesheet rather than from what it paints. Sites that block automated browsers land here. Check the values closely.',
+          )
+        }
       }
 
       const found = Object.entries(extracted)

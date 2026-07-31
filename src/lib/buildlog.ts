@@ -151,6 +151,16 @@ export const buildLogEntryId = (entry: BuildLogEntry): string => `${entry.date}-
 export const buildLogItemId = (entry: BuildLogEntry, item: BuildLogItem): string =>
   `${buildLogEntryId(entry)}--${slug(item.title)}`
 
+/**
+ * Stable id for one piece of evidence, used as its capture filename.
+ *
+ * Built from the item id plus the evidence label rather than from a counter, so
+ * re-ordering the evidence on an item does not silently repoint every stored
+ * screenshot at the wrong recipe.
+ */
+export const buildLogEvidenceId = (entry: BuildLogEntry, item: BuildLogItem, ev: BuildLogEvidence): string =>
+  `${buildLogItemId(entry, item)}--${slug(ev.label)}`
+
 export const ENTRIES: BuildLogEntry[] = [
   {
     date: '2026-07-30',

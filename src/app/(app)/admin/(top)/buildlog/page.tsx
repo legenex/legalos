@@ -10,11 +10,13 @@ import {
   isOutstanding,
   buildLogEntryId,
   buildLogItemId,
+  buildLogEvidenceId,
   type ItemStatus,
   type BuildLogEntry,
   type BuildLogItem,
   type BuildLogEvidence,
 } from '@/lib/buildlog'
+import { readCaptures, type BuildLogCapture } from '@/lib/buildlog/captures'
 import { CommentThread, type BuildLogComment } from './CommentThread'
 
 type CommentIndex = {
@@ -55,22 +57,39 @@ function StatusChip({ status }: { status: ItemStatus }) {
 
 
 /**
- * Where to look, and eventually a picture of it.
+ * Where to look, and a picture of it once one has been captured.
  *
  * Most of what ships lives behind an interaction rather than at a URL - the
  * redirect editor is a tab inside a modal inside the quiz builder - so the
- * steps are the primary content and the image is the extra. A reader can follow
- * the recipe today; a capture job will drive the same recipe later and fill in
- * `image`.
+ * steps are the primary content and the image is the extra. The recipe stays
+ * readable whether or not a capture exists, which matters because the capture
+ * job deliberately files nothing for a screen it could not confirm it reached.
+ *
+ * Images come from an authenticated route, not from `public/`: they are
+ * photographs of this admin taken while signed in, so some of them contain real
+ * lead details.
  */
-function Evidence({ evidence }: { evidence: BuildLogEvidence[] }) {
+function Evidence({
+  evidence,
+  entry,
+  item,
+  captures,
+}: {
+  evidence: BuildLogEvidence[]
+  entry: BuildLogEntry
+  item: BuildLogItem
+  captures: Record<string, BuildLogCapture>
+}) {
   return (
     <div className="mt-3 flex flex-col gap-2">
-      {evidence.map((ev) => (
+      {evidence.map((ev) => {
+        const capture = captures[buildLogEvidenceId(entry, item, ev)]
+        const src = ev.image || (capture ? `/api/legalos/buildlog-capture/${buildLogEvidenceId(entry, item, ev)}` : null)
+        return (
         <div key={`${ev.path}-${ev.label}`} className="rounded-lg border border-[var(--color-border)] bg-black/20 overflow-hidden">
-          {ev.image ? (
+          {src ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={ev.image} alt={ev.label} className="block w-full border-b border-[var(--color-border)]" />
+            <img src={src} alt={ev.label} loading="lazy" className="block w-full border-b border-[var(--color-border)]" />
           ) : null}
           <div className="p-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -93,9 +112,17 @@ function Evidence({ evidence }: { evidence: BuildLogEvidence[] }) {
                 ))}
               </ol>
             ) : null}
+            {capture ? (
+              /* What the job asserted before saving. Without it a reader cannot
+                 tell a confirmed capture from a lucky screenshot. */
+              <p className="mt-2 text-[10.5px] text-[var(--color-ink-muted)]">
+                Captured {formatDate(capture.capturedAt.slice(0, 10))}, confirmed by {capture.confirmedBy}.
+              </p>
+            ) : null}
           </div>
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -104,10 +131,12 @@ function Entry({
   entry,
   index,
   userEmail,
+  captures,
 }: {
   entry: BuildLogEntry
   index: CommentIndex
   userEmail: string
+  captures: Record<string, BuildLogCapture>
 }) {
   const entryId = buildLogEntryId(entry)
   return (
@@ -160,7 +189,9 @@ function Entry({
                 ))}
               </ul>
             ) : null}
-            {item.evidence?.length ? <Evidence evidence={item.evidence} /> : null}
+            {item.evidence?.length ? (
+              <Evidence evidence={item.evidence} entry={entry} item={item} captures={captures} />
+            ) : null}
             <CommentThread
               entryId={entryId}
               itemId={buildLogItemId(entry, item)}
@@ -310,6 +341,10 @@ export default async function BuildLogPage() {
   if (!me) redirect('/sign-in?next=/admin/buildlog')
 
   const index = await loadComments()
+  // Screenshots taken by scripts/capture-buildlog.ts. Absent on a server where
+  // it has never run, which the board renders as recipes without pictures
+  // rather than as an error.
+  const captures = await readCaptures()
   const userEmail = me.email ?? ''
 
   const allItems: BuildLogItem[] = ENTRIES.flatMap((e) => e.items)
@@ -352,7 +387,7 @@ export default async function BuildLogPage() {
       ) : null}
 
       {ENTRIES.map((entry, i) => (
-        <Entry key={`${entry.date}-${i}`} entry={entry} index={index} userEmail={userEmail} />
+        <Entry key={`${entry.date}-${i}`} entry={entry} index={index} userEmail={userEmail} captures={captures} />
       ))}
     </div>
   )
