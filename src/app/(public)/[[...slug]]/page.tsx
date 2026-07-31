@@ -20,7 +20,7 @@ import {
 import { LivePreview as LandingPageSections } from '@/components/builder/lp/render'
 import { renderTemplateVars, applyTemplateOverrides, deepRenderTemplateVars, type SiteForTemplate } from '@/lib/template-vars'
 import { resolvePhoneForPath } from '@/lib/resolve-phone'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUser, isBoundToSite } from '@/lib/auth'
 import LegalOSMarketing from '@/components/LegalOSMarketing'
 import { BlockRenderer, type Block, type SiteForRender } from '@/components/blocks/BlockRenderer'
 import { SiteScripts, type TrackingConfigShape } from '@/components/public/SiteScripts'
@@ -120,15 +120,98 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const resolved = await resolveSiteByHost(host)
   if (!resolved?.siteId) return {}
 
-  // Quiz deployments and landing-page deployments are checked in the same order
-  // the body uses, so the tags always describe the document that gets served.
+  const payload = await getPayload({ config })
+
+  // Resolution order MUST match the body's, or the tags describe a different
+  // document than the one served. The body tries an authored Page FIRST and
+  // only then a deployment, so this does too. It previously checked
+  // deployments first, which meant a path claimed by both was rendered as the
+  // Page and described as the deployment.
+  const site = await payload.findByID({
+    collection: 'sites',
+    id: resolved.siteId,
+    overrideAccess: true,
+    depth: 0,
+  }).catch(() => null) as { name?: string | null; status?: string } | null
+
+  // A draft or archived Site serves nothing, so it must not advertise a title
+  // either. Anything else would put an unpublished brand into a link preview.
+  if (!site || site.status === 'draft' || site.status === 'archived') return {}
+
+  const brandFallback = site.name || undefined
+
+  // Same visibility rule the body uses for public requests: published, or
+  // scheduled with the time already passed.
+  const nowIso = new Date().toISOString()
+  const visible: Where = {
+    or: [
+      { status: { equals: 'published' } },
+      { and: [{ status: { equals: 'scheduled' } }, { publish_at: { less_than_equal: nowIso } }] },
+    ],
+  }
+
+  const pageDoc = (
+    await payload.find({
+      collection: 'pages',
+      where: {
+        and: [
+          { site: { equals: resolved.siteId } },
+          visible,
+          { slug: { in: [path, path.replace(/^\//, '')] } },
+        ],
+      },
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+      // Only the tag fields, so adding metadata does not double the cost of
+      // rendering a page.
+      select: { title: true, meta_title: true, meta_description: true, og_image_url: true },
+    }).catch(() => ({ docs: [] as Array<Record<string, unknown>> }))
+  ).docs[0] as
+    | { title?: string | null; meta_title?: string | null; meta_description?: string | null; og_image_url?: string | null }
+    | undefined
+
+  const url = deploymentUrl(host, path)
+
+  if (pageDoc) {
+    const title = pageDoc.meta_title || [pageDoc.title, brandFallback].filter(Boolean).join(' | ') || brandFallback
+    const description = pageDoc.meta_description || undefined
+    const image = pageDoc.og_image_url || undefined
+    return {
+      title,
+      description,
+      alternates: { canonical: url },
+      openGraph: {
+        type: 'website',
+        title,
+        description,
+        url,
+        siteName: brandFallback,
+        ...(image ? { images: [{ url: image }] } : {}),
+      },
+      twitter: {
+        card: image ? 'summary_large_image' : 'summary',
+        title,
+        description,
+        ...(image ? { images: [image] } : {}),
+      },
+    }
+  }
+
   const dep = await resolveQuizDeployment(Number(resolved.siteId), host, path, false)
   const lp = dep ? null : await resolveLpDeployment(Number(resolved.siteId), host, path, false)
-  if (!dep && !lp) return {}
+
+  if (!dep && !lp) {
+    // Nothing authored at this path. A shared legal template or a fallback
+    // still renders, so the brand name is better than no title at all: an
+    // untitled page is what a search engine and a link preview both punish.
+    return brandFallback
+      ? { title: brandFallback, alternates: { canonical: url }, openGraph: { type: 'website', title: brandFallback, url, siteName: brandFallback } }
+      : {}
+  }
 
   const meta = dep ? quizDeploymentMeta(dep) : lpDeploymentMeta(lp!)
   const brandName = dep ? dep.brand.displayName : lp!.brand.displayName
-  const url = deploymentUrl(host, path)
   return {
     title: meta.title,
     description: meta.description,
@@ -201,8 +284,19 @@ export default async function PublicCatchAll({ params, searchParams }: Props) {
   // the user once, up front, so an anonymous visitor can never use a preview
   // header to view another Site or its draft / paused content. An unauthenticated
   // ?site= is ignored entirely and falls back to normal host resolution.
+  //
+  // The user is also resolved when no preview flag is present, because a draft
+  // Site must still be viewable by the people who own it. Without that, a Site
+  // created in the builder returns 404 on its own preview domain and nothing
+  // explains why, which is exactly the trap this codebase is meant to avoid.
   const wantsPreview = previewMode || Boolean(rawPreviewSiteSlug)
-  const authedUser = wantsPreview ? await getCurrentUser() : null
+
+  // Resolved for a preview request, and otherwise only when a session cookie is
+  // actually present. payload.auth() is a real verification, and running it for
+  // every anonymous visitor to a public marketing page would be a cost paid on
+  // the busiest path in the system to answer a question almost always no.
+  const hasSessionCookie = (h.get('cookie') ?? '').includes('payload-token')
+  const authedUser = wantsPreview || hasSessionCookie ? await getCurrentUser() : null
   const previewSiteSlug = authedUser ? rawPreviewSiteSlug : null
 
   if (!previewSiteSlug && (!host || isFallbackHost(host))) {
@@ -245,9 +339,18 @@ export default async function PublicCatchAll({ params, searchParams }: Props) {
   // authenticated above) selects which Site to preview.
   const isAuthedAdminPreview = previewMode && Boolean(authedUser)
   const isAdminPreview = Boolean(previewSiteSlug) || isAuthedAdminPreview
+
+  // Someone bound to this Site may view it before it is published, on its own
+  // domain, without knowing to append a query string. This is narrower than it
+  // looks: it requires a real session AND a binding to THIS Site, so it grants
+  // nothing to an anonymous visitor and nothing across tenants. A super admin
+  // is bound to everything by definition.
+  const ownsThisSite = isBoundToSite(authedUser, site.id)
+  const maySeeUnpublished = isAdminPreview || ownsThisSite
+
   if (site.status === 'archived') notFound()
-  if (site.status === 'draft' && !isAdminPreview) notFound()
-  if (site.status === 'paused' && !isAdminPreview) {
+  if (site.status === 'draft' && !maySeeUnpublished) notFound()
+  if (site.status === 'paused' && !maySeeUnpublished) {
     return <PausedSite name={site.name ?? 'This site'} />
   }
 
