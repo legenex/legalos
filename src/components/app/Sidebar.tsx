@@ -21,6 +21,7 @@ import {
   Activity,
   Bot,
   ScrollText,
+  BookOpen,
   ChevronDown,
   ChevronRight,
   Loader2,
@@ -58,6 +59,7 @@ const SETTINGS_NAV: NavItem[] = [
   { href: '/admin/settings/system', label: 'System', icon: Activity },
   { href: '/admin/plan', label: 'Agent Plan', icon: Bot },
   { href: '/admin/buildlog', label: 'Build Log', icon: ScrollText },
+  { href: '/admin/handbook', label: 'Handbook', icon: BookOpen },
 ]
 
 export function Sidebar({ userEmail }: { userEmail: string }) {
