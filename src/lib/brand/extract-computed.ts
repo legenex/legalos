@@ -131,7 +131,14 @@ const samplePage = async (): Promise<RawSample> => {
       return { bg: normalise(s.backgroundColor), img: s.backgroundImage, area: px(el) }
     })
     // A gradient or image background has no single colour to take.
-    .filter((c) => c.img === 'none' && c.area > 0 && c.bg !== 'rgba(0, 0, 0, 0)' && c.bg !== 'transparent')
+    .filter((c) => c.img === 'none' && c.area > 0)
+    // Only fully opaque backgrounds may COMPETE. normalise() returns '#rrggbb'
+    // for those and rgba() for anything with alpha, so this also drops the
+    // transparent ones. The distinction matters because ranking picks a winner
+    // before the rejection rules run: a large faint panel that is rejected
+    // later would otherwise beat a real button and take the whole call-to-action
+    // reading down with it, which is exactly what a 7%-opaque overlay did.
+    .filter((c) => c.bg.startsWith('#'))
 
   // Ranked by TOTAL painted area per colour, not by the single biggest button.
   // A brand that uses one colour on several smaller buttons is making just as
