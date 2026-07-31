@@ -11,7 +11,7 @@
  * not 'verified'. Nothing here should read as finished when it is not.
  */
 
-export type ItemStatus = 'shipped' | 'partial' | 'open'
+export type ItemStatus = 'shipped' | 'partial' | 'open' | 'superseded'
 
 export type BuildLogItem = {
   /** The owner's own numbering where one exists, e.g. '9'. */
@@ -75,7 +75,19 @@ export const STATUS_LABEL: Record<ItemStatus, string> = {
   shipped: 'Shipped',
   partial: 'Partial',
   open: 'Not started',
+  superseded: 'Superseded',
 }
+
+/**
+ * Statuses that count as outstanding work.
+ *
+ * `superseded` is excluded on purpose. When a later entry merges two open items
+ * into one, leaving the originals as open double-counts the same work and the
+ * board reports more outstanding than exists - which is what happened when
+ * three real pieces of work were showing as five.
+ */
+export const isOutstanding = (status: ItemStatus): boolean =>
+  status === 'partial' || status === 'open'
 
 
 /**
@@ -275,9 +287,9 @@ export const ENTRIES: BuildLogEntry[] = [
       },
       {
         title: 'Screenshots themselves',
-        status: 'open',
+        status: 'superseded',
         detail:
-          'Not built. The slot is rendered and every recipe is written, so capture is now a job that walks the recipes and fills in an image rather than a feature that has to be designed. It still needs a headless browser and image storage on the server, which is a dependency I cannot install or test from here.',
+          'Not built. The slot is rendered and every recipe is written, so capture is now a job that walks the recipes and fills in an image rather than a feature that has to be designed. It still needs a headless browser and image storage on the server, which is a dependency I cannot install or test from here. Superseded by the merged screenshots and extraction item on 30 July, which records the shared blocker rather than counting the two halves separately.',
       },
     ],
     verification: [
@@ -572,9 +584,9 @@ export const ENTRIES: BuildLogEntry[] = [
       },
       {
         title: 'What is left is template work, not find and replace',
-        status: 'partial',
+        status: 'superseded',
         detail:
-          'The remaining 163 is concentrated in the landing-page renderer, the quiz templates and the block renderer. Their colours are not stray literals; they are the fixed palettes that define what each template looks like. Turning those into tokens is the template library itself, which is its own package, and doing it as a sweep now would produce templates that all look the same.',
+          'The remaining 163 is concentrated in the landing-page renderer, the quiz templates and the block renderer. Their colours are not stray literals; they are the fixed palettes that define what each template looks like. Turning those into tokens is the template library itself, which is its own package, and doing it as a sweep now would produce templates that all look the same. Superseded by the template-library item on 30 July. The figure here, 163, is also out of date: it is 157 after the tokenising pass.',
         files: ['src/components/builder/lp/render.tsx', 'src/components/builder/quiz/templates.tsx', 'src/components/blocks/BlockRenderer.tsx'],
       },
     ],
@@ -637,9 +649,9 @@ export const ENTRIES: BuildLogEntry[] = [
       },
       {
         title: 'The extraction method is still the weak one, and says so',
-        status: 'partial',
+        status: 'superseded',
         detail:
-          'Reading a URL still inspects the site’s declared stylesheet and Tailwind config, which returns framework defaults rather than the brand on any utility-framework site. That is why one brand came back as Tailwind’s orange-600 and slate-800. Confidence for that source is reported at 35 per cent and the panel says plainly that it is a starting point, so the weakness is visible instead of implied. Replacing it with computed-style sampling from a headless render is its own package.',
+          'Reading a URL still inspects the site’s declared stylesheet and Tailwind config, which returns framework defaults rather than the brand on any utility-framework site. That is why one brand came back as Tailwind’s orange-600 and slate-800. Confidence for that source is reported at 35 per cent and the panel says plainly that it is a starting point, so the weakness is visible instead of implied. Replacing it with computed-style sampling from a headless render is its own package. Superseded by the merged screenshots and extraction item on 30 July.',
         files: ['src/app/(app)/admin/(top)/brands/brand-identities/actions.ts'],
       },
       {

@@ -1,12 +1,13 @@
 import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { CheckCircle2, CircleDashed, CircleDot, FlaskConical, AlertTriangle, Terminal, Eye } from 'lucide-react'
+import { CheckCircle2, CircleDashed, CircleDot, FlaskConical, AlertTriangle, Terminal, Eye, Archive } from 'lucide-react'
 import { getCurrentUser } from '@/lib/auth'
 import {
   ENTRIES,
   STATUS_LABEL,
   inferArea,
+  isOutstanding,
   buildLogEntryId,
   buildLogItemId,
   type ItemStatus,
@@ -29,6 +30,9 @@ const STATUS_STYLE: Record<ItemStatus, { icon: typeof CheckCircle2; className: s
   shipped: { icon: CheckCircle2, className: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30' },
   partial: { icon: CircleDot, className: 'text-amber-400 bg-amber-400/10 border-amber-400/30' },
   open: { icon: CircleDashed, className: 'text-[var(--color-ink-muted)] bg-white/5 border-[var(--color-border)]' },
+  // Replaced by a later item. Kept visible so the history reads, dimmed so it
+  // does not compete with work that is actually outstanding.
+  superseded: { icon: Archive, className: 'text-[var(--color-ink-muted)]/70 bg-transparent border-[var(--color-border)]' },
 }
 
 const formatDate = (iso: string): string => {
@@ -309,7 +313,7 @@ export default async function BuildLogPage() {
   const userEmail = me.email ?? ''
 
   const allItems: BuildLogItem[] = ENTRIES.flatMap((e) => e.items)
-  const notShipped = allItems.filter((i) => i.status !== 'shipped').length
+  const notShipped = allItems.filter((i) => isOutstanding(i.status)).length
   const notRun = ENTRIES.flatMap((e) => e.verification).filter((v) => v.state === 'not-run').length
 
   return (
