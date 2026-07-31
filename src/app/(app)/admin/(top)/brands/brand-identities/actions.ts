@@ -7,6 +7,7 @@ import config from '@payload-config'
 import { getCurrentUser } from '@/lib/auth'
 import { invokeLLM } from '@/lib/ai/invoke'
 import { resolveBrandTokens } from '@/lib/brand/resolve-tokens'
+import { extractBrandFromRender } from '@/lib/brand/extract-computed'
 import { createSite } from '../../sites/actions'
 import { seedStarterFunnelsForBrand } from '@/lib/funnel-samples'
 import { fetchUrlBundle, fetchGithubBundle } from '@/lib/builder/extract/fetch-bundle'
@@ -510,6 +511,12 @@ export type BrandTokenProposal = {
   rationale: string
   audit: { pair: string; ratio: number; pass: boolean }[]
   passes: boolean
+  /**
+   * What the reading could not establish, in plain words. Shown so an operator
+   * can tell "we read this site and it has no logo colour" from "we could not
+   * read this site", which a bare set of tokens cannot express.
+   */
+  notes?: string[]
 }
 
 export async function proposeBrandTokens(args: {
@@ -527,35 +534,58 @@ export async function proposeBrandTokens(args: {
   try {
     const extracted: Record<string, string | undefined> = {}
     const evidence: Record<string, { confidence: number; source: string }> = {}
+    const notes: string[] = []
     let userPrompt = ''
     let images: Array<{ mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'; dataBase64: string }> = []
 
     if (source === 'url') {
       if (!value) return { ok: false, error: 'Enter a URL to read the brand from.' }
-      const bundle = await fetchUrlBundle(value)
-      if (!bundle) return { ok: false, error: 'Could not load that URL. Check it is reachable and public.' }
-      const c = extractColors({ css: bundle.css, html: bundle.html, googleFontFamilies: bundle.googleFontFamilies })
-      Object.assign(extracted, {
-        primary: c.primary,
-        accent: c.accent,
-        bg: c.darkBackdrop || c.ink,
-        surface: c.surface,
-        font_heading: c.fontHeading,
-        font_body: c.fontBody,
-      })
-      for (const [k, v] of Object.entries(extracted)) {
-        if (v) {
-          evidence[k] = {
-            // Deliberately capped low: a declared-stylesheet read is weak
-            // evidence, and reporting it as strong is how a framework default
-            // gets accepted as a brand colour.
-            confidence: 0.35,
-            source: `declared in ${bundle.host}'s stylesheet or Tailwind config`,
+
+      // Render the page and sample what it actually painted. Reading declared
+      // stylesheet values instead returns whatever the framework declared, in
+      // declaration order, which on a Tailwind site is Tailwind's palette.
+      const rendered = await extractBrandFromRender(value).catch(() => null)
+      let host: string
+
+      if (rendered) {
+        host = rendered.host
+        for (const [token, proposal] of Object.entries(rendered.tokens)) {
+          extracted[token] = proposal.value
+          evidence[token] = { confidence: proposal.confidence, source: proposal.source }
+        }
+        notes.push(...rendered.warnings)
+      } else {
+        // Rendering can fail on a site that blocks headless browsers, or where
+        // the browser is unavailable. The stylesheet read is a weaker answer,
+        // not a wrong one, so it is kept as a fallback and labelled honestly.
+        const bundle = await fetchUrlBundle(value)
+        if (!bundle) return { ok: false, error: 'Could not load that URL. Check it is reachable and public.' }
+        host = bundle.host
+        const c = extractColors({ css: bundle.css, html: bundle.html, googleFontFamilies: bundle.googleFontFamilies })
+        Object.assign(extracted, {
+          primary: c.primary,
+          accent: c.accent,
+          bg: c.darkBackdrop || c.ink,
+          surface: c.surface,
+          font_heading: c.fontHeading,
+          font_body: c.fontBody,
+        })
+        for (const [k, v] of Object.entries(extracted)) {
+          if (v) {
+            // Capped low on purpose: a declared value is weak evidence, and
+            // reporting it as strong is how a framework default gets accepted
+            // as a brand colour.
+            evidence[k] = { confidence: 0.35, source: `declared in ${bundle.host}'s stylesheet` }
           }
         }
+        notes.push('That site could not be rendered, so these came from its stylesheet rather than from what it paints. Check them closely.')
       }
-      const found = Object.entries(extracted).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(', ')
-      userPrompt = `Propose brand tokens matching ${bundle.host}.\n\nValues declared in that site's stylesheet: ${found || 'none found'}.\n\nUse them where they exist and fill the rest so the result is a complete, readable set.`
+
+      const found = Object.entries(extracted)
+        .filter(([, v]) => v)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(', ')
+      userPrompt = `Propose brand tokens matching ${host}.\n\nMeasured from that site: ${found || 'nothing could be measured'}.\n\nKeep every measured value exactly as given. Fill only what is missing, so the result is a complete and readable set.`
     } else if (source === 'prompt') {
       if (!value) return { ok: false, error: 'Describe the brand you want.' }
       userPrompt = `Propose brand tokens for this brief:\n\n${value.slice(0, 1200)}`
@@ -589,10 +619,10 @@ export async function proposeBrandTokens(args: {
     const tokens: Record<string, string> = {
       primary: extracted.primary || out.primary,
       accent: extracted.accent || out.accent,
-      cta: out.cta,
+      cta: extracted.cta || out.cta,
       bg: extracted.bg || out.bg,
       surface: extracted.surface || out.surface,
-      ink: out.ink,
+      ink: extracted.ink || out.ink,
       font_heading: extracted.font_heading || out.font_heading,
       font_body: extracted.font_body || out.font_body,
     }
@@ -620,7 +650,7 @@ export async function proposeBrandTokens(args: {
       }
     }
 
-    return { ok: true, proposal: { tokens, evidence, rationale: out.rationale, audit, passes } }
+    return { ok: true, proposal: { tokens, evidence, rationale: out.rationale, audit, passes, notes } }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'Brand extraction failed' }
   }

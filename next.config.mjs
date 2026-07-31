@@ -13,6 +13,10 @@ const nextConfig = {
   experimental: {
     reactCompiler: false,
   },
+  // Playwright drives a real Chromium binary and resolves it from its own
+  // package directory at runtime. Bundling it would rewrite those paths and
+  // break the launch, so it stays external and is required from node_modules.
+  serverExternalPackages: ['playwright'],
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: '**' },

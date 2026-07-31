@@ -450,6 +450,14 @@ const BrandExtractionPanel = ({ onAccept }) => {
 
       {proposal.rationale && <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.5 }}>{proposal.rationale}</div>}
 
+      {/* What the reading could not establish. Shown because a bare set of
+          tokens cannot distinguish "this site has no logo colour" from "we
+          could not read this site", and those call for different actions. */}
+      {proposal.notes?.length > 0 && <div style={{ padding: 10, backgroundColor: `${T.warning}0e`, border: `1px solid ${T.warning}44`, borderRadius: 6 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: T.warning, marginBottom: 5 }}>What this reading could not tell us</div>
+        {proposal.notes.map((n, i) => <div key={i} style={{ fontSize: 10.5, color: T.textDim, lineHeight: 1.45 }}>{n}</div>)}
+      </div>}
+
       <div style={{ padding: 10, backgroundColor: proposal.passes ? `${T.success}11` : `${T.danger}11`, border: `1px solid ${proposal.passes ? T.success : T.danger}`, borderRadius: 6 }}>
         <div style={{ fontSize: 11.5, fontWeight: 600, color: proposal.passes ? T.success : T.danger, marginBottom: 6 }}>
           {proposal.passes ? 'Contrast passes on every pair' : 'Contrast fails, this palette is not publishable as-is'}

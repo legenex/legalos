@@ -10,6 +10,7 @@
     "start": "cross-env NODE_OPTIONS=--no-deprecation next start",
     "lint": "next lint",
     "lint:tokens": "node scripts/lint-brand-tokens.mjs",
+    "test:brand": "node --experimental-strip-types scripts/test-brand-extract.ts",
     "typecheck": "tsc --noEmit",
     "payload": "cross-env NODE_OPTIONS=--no-deprecation payload",
     "generate:types": "cross-env NODE_OPTIONS=--no-deprecation payload generate:types",
@@ -33,6 +34,7 @@
     "lucide-react": "^0.469.0",
     "next": "15.4.11",
     "payload": "3.83.0",
+    "playwright": "^1.62.1",
     "react": "19.1.2",
     "react-dom": "19.1.2",
     "sharp": "0.33.5",
@@ -46,7 +48,6 @@
     "@types/react-dom": "19.1.2",
     "eslint": "^9.18.0",
     "eslint-config-next": "15.4.11",
-    "playwright": "^1.62.1",
     "tailwindcss": "^4.0.0",
     "tsx": "^4.19.2",
     "typescript": "5.7.3"
