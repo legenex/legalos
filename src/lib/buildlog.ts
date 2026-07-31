@@ -163,6 +163,142 @@ export const buildLogEvidenceId = (entry: BuildLogEntry, item: BuildLogItem, ev:
 
 export const ENTRIES: BuildLogEntry[] = [
   {
+    date: '2026-07-31',
+    title: 'Brand extraction, screenshot capture, and a handbook',
+    summary:
+      'The shared blocker from 30 July is gone: there is a headless browser on the server, so brand extraction was rebuilt to read what a page paints rather than what its stylesheet declares, and the screenshot capture job it also unblocked is written. One of the three is not finished, and it is named as such rather than counted.',
+    items: [
+      {
+        title: 'Brand extraction reads what the page paints',
+        status: 'shipped',
+        detail:
+          'The old method parsed a page’s declared stylesheet and Tailwind config. Declaration order in a utility framework has no relationship to visual hierarchy, so on any Tailwind site it returned the framework’s palette: dontsettle.co came back as orange-600 and slate-800, two colours that site does not use. It now renders the page in Chromium and samples what was actually painted, by role, and returns #2b867a for that site’s claim button and #c0a848 from its logo. Every value carries a confidence figure and the sentence describing where it came from.',
+        files: ['src/lib/brand/extract-computed.ts', 'src/lib/brand/extract-score.ts', 'src/app/(app)/admin/(top)/brands/brand-identities/actions.ts'],
+        evidence: [
+          {
+            label: 'Reading a brand off a real URL',
+            path: '/admin/brands/brand-identities',
+            steps: ['From a URL'],
+          },
+        ],
+      },
+      {
+        title: 'The scoring rules are separate from the browser, and the tests found four bugs',
+        status: 'shipped',
+        detail:
+          'Deciding whether a reading is a brand colour or a framework default is the hard part, so it lives in pure functions with no browser import and is tested against synthetic samples. That paid for itself immediately. A flat two percent pixel floor rejected the very hero button it was written to find, because one at 1440x900 covers under one percent. A three occurrence floor rejected it again, because a page usually has exactly one. Neutrality measured by channel spread could not separate Tailwind grey-500 from a real brand navy, since both span about twenty points; saturation separates them at nine percent against twenty-one. And the in-page sampler was passed to the browser as a string, which Playwright evaluates as an expression, so it returned a function object and never ran.',
+        files: ['src/lib/brand/extract-score.ts', 'scripts/test-brand-extract.ts'],
+      },
+      {
+        title: 'A regression I introduced, caught by running it against a real site',
+        status: 'shipped',
+        detail:
+          'Ranking buttons by total painted area let a seven percent opaque overlay on dontsettle.co outrank every real button. Being translucent it was then rejected, which took the entire call-to-action reading down with it: a rejected winner silently suppresses a valid runner-up. Only fully opaque backgrounds now enter the ranking. Reading the code would not have found this; running it did.',
+        files: ['src/lib/brand/extract-computed.ts'],
+      },
+      {
+        title: 'Screenshot capture is written but has never been run',
+        status: 'partial',
+        detail:
+          'The job drives each evidence recipe, asserts its target is on screen, rings that target so the shot points at itself, and files nothing it could not confirm reaching. It is deployed, type-checked, and verified as far as signing in: with a wrong password it reports the reason as a sentence rather than a stack trace. It has captured zero screenshots, because it needs an admin account and creating one or guessing a password on a production system is not mine to do. One command with real credentials finishes it.',
+        files: ['scripts/capture-buildlog.ts', 'src/lib/buildlog/captures.ts', 'src/app/api/legalos/buildlog-capture/[id]/route.ts'],
+        evidence: [
+          {
+            label: 'Where captures appear once taken',
+            path: '/admin/buildlog',
+          },
+        ],
+      },
+      {
+        title: 'Captures are stored behind authentication, not in public files',
+        status: 'shipped',
+        detail:
+          'These are photographs of this admin taken while signed in, so a capture of the leads table is a capture of real people’s contact details. They are written under data/ and served through a route that checks the session, with a private cache header, rather than into public/ where anyone guessing a filename would get them with no authentication step to fail. Image and manifest are written separately, image first, so a record never points at a file that is not there.',
+        files: ['src/lib/buildlog/captures.ts', 'src/app/api/legalos/buildlog-capture/[id]/route.ts'],
+      },
+      {
+        title: 'A handbook for every screen',
+        status: 'shipped',
+        detail:
+          'Thirty-two screens, each with what it is for, how to use it, and what it does underneath. The mechanism is given equal weight because most of what surprises people here is mechanical rather than visual: a host cache with a sixty second life, a lead pipeline that runs inside the request, a Site delete that takes its leads with it. It also records honestly that six routes are unbuilt placeholders, one of them Leads, which sits in the main sidebar.',
+        files: ['src/lib/handbook.ts', 'src/app/(app)/admin/(top)/handbook/page.tsx', 'src/components/app/Sidebar.tsx'],
+        evidence: [
+          {
+            label: 'The handbook',
+            path: '/admin/handbook',
+          },
+        ],
+      },
+      {
+        title: 'Documented routes are checked, not trusted',
+        status: 'shipped',
+        detail:
+          'Documentation rots by pointing at screens that moved. Writing the handbook as data rather than prose is what makes that checkable: pnpm check:handbook resolves all twenty-one documented routes back to the file serving them and fails on any that has none. It cannot tell whether the words are still true, only a person can do that, but a dead link needs no judgement to catch.',
+        files: ['scripts/check-handbook-routes.ts'],
+      },
+      {
+        title: 'Playwright is a dependency, not a dev dependency',
+        status: 'shipped',
+        detail:
+          'It is on a production request path now, so a --prod install would have silently dropped brand extraction to the weaker stylesheet reader with no error. It is also pinned exactly rather than by range, because a minor bump would leave the library without matching browser binaries, and marked external so Next does not bundle it and rewrite the paths it uses to find Chromium.',
+        files: ['package.json', 'next.config.mjs'],
+      },
+      {
+        title: 'A shared module could not carry the server-only marker',
+        status: 'shipped',
+        detail:
+          'The capture store was marked server-only, which is an alias Next supplies to its own build rather than a real package. Importing it under plain node threw before the script reached its own credential guard, so the capture job could never have run at all. Removed with the reason recorded: the node:fs import already makes a client bundle fail, so only the friendlier error message was given up. Duplicating the atomic write into the script would have been worse.',
+        files: ['src/lib/buildlog/captures.ts'],
+      },
+    ],
+    verification: [
+      {
+        label: 'Thirty-seven assertions on the scoring rules',
+        state: 'verified',
+        detail:
+          'Run with pnpm test:brand. They include the property the rebuild exists for: given what a Tailwind site actually paints, no Tailwind default appears anywhere in the output, and a grey call to action yields no primary at all.',
+      },
+      {
+        label: 'The extraction checked against a screenshot, not just against itself',
+        state: 'verified',
+        detail:
+          'dontsettle.co was captured and looked at. The teal button, the gold logo, the off-white ground, the white cards and the Fraunces headings are all visible in the image and all match what was returned. An earlier reading of mine that the light ground was wrong was itself wrong: the page is 10,157px tall and majority light, so the dark hero is a band rather than the ground.',
+      },
+      {
+        label: 'The capture route refuses anonymous requests',
+        state: 'verified',
+        detail:
+          'Returns 401 with no session. An encoded traversal path was also tried: it normalises away before reaching the handler and returns marketing HTML, containing no file content, and the id pattern would reject it regardless.',
+      },
+      {
+        label: 'The handbook route checker fails when it should',
+        state: 'verified',
+        detail:
+          'Verified by breaking it deliberately. A moved route and a mismatched URL pattern were both named in the output and the run exited 1. A checker that has only ever passed has not been tested.',
+      },
+      {
+        label: 'Type check clean and the production build compiles',
+        state: 'verified',
+        detail: 'Run on the server, where the dependencies and database exist. Zero errors, and the build completed.',
+      },
+      {
+        label: 'A screenshot has actually been captured',
+        state: 'not-run',
+        detail:
+          'Zero captures exist. The job is verified up to sign-in and no further, because it needs an admin credential. Until it runs, the board shows recipes without pictures, which is the intended state rather than a failure.',
+      },
+    ],
+    deployNotes: [
+      'Playwright and Chromium are installed on the server. A future environment needs pnpm install followed by npx playwright install --with-deps chromium.',
+      'To capture: BUILDLOG_CAPTURE_EMAIL and BUILDLOG_CAPTURE_PASSWORD set to an admin account, then node --experimental-strip-types scripts/capture-buildlog.ts https://os.legenex.com',
+    ],
+    openIssues: [
+      'No screenshot has been captured yet. The job needs an admin credential to run.',
+      'Recipes are prose written for humans, so the interpreter that drives them may not reach every screen on the first run. It reports what it could not reach rather than guessing, and those need tightening once there is a real run to look at.',
+      'The handbook records what is true today. It has no automatic link to the code beyond the route check, so the words need a read whenever a screen changes materially.',
+    ],
+  },
+  {
     date: '2026-07-30',
     title: 'Closing the not-shipped list',
     summary:
@@ -194,9 +330,9 @@ export const ENTRIES: BuildLogEntry[] = [
       },
       {
         title: 'Screenshots, and the extraction method, share one blocker',
-        status: 'open',
+        status: 'superseded',
         detail:
-          'Both need a headless browser on the server. Capture has to drive the admin UI, and rebuilding brand extraction properly means sampling computed styles from a rendered page rather than reading declared stylesheet values. Neither is close to done, and doing one makes the other much cheaper, so they should be taken together rather than separately.',
+          'Both need a headless browser on the server. Capture has to drive the admin UI, and rebuilding brand extraction properly means sampling computed styles from a rendered page rather than reading declared stylesheet values. Neither is close to done, and doing one makes the other much cheaper, so they should be taken together rather than separately. Superseded on 31 July: the browser was installed and both halves were built off it. Taking them together was right, and the second half came almost free. Extraction is finished; capture is written but has never been run, and is tracked as its own partial item rather than left inside this one.',
       },
       {
         title: 'The remaining hardcoded colour is the template library',
