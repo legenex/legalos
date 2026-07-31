@@ -61,11 +61,40 @@ export const ROLE_WEIGHT: Record<Role, number> = {
   link: 0.3,
 }
 
-/** Below this many occurrences a colour is an accident, not a decision. */
-export const MIN_COUNT = 3
+/**
+ * Minimum occurrences before a colour counts as a decision. Roles absent from
+ * this table are exempt.
+ *
+ * Repetition is only EVIDENCE for roles whose whole claim is that they are
+ * systematic: a card background means something because it recurs, and a link
+ * colour seen once may just be a stray anchor. For the rest, repetition is not
+ * the point - a page has exactly one background, usually one logo, and very
+ * often exactly one hero call to action. Requiring three of those would reject
+ * the single strongest brand signal on the page.
+ */
+export const MIN_COUNT: Partial<Record<Role, number>> = {
+  surface: 3,
+  link: 2,
+}
 
-/** Below this share of rendered pixels a colour is trim, not identity. */
-export const MIN_PIXEL_SHARE = 0.02
+/**
+ * Minimum share of the rendered viewport, by role. Roles absent are exempt.
+ *
+ * Set from how large each role actually is, not from one global number. A hero
+ * button at 1440x900 covers well under 1% of the viewport - an earlier flat 2%
+ * floor would have thrown away every call to action it was written to find.
+ * These floors only exclude things too small to be a deliberate area of colour:
+ * icons, badges, hairlines.
+ *
+ * Grounds (page background, card surface, body ink) and logos are exempt.
+ * A background trivially covers everything, prose legitimately covers very
+ * little, and a logo is small by nature.
+ */
+export const MIN_PIXEL_SHARE: Partial<Record<Role, number>> = {
+  cta: 0.0015,
+  heading: 0.002,
+  link: 0.0008,
+}
 
 const HEX = /^#[0-9a-f]{6}$/i
 
@@ -108,37 +137,42 @@ export const isGrey = (hex: string): boolean => {
 export type Rejection = { sample: Sample; reason: string }
 
 /**
- * Apply the rejection rules.
+ * Apply the rejection rules, per role.
  *
- * Roles that describe a GROUND (page background, card surface, body text) are
- * exempt from the pixel-share floor: a page background trivially covers the
- * viewport, and body text legitimately covers very little. The floor exists to
- * stop a stray accent being mistaken for identity, which only applies to the
- * roles that claim identity.
+ * Every rejection carries the rule that caused it, in words an operator can act
+ * on. "Covers 0.1% of the page, needs 0.15%" tells someone their button is too
+ * small to sample; "rejected" on its own tells them nothing.
  */
 export const applyRejections = (
   samples: Sample[],
 ): { kept: Sample[]; rejected: Rejection[] } => {
   const kept: Sample[] = []
   const rejected: Rejection[] = []
-  const groundRoles: Role[] = ['page_bg', 'surface', 'ink']
 
   for (const s of samples) {
     if (!HEX.test(s.color)) {
       rejected.push({ sample: s, reason: 'not a resolvable colour' })
       continue
     }
-    if (s.count < MIN_COUNT && s.role !== 'page_bg' && s.role !== 'logo') {
-      rejected.push({ sample: s, reason: `seen ${s.count} time${s.count === 1 ? '' : 's'}, needs ${MIN_COUNT}` })
-      continue
-    }
-    if (!groundRoles.includes(s.role) && s.role !== 'logo' && s.pixelShare < MIN_PIXEL_SHARE) {
+
+    const minCount = MIN_COUNT[s.role]
+    if (minCount !== undefined && s.count < minCount) {
       rejected.push({
         sample: s,
-        reason: `covers ${(s.pixelShare * 100).toFixed(1)}% of the page, needs ${MIN_PIXEL_SHARE * 100}%`,
+        reason: `seen ${s.count} time${s.count === 1 ? '' : 's'}, needs ${minCount} to count as systematic`,
       })
       continue
     }
+
+    const minShare = MIN_PIXEL_SHARE[s.role]
+    if (minShare !== undefined && s.pixelShare < minShare) {
+      rejected.push({
+        sample: s,
+        reason: `covers ${(s.pixelShare * 100).toFixed(2)}% of the page, needs ${(minShare * 100).toFixed(2)}%`,
+      })
+      continue
+    }
+
     kept.push(s)
   }
   return { kept, rejected }

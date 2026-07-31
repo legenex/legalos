@@ -43,31 +43,48 @@ const toHex = (css: string): string | null => {
   return `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`
 }
 
+type RawReading = { role: Sample['role']; color: string; count: number; share: number; source: string }
+type RawSample = { colors: RawReading[]; fonts: FontSample[]; notes: string[] }
+
 /**
- * Runs INSIDE the page. Returns raw readings only - no judgement, because
- * anything decided here would be untestable without a browser.
+ * Runs INSIDE the page, serialised across by Playwright.
+ *
+ * Passed as a real function rather than a string: Playwright evaluates a string
+ * as an EXPRESSION, so a stringified arrow evaluates to a function object and
+ * returns undefined instead of calling it. A real function also gets its body
+ * type-checked against the DOM lib.
+ *
+ * Because it is serialised, it can close over nothing - every helper it needs
+ * is declared inside. It returns raw readings only; no judgement happens here,
+ * since anything decided in-page could not be tested without a browser.
  */
-const SAMPLER = `() => {
-  const vw = window.innerWidth, vh = window.innerHeight
+const samplePage = (): RawSample => {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
   const area = vw * vh
-  const out = { colors: [], fonts: [], notes: [] }
-  const px = (el) => {
+  const colors: RawReading[] = []
+  const fonts: FontSample[] = []
+  const notes: string[] = []
+
+  const px = (el: Element): number => {
     const r = el.getBoundingClientRect()
-    if (r.width <= 0 || r.height <= 0) return 0
-    return (r.width * r.height) / area
+    return r.width > 0 && r.height > 0 ? (r.width * r.height) / area : 0
   }
-  const visible = (el) => {
+  const visible = (el: Element): boolean => {
     const s = getComputedStyle(el)
     if (s.display === 'none' || s.visibility === 'hidden' || Number(s.opacity) === 0) return false
     const r = el.getBoundingClientRect()
     return r.width > 0 && r.height > 0
   }
-  const push = (role, color, share, source) => out.colors.push({ role, color, share, source })
+  const push = (role: Sample['role'], color: string, count: number, share: number, source: string) =>
+    colors.push({ role, color, count, share, source })
 
-  // --- primary call to action -------------------------------------------
-  // The largest solid-background button or link in the first viewport. This is
-  // the colour a brand is most certain to have chosen on purpose.
-  const clickable = [...document.querySelectorAll('button, a, [role=button], input[type=submit]')]
+  // --- primary call to action --------------------------------------------
+  // The largest solid-background button in the first viewport: the one colour
+  // a brand is most certain to have chosen on purpose.
+  const clickable = Array.from(
+    document.querySelectorAll('button, a, [role=button], input[type=submit]'),
+  )
     .filter(visible)
     .filter((el) => {
       const r = el.getBoundingClientRect()
@@ -75,104 +92,134 @@ const SAMPLER = `() => {
     })
     .map((el) => {
       const s = getComputedStyle(el)
-      return { el, bg: s.backgroundColor, img: s.backgroundImage, area: px(el) }
+      return { bg: s.backgroundColor, img: s.backgroundImage, area: px(el) }
     })
     // A gradient or image background has no single colour to take.
-    .filter((c) => c.img === 'none' && c.area > 0)
+    .filter((c) => c.img === 'none' && c.area > 0 && c.bg !== 'rgba(0, 0, 0, 0)' && c.bg !== 'transparent')
     .sort((a, b) => b.area - a.area)
-  if (clickable[0]) push('cta', clickable[0].bg, clickable[0].area, 'computed background of the largest above-the-fold button')
-  else out.notes.push('no solid-background button found above the fold')
 
-  // --- page ground -------------------------------------------------------
+  if (clickable[0]) {
+    const shared = clickable.filter((c) => c.bg === clickable[0].bg).length
+    push(
+      'cta',
+      clickable[0].bg,
+      shared,
+      clickable[0].area,
+      `computed background of the largest above-the-fold button${shared > 1 ? `, shared by ${shared} buttons` : ''}`,
+    )
+  } else {
+    notes.push('no solid-background button was found above the fold')
+  }
+
+  // --- page ground --------------------------------------------------------
   const bodyStyle = getComputedStyle(document.body)
   const htmlStyle = getComputedStyle(document.documentElement)
   const ground = bodyStyle.backgroundImage === 'none' ? bodyStyle.backgroundColor : htmlStyle.backgroundColor
-  push('page_bg', ground, 1, 'computed background of the page at the top of the document')
+  push('page_bg', ground, 1, 1, 'computed background of the page at the top of the document')
 
-  // --- card surfaces -----------------------------------------------------
+  // --- card surfaces ------------------------------------------------------
   // The most repeated block background that is not the page ground.
-  const tally = new Map()
-  for (const el of document.querySelectorAll('div, section, article, aside, li')) {
+  const tally = new Map<string, { n: number; share: number }>()
+  for (const el of Array.from(document.querySelectorAll('div, section, article, aside, li'))) {
     if (!visible(el)) continue
     const s = getComputedStyle(el)
     if (s.backgroundImage !== 'none') continue
     const c = s.backgroundColor
-    if (!c || c === 'rgba(0, 0, 0, 0)' || c === 'transparent') continue
-    if (c === ground) continue
+    if (!c || c === 'rgba(0, 0, 0, 0)' || c === 'transparent' || c === ground) continue
     const cur = tally.get(c) || { n: 0, share: 0 }
     cur.n += 1
     cur.share = Math.max(cur.share, px(el))
     tally.set(c, cur)
   }
-  const surfaces = [...tally.entries()].sort((a, b) => b[1].n - a[1].n)
-  if (surfaces[0]) push('surface', surfaces[0][0], surfaces[0][1].share, 'most repeated card background, ' + surfaces[0][1].n + ' elements')
-
-  // --- body text ---------------------------------------------------------
-  // The colour of the longest run of prose, not of the first paragraph found.
-  let longest = null, longestLen = 0
-  for (const el of document.querySelectorAll('p, li, span, div')) {
-    if (!visible(el)) continue
-    const own = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent || '').join('').trim()
-    if (own.length > longestLen) { longestLen = own.length; longest = el }
+  const surfaces = Array.from(tally.entries()).sort((a, b) => b[1].n - a[1].n)
+  if (surfaces[0]) {
+    push('surface', surfaces[0][0], surfaces[0][1].n, surfaces[0][1].share, `most repeated card background, on ${surfaces[0][1].n} elements`)
   }
-  if (longest) push('ink', getComputedStyle(longest).color, px(longest), 'computed colour of the longest run of text on the page')
 
-  // --- headings ----------------------------------------------------------
-  const heads = [...document.querySelectorAll('h1, h2')].filter(visible)
+  // --- body text ----------------------------------------------------------
+  // The colour of the LONGEST run of prose, not of the first paragraph found:
+  // the first is often a nav item or an eyebrow label.
+  let longest: Element | null = null
+  let longestLen = 0
+  const inkTally = new Map<string, number>()
+  for (const el of Array.from(document.querySelectorAll('p, li, span, div'))) {
+    if (!visible(el)) continue
+    const own = Array.from(el.childNodes)
+      .filter((n) => n.nodeType === 3)
+      .map((n) => n.textContent || '')
+      .join('')
+      .trim()
+    if (own.length < 20) continue
+    const c = getComputedStyle(el).color
+    inkTally.set(c, (inkTally.get(c) || 0) + 1)
+    if (own.length > longestLen) {
+      longestLen = own.length
+      longest = el
+    }
+  }
+  if (longest) {
+    const c = getComputedStyle(longest).color
+    push('ink', c, inkTally.get(c) || 1, px(longest), `computed colour of the longest run of text on the page, matched by ${inkTally.get(c) || 1} text element${(inkTally.get(c) || 1) === 1 ? '' : 's'}`)
+  }
+
+  // --- headings -----------------------------------------------------------
+  const heads = Array.from(document.querySelectorAll('h1, h2')).filter(visible)
   if (heads[0]) {
     const s = getComputedStyle(heads[0])
-    push('heading', s.color, px(heads[0]), 'computed colour of the first heading')
-    out.fonts.push({ role: 'heading', family: s.fontFamily, count: heads.length })
+    push('heading', s.color, heads.length, heads.reduce((n, el) => n + px(el), 0), `computed colour of the page headings, ${heads.length} found`)
+    fonts.push({ role: 'heading', family: s.fontFamily, count: heads.length })
   }
-  const bodyFontEl = longest || document.body
-  out.fonts.push({ role: 'body', family: getComputedStyle(bodyFontEl).fontFamily, count: 1 })
+  fonts.push({ role: 'body', family: getComputedStyle(longest || document.body).fontFamily, count: 1 })
 
-  // --- links in prose ----------------------------------------------------
-  const proseLinks = [...document.querySelectorAll('p a, li a')].filter(visible)
+  // --- links in prose -----------------------------------------------------
+  const proseLinks = Array.from(document.querySelectorAll('p a, li a')).filter(visible)
   if (proseLinks.length) {
-    const c = getComputedStyle(proseLinks[0]).color
-    push('link', c, proseLinks.reduce((n, el) => n + px(el), 0), 'computed colour of links inside prose, ' + proseLinks.length + ' found')
+    const first = getComputedStyle(proseLinks[0]).color
+    const shared = proseLinks.filter((el) => getComputedStyle(el).color === first).length
+    push('link', first, shared, proseLinks.reduce((n, el) => n + px(el), 0), `computed colour of ${shared} link${shared === 1 ? '' : 's'} inside prose`)
   }
 
-  // --- logo --------------------------------------------------------------
-  // Decoded in-page onto a canvas so the dominant non-neutral colour can be
-  // read directly. Cross-origin images taint the canvas; that is caught and
-  // reported rather than thrown.
-  const logo = document.querySelector('header img, [class*=logo] img, a[href="/"] img, img[alt*=logo i]')
+  // --- logo ---------------------------------------------------------------
+  // Decoded onto a canvas so the dominant non-neutral colour can be read
+  // directly. Cross-origin images taint the canvas; that is reported, not
+  // thrown, because a missing logo colour is not a failed extraction.
+  const logo = document.querySelector<HTMLImageElement>(
+    'header img, [class*=logo] img, a[href="/"] img, img[alt*=logo i]',
+  )
   if (logo && logo.complete && logo.naturalWidth > 0) {
     try {
-      const c = document.createElement('canvas')
-      const w = c.width = Math.min(64, logo.naturalWidth)
-      const h = c.height = Math.min(64, logo.naturalHeight)
-      const ctx = c.getContext('2d')
+      const canvas = document.createElement('canvas')
+      const w = (canvas.width = Math.min(64, logo.naturalWidth))
+      const h = (canvas.height = Math.min(64, logo.naturalHeight))
+      const ctx = canvas.getContext('2d')
+      if (!ctx) throw new Error('no 2d context')
       ctx.drawImage(logo, 0, 0, w, h)
       const data = ctx.getImageData(0, 0, w, h).data
-      const buckets = new Map()
+      const buckets = new Map<string, number>()
       for (let i = 0; i < data.length; i += 4) {
-        const [r, g, b, a] = [data[i], data[i+1], data[i+2], data[i+3]]
+        const [r, g, b, a] = [data[i], data[i + 1], data[i + 2], data[i + 3]]
         if (a < 200) continue
-        const max = Math.max(r,g,b), min = Math.min(r,g,b)
-        // Drop near-white, near-black and greys: a logo's ink is not its brand.
-        if (max - min <= 18) continue
-        const key = [r,g,b].map(v => Math.round(v/24)*24).join(',')
+        // Drop greys: a logo's ink and its cut-out are not its brand colour.
+        if (Math.max(r, g, b) - Math.min(r, g, b) <= 18) continue
+        const key = [r, g, b].map((v) => Math.round(v / 24) * 24).join(',')
         buckets.set(key, (buckets.get(key) || 0) + 1)
       }
-      const top = [...buckets.entries()].sort((a,b) => b[1]-a[1])[0]
+      const top = Array.from(buckets.entries()).sort((a, b) => b[1] - a[1])[0]
       if (top) {
-        const [r,g,b] = top[0].split(',').map(Number)
-        push('logo', 'rgb(' + r + ', ' + g + ', ' + b + ')', 0.05, 'dominant colour of the header logo, ' + top[1] + ' pixels sampled')
+        const [r, g, b] = top[0].split(',').map(Number)
+        push('logo', `rgb(${r}, ${g}, ${b})`, 1, 0, `dominant colour of the header logo, from ${top[1]} sampled pixels`)
       } else {
-        out.notes.push('logo found but it is monochrome, so it carries no brand colour')
+        notes.push('a header logo was found but it is monochrome, so it carries no brand colour')
       }
-    } catch (e) {
-      out.notes.push('logo could not be sampled: it is served cross-origin without CORS headers')
+    } catch {
+      notes.push('the header logo could not be sampled: it is served cross-origin without CORS headers')
     }
   } else {
-    out.notes.push('no header logo image found')
+    notes.push('no header logo image was found')
   }
 
-  return out
-}`
+  return { colors, fonts, notes }
+}
 
 /**
  * Render a URL and extract brand tokens from what it actually painted.
@@ -199,11 +246,7 @@ export const extractBrandFromRender = async (rawUrl: string): Promise<ComputedEx
     // Web fonts and late-loading heroes change what is painted.
     await page.waitForTimeout(600)
 
-    const raw = (await page.evaluate(SAMPLER as never)) as {
-      colors: Array<{ role: string; color: string; share: number; source: string }>
-      fonts: Array<{ role: 'heading' | 'body'; family: string; count: number }>
-      notes: string[]
-    }
+    const raw = await page.evaluate(samplePage)
 
     const finalUrl = page.url()
     await context.close()
@@ -216,21 +259,13 @@ export const extractBrandFromRender = async (rawUrl: string): Promise<ComputedEx
         rejected.push({ role: c.role, color: c.color, reason: 'translucent or unresolvable, so what a visitor sees depends on what is behind it' })
         continue
       }
-      samples.push({
-        role: c.role as Sample['role'],
-        color: hex,
-        // The sampler reports one reading per role; corroboration comes from
-        // two roles landing on the same colour, counted in the scorer.
-        count: c.role === 'surface' || c.role === 'link' ? 3 : 3,
-        pixelShare: c.share,
-        source: c.source,
-      })
+      samples.push({ role: c.role, color: hex, count: c.count, pixelShare: c.share, source: c.source })
     }
 
     const { kept, rejected: ruleRejected } = applyRejections(samples)
     for (const r of ruleRejected) rejected.push({ role: r.sample.role, color: r.sample.color, reason: r.reason })
 
-    const tokens = { ...proposeTokens(kept), ...proposeFonts(raw.fonts as FontSample[]) }
+    const tokens = { ...proposeTokens(kept), ...proposeFonts(raw.fonts) }
 
     return {
       finalUrl,
