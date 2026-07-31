@@ -124,14 +124,34 @@ const highlight = async (page: Page, target: Locator): Promise<void> => {
     .catch(() => {})
 }
 
+/**
+ * Sign in, and say plainly what went wrong if it does not work.
+ *
+ * A wrong password otherwise surfaces as a navigation timeout and a stack
+ * trace, which reads like a broken script rather than a bad credential. The
+ * page's own error message is the useful thing, so it is read off the screen
+ * and reported.
+ */
 const signIn = async (page: Page): Promise<void> => {
   await page.goto(`${BASE}/sign-in`, { waitUntil: 'networkidle', timeout: 30_000 })
   await page.fill('input[name="email"]', EMAIL)
   await page.fill('input[name="password"]', PASSWORD)
-  await Promise.all([
-    page.waitForURL((u) => !u.pathname.includes('/sign-in'), { timeout: 30_000 }),
-    page.click('button[type="submit"]'),
-  ])
+  await page.click('button[type="submit"]')
+
+  try {
+    await page.waitForURL((u) => !u.pathname.includes('/sign-in'), { timeout: 20_000 })
+  } catch {
+    const onScreen = (await page.locator('body').innerText().catch(() => '')) || ''
+    const reported = onScreen
+      .split('\n')
+      .map((l) => l.trim())
+      .find((l) => /incorrect|invalid|failed|locked|too many|not found/i.test(l))
+    throw new Error(
+      reported
+        ? `sign-in was refused for ${EMAIL}: ${reported}`
+        : `sign-in for ${EMAIL} did not complete, and the page gave no reason. Check the account exists and the password is right.`,
+    )
+  }
 }
 
 const main = async () => {
@@ -203,4 +223,9 @@ const main = async () => {
   }
 }
 
-await main()
+// A failure here is an operational problem with a cause worth reading, not a
+// crash worth a stack trace.
+await main().catch((err: unknown) => {
+  console.error(`\n${err instanceof Error ? err.message : String(err)}`)
+  process.exit(1)
+})
