@@ -257,6 +257,19 @@ export const ENTRIES: BuildLogEntry[] = [
         ],
       },
       {
+        title: 'The summary box border matches the other cards again',
+        status: 'shipped',
+        detail:
+          'It had been set to a dark red on 30 July to make the counts stand out. Against the surrounding cards it read as an alert rather than a heading, on a box whose numbers are usually unremarkable. Back to the shared border token, so it is one token rather than a literal and it follows the theme wherever that goes.',
+        files: ['src/app/(app)/admin/(top)/buildlog/page.tsx'],
+        evidence: [
+          {
+            label: 'The summary box',
+            path: '/admin/buildlog',
+          },
+        ],
+      },
+      {
         title: 'The DNS and certificate setup is real, but half the traffic to the live brand is being dropped',
         status: 'open',
         detail:
