@@ -244,6 +244,26 @@ export const ENTRIES: BuildLogEntry[] = [
         files: ['package.json', 'next.config.mjs'],
       },
       {
+        title: 'Walking the live flows found two real breaks',
+        status: 'open',
+        detail:
+          'Every public path was walked against the running server rather than reasoned about. Two things are wrong and neither is visible from the admin. First, a Site is created in draft, and the public route returns 404 for a draft Site on every path including its own preview domain, so two of the three Sites here are entirely unreachable and four of their six deployments marked live serve nothing. Nothing in the builder says why. Second, generateMetadata returns an empty object for anything that is not a quiz or landing-page deployment, so every authored page, including the home page and all the legal pages, ships with no title tag, no description, no canonical and no social tags. Both are recorded here rather than fixed in the same pass, because one changes public visibility and the other changes what search engines see, and those are the owner’s calls.',
+        files: ['src/app/(public)/[[...slug]]/page.tsx', 'src/collections/Sites.ts'],
+        evidence: [
+          {
+            label: 'Where a Site is set live',
+            path: '/admin/sites',
+          },
+        ],
+      },
+      {
+        title: 'The handbook claim about preview domains was wrong',
+        status: 'shipped',
+        detail:
+          'It said a preview domain makes a new Site reachable immediately. Walking the flow proved otherwise: the Site is created in draft and 404s everywhere until it is set active. Corrected in the concept, in the first-run sequence and on the Sites entry, with the current state of this server named. Documentation that is confidently wrong is worse than none, and this was mine.',
+        files: ['src/lib/handbook.ts'],
+      },
+      {
         title: 'A shared module could not carry the server-only marker',
         status: 'shipped',
         detail:
@@ -280,6 +300,18 @@ export const ENTRIES: BuildLogEntry[] = [
         label: 'Type check clean and the production build compiles',
         state: 'verified',
         detail: 'Run on the server, where the dependencies and database exist. Zero errors, and the build completed.',
+      },
+      {
+        label: 'Every public path walked against the running server',
+        state: 'verified',
+        detail:
+          'All six domains, all six live deployments, and ten paths on the one reachable Site were requested directly at the app on port 3000, which isolates the application from nginx. Two breaks were found and are recorded as an open item. The lead endpoint was probed with invalid payloads: it returns 400 and writes no row. The leads table still holds zero rows.',
+      },
+      {
+        label: 'A lead has been captured end to end',
+        state: 'not-run',
+        detail:
+          'Validation was checked, persistence was not. Every integration is disabled on all three Sites, so a real submission would fire nothing external and only write a row, but that row is a compliance record in the owner\u2019s production table and creating one is their call, not mine.',
       },
       {
         label: 'A screenshot has actually been captured',

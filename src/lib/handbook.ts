@@ -101,7 +101,7 @@ export const CONCEPTS: HandbookConcept[] = [
   {
     term: 'Preview domain',
     meaning:
-      'Every Site gets one automatically at slug.preview.legenex.com so it is reachable before a real domain is connected. It stays primary until a custom domain verifies, and it cannot be deleted from the UI.',
+      'Every Site gets one automatically at slug.preview.legenex.com. It stays primary until a custom domain verifies, and it cannot be deleted from the UI. Be aware that it does NOT make a new Site viewable: a Site is created in draft, and the public route returns 404 for a draft Site on every path including its preview domain. Set the Site to Active, or sign in and add ?preview=1, before expecting to see anything.',
   },
 ]
 
@@ -111,7 +111,7 @@ export const FIRST_RUN: Array<{ step: string; route: string; detail: string }> =
     step: 'Create the Site',
     route: '/admin/sites',
     detail:
-      'Name it and pick a vertical. It is not born empty: a home page, a qualifying quiz and a landing page are seeded from the vertical, themed by the brand tokens at render. A preview domain is issued at the same time, so the Site is reachable immediately.',
+      'Name it and pick a vertical. It is not born empty: a home page, a qualifying quiz and a landing page are seeded from the vertical, themed by the brand tokens at render. A preview domain is issued at the same time. The Site is created in DRAFT, which means every one of its URLs returns 404 until you set it Active, so do that as soon as you want to look at it.',
   },
   {
     step: 'Give it a brand',
@@ -215,6 +215,7 @@ export const SECTIONS: HandbookSection[] = [
         ],
         watchOut: [
           'The slug is used in the preview hostname, so changing it later changes that URL.',
+          'A new Site is created in draft, and a draft Site returns 404 on every public path including its own preview domain. Two of the three Sites on this server are in that state today, which is why four of their six live deployments are unreachable. Set the Site to Active when you want to see it.',
         ],
       },
       {
@@ -666,6 +667,10 @@ export const SECTIONS: HandbookSection[] = [
           'A request is matched by host header to a Domain, then to a Site, then the path is resolved to a page, landing page or blog post, then to a shared legal template for known legal paths, and finally to the marketing site if no Site matches.',
           'The draft bypass is verified on the server against your session. The routing layer only forwards the intent; it never grants it.',
           'Host lookups are cached for sixty seconds.',
+          'A draft Site returns 404 on every path, and so does everything deployed under it, however the deployment itself is labelled. Signing in and adding ?preview=1 is the way to view one without publishing it.',
+        ],
+        watchOut: [
+          'Authored pages currently ship with no title tag, meta description, canonical or social tags. Only quiz and landing-page deployment URLs get them. That affects the home page and every legal page on every Site.',
         ],
       },
     ],
