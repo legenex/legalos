@@ -17,6 +17,7 @@
 
 export type Role =
   | 'cta'
+  | 'accent'
   | 'logo'
   | 'page_bg'
   | 'surface'
@@ -54,6 +55,7 @@ export type FontSample = {
 export const ROLE_WEIGHT: Record<Role, number> = {
   cta: 1.0,
   logo: 0.85,
+  accent: 0.7,
   page_bg: 0.8,
   surface: 0.6,
   ink: 0.6,
@@ -92,6 +94,7 @@ export const MIN_COUNT: Partial<Record<Role, number>> = {
  */
 export const MIN_PIXEL_SHARE: Partial<Record<Role, number>> = {
   cta: 0.0015,
+  accent: 0.0015,
   heading: 0.002,
   link: 0.0008,
 }
@@ -221,7 +224,7 @@ export const proposeTokens = (
   // finding no brand at all, and saying so is more useful than proposing grey.
   put('cta', best(['cta'], (s) => !isGrey(s.color)))
   put('primary', best(['cta', 'logo'], (s) => !isGrey(s.color)))
-  put('accent', best(['logo', 'link'], (s) => !isGrey(s.color) && s.color !== out.primary?.value))
+  put('accent', best(['accent', 'logo', 'link'], (s) => !isGrey(s.color) && s.color !== out.primary?.value))
   put('bg', best(['page_bg']))
   put('surface', best(['surface']))
   put('ink', best(['ink', 'heading']))

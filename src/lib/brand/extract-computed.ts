@@ -31,16 +31,31 @@ export type ComputedExtraction = {
   warnings: string[]
 }
 
-/** Chromium reports colours as rgb()/rgba(). Normalise, and drop transparency. */
-const toHex = (css: string): string | null => {
+/**
+ * Turn a normalised in-page colour into '#rrggbb', or say why it cannot be.
+ *
+ * The two failure modes are reported separately because they mean different
+ * things to whoever is looking at the result: a translucent colour was read
+ * fine but cannot be proposed, while an unreadable one means the sampler met a
+ * format it could not resolve and is worth knowing about.
+ */
+type HexResult = { hex: string } | { hex: null; reason: string }
+
+const toHex = (css: string): HexResult => {
+  const opaque = css.match(/^#([0-9a-f]{6})$/i)
+  if (opaque) return { hex: `#${opaque[1].toLowerCase()}` }
+
   const m = css.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,/\s]+([\d.]+))?/i)
-  if (!m) return null
+  if (!m) return { hex: null, reason: `reported as "${css}", a colour format the sampler could not resolve` }
+
   const a = m[4] === undefined ? 1 : Number(m[4])
-  // A translucent surface is not a colour we can propose: what a visitor sees
-  // depends on whatever is behind it.
-  if (a < 0.95) return null
+  // A translucent colour is not one we can propose: what a visitor actually
+  // sees depends on whatever is painted behind it.
+  if (a < 0.95) {
+    return { hex: null, reason: `${Math.round(a * 100)}% opaque, so what a visitor sees depends on what is behind it` }
+  }
   const [r, g, b] = [m[1], m[2], m[3]].map((n) => Math.round(Number(n)))
-  return `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`
+  return { hex: `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}` }
 }
 
 type RawReading = { role: Sample['role']; color: string; count: number; share: number; source: string }
@@ -58,7 +73,7 @@ type RawSample = { colors: RawReading[]; fonts: FontSample[]; notes: string[] }
  * is declared inside. It returns raw readings only; no judgement happens here,
  * since anything decided in-page could not be tested without a browser.
  */
-const samplePage = (): RawSample => {
+const samplePage = async (): Promise<RawSample> => {
   const vw = window.innerWidth
   const vh = window.innerHeight
   const area = vw * vh
@@ -79,6 +94,27 @@ const samplePage = (): RawSample => {
   const push = (role: Sample['role'], color: string, count: number, share: number, source: string) =>
     colors.push({ role, color, count, share, source })
 
+  // Chromium does not always report rgb(). A colour that came through
+  // color-mix() or a wide-gamut declaration arrives as oklab(), and parsing
+  // every CSS Color 4 format by hand would be a second colour library. Instead
+  // let the browser do it: assigning to a canvas fillStyle resolves ANY colour
+  // the browser understands down to #rrggbb, or rgba() when it has alpha.
+  //
+  // An invalid value leaves fillStyle at its previous setting, which is
+  // indistinguishable from a valid assignment of that same colour. Assigning
+  // against two different sentinels tells the two apart: a real colour lands on
+  // the same result from both, an invalid one keeps whichever sentinel it had.
+  const probe = document.createElement('canvas').getContext('2d')
+  const normalise = (css: string): string => {
+    if (!probe) return css
+    probe.fillStyle = '#000000'
+    probe.fillStyle = css
+    const fromBlack = probe.fillStyle
+    probe.fillStyle = '#ffffff'
+    probe.fillStyle = css
+    return probe.fillStyle === fromBlack ? String(fromBlack) : css
+  }
+
   // --- primary call to action --------------------------------------------
   // The largest solid-background button in the first viewport: the one colour
   // a brand is most certain to have chosen on purpose.
@@ -92,29 +128,41 @@ const samplePage = (): RawSample => {
     })
     .map((el) => {
       const s = getComputedStyle(el)
-      return { bg: s.backgroundColor, img: s.backgroundImage, area: px(el) }
+      return { bg: normalise(s.backgroundColor), img: s.backgroundImage, area: px(el) }
     })
     // A gradient or image background has no single colour to take.
     .filter((c) => c.img === 'none' && c.area > 0 && c.bg !== 'rgba(0, 0, 0, 0)' && c.bg !== 'transparent')
-    .sort((a, b) => b.area - a.area)
 
-  if (clickable[0]) {
-    const shared = clickable.filter((c) => c.bg === clickable[0].bg).length
-    push(
-      'cta',
-      clickable[0].bg,
-      shared,
-      clickable[0].area,
-      `computed background of the largest above-the-fold button${shared > 1 ? `, shared by ${shared} buttons` : ''}`,
-    )
+  // Ranked by TOTAL painted area per colour, not by the single biggest button.
+  // A brand that uses one colour on several smaller buttons is making just as
+  // deliberate a choice as one that uses it on a single large one, and ranking
+  // by the biggest element alone would miss it.
+  const ctaTally = new Map<string, { area: number; n: number }>()
+  for (const c of clickable) {
+    const cur = ctaTally.get(c.bg) || { area: 0, n: 0 }
+    cur.area += c.area
+    cur.n += 1
+    ctaTally.set(c.bg, cur)
+  }
+  const ranked = Array.from(ctaTally.entries()).sort((a, b) => b[1].area - a[1].area)
+
+  if (ranked[0]) {
+    const [color, { area, n }] = ranked[0]
+    push('cta', color, n, area, `computed background of the primary above-the-fold button${n > 1 ? `, shared by ${n} buttons` : ''}`)
   } else {
     notes.push('no solid-background button was found above the fold')
+  }
+  // The second button colour is a strong accent candidate: a brand that uses
+  // two deliberate button colours has told us about both.
+  if (ranked[1]) {
+    const [color, { area, n }] = ranked[1]
+    push('accent', color, n, area, `computed background of the secondary above-the-fold button${n > 1 ? `s, ${n} of them` : ''}`)
   }
 
   // --- page ground --------------------------------------------------------
   const bodyStyle = getComputedStyle(document.body)
   const htmlStyle = getComputedStyle(document.documentElement)
-  const ground = bodyStyle.backgroundImage === 'none' ? bodyStyle.backgroundColor : htmlStyle.backgroundColor
+  const ground = normalise(bodyStyle.backgroundImage === 'none' ? bodyStyle.backgroundColor : htmlStyle.backgroundColor)
   push('page_bg', ground, 1, 1, 'computed background of the page at the top of the document')
 
   // --- card surfaces ------------------------------------------------------
@@ -124,7 +172,7 @@ const samplePage = (): RawSample => {
     if (!visible(el)) continue
     const s = getComputedStyle(el)
     if (s.backgroundImage !== 'none') continue
-    const c = s.backgroundColor
+    const c = normalise(s.backgroundColor)
     if (!c || c === 'rgba(0, 0, 0, 0)' || c === 'transparent' || c === ground) continue
     const cur = tally.get(c) || { n: 0, share: 0 }
     cur.n += 1
@@ -150,7 +198,7 @@ const samplePage = (): RawSample => {
       .join('')
       .trim()
     if (own.length < 20) continue
-    const c = getComputedStyle(el).color
+    const c = normalise(getComputedStyle(el).color)
     inkTally.set(c, (inkTally.get(c) || 0) + 1)
     if (own.length > longestLen) {
       longestLen = own.length
@@ -158,7 +206,7 @@ const samplePage = (): RawSample => {
     }
   }
   if (longest) {
-    const c = getComputedStyle(longest).color
+    const c = normalise(getComputedStyle(longest).color)
     push('ink', c, inkTally.get(c) || 1, px(longest), `computed colour of the longest run of text on the page, matched by ${inkTally.get(c) || 1} text element${(inkTally.get(c) || 1) === 1 ? '' : 's'}`)
   }
 
@@ -166,7 +214,7 @@ const samplePage = (): RawSample => {
   const heads = Array.from(document.querySelectorAll('h1, h2')).filter(visible)
   if (heads[0]) {
     const s = getComputedStyle(heads[0])
-    push('heading', s.color, heads.length, heads.reduce((n, el) => n + px(el), 0), `computed colour of the page headings, ${heads.length} found`)
+    push('heading', normalise(s.color), heads.length, heads.reduce((n, el) => n + px(el), 0), `computed colour of the page headings, ${heads.length} found`)
     fonts.push({ role: 'heading', family: s.fontFamily, count: heads.length })
   }
   fonts.push({ role: 'body', family: getComputedStyle(longest || document.body).fontFamily, count: 1 })
@@ -174,8 +222,8 @@ const samplePage = (): RawSample => {
   // --- links in prose -----------------------------------------------------
   const proseLinks = Array.from(document.querySelectorAll('p a, li a')).filter(visible)
   if (proseLinks.length) {
-    const first = getComputedStyle(proseLinks[0]).color
-    const shared = proseLinks.filter((el) => getComputedStyle(el).color === first).length
+    const first = normalise(getComputedStyle(proseLinks[0]).color)
+    const shared = proseLinks.filter((el) => normalise(getComputedStyle(el).color) === first).length
     push('link', first, shared, proseLinks.reduce((n, el) => n + px(el), 0), `computed colour of ${shared} link${shared === 1 ? '' : 's'} inside prose`)
   }
 
@@ -183,23 +231,38 @@ const samplePage = (): RawSample => {
   // Decoded onto a canvas so the dominant non-neutral colour can be read
   // directly. Cross-origin images taint the canvas; that is reported, not
   // thrown, because a missing logo colour is not a failed extraction.
-  const logo = document.querySelector<HTMLImageElement>(
+  const logoEl = document.querySelector<HTMLImageElement>(
     'header img, [class*=logo] img, a[href="/"] img, img[alt*=logo i]',
   )
-  if (logo && logo.complete && logo.naturalWidth > 0) {
+  const logoSrc = logoEl?.currentSrc || logoEl?.src
+  if (logoSrc) {
     try {
+      // Re-requested in CORS mode rather than read off the element. Serving the
+      // response with a permissive header is not enough on its own: a canvas
+      // stays tainted unless the image was REQUESTED with crossOrigin set, and
+      // the page's own element was not. This second request is served from
+      // cache and costs nothing.
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.src = logoSrc
+      await img.decode()
+
       const canvas = document.createElement('canvas')
-      const w = (canvas.width = Math.min(64, logo.naturalWidth))
-      const h = (canvas.height = Math.min(64, logo.naturalHeight))
+      const w = (canvas.width = Math.min(96, img.naturalWidth))
+      const h = (canvas.height = Math.min(96, img.naturalHeight))
       const ctx = canvas.getContext('2d')
       if (!ctx) throw new Error('no 2d context')
-      ctx.drawImage(logo, 0, 0, w, h)
+      ctx.drawImage(img, 0, 0, w, h)
+
       const data = ctx.getImageData(0, 0, w, h).data
       const buckets = new Map<string, number>()
+      let opaquePixels = 0
       for (let i = 0; i < data.length; i += 4) {
         const [r, g, b, a] = [data[i], data[i + 1], data[i + 2], data[i + 3]]
         if (a < 200) continue
-        // Drop greys: a logo's ink and its cut-out are not its brand colour.
+        opaquePixels += 1
+        // Greys are skipped: a logo's ink, its cut-out and its drop shadow are
+        // not the brand's colour.
         if (Math.max(r, g, b) - Math.min(r, g, b) <= 18) continue
         const key = [r, g, b].map((v) => Math.round(v / 24) * 24).join(',')
         buckets.set(key, (buckets.get(key) || 0) + 1)
@@ -207,12 +270,21 @@ const samplePage = (): RawSample => {
       const top = Array.from(buckets.entries()).sort((a, b) => b[1] - a[1])[0]
       if (top) {
         const [r, g, b] = top[0].split(',').map(Number)
-        push('logo', `rgb(${r}, ${g}, ${b})`, 1, 0, `dominant colour of the header logo, from ${top[1]} sampled pixels`)
+        // Share of the logo's own opaque pixels, not of the viewport: a colour
+        // on 3% of a logo is trim, one on 40% is the logo's colour.
+        const shareOfLogo = top[1] / Math.max(1, opaquePixels)
+        push(
+          'logo',
+          `rgb(${r}, ${g}, ${b})`,
+          1,
+          0,
+          `dominant colour of the header logo, ${Math.round(shareOfLogo * 100)}% of its visible pixels`,
+        )
       } else {
         notes.push('a header logo was found but it is monochrome, so it carries no brand colour')
       }
     } catch {
-      notes.push('the header logo could not be sampled: it is served cross-origin without CORS headers')
+      notes.push('the header logo could not be decoded, so no colour was taken from it')
     }
   } else {
     notes.push('no header logo image was found')
@@ -241,6 +313,25 @@ export const extractBrandFromRender = async (rawUrl: string): Promise<ComputedEx
       userAgent:
         'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151 Safari/537.36 LegalOS-BrandExtract/1.0',
     })
+    // A logo served from a CDN taints the canvas, and the dominant-colour read
+    // fails on exactly the sites most likely to have a deliberate brand. This
+    // browser exists only to read public pages, so images are re-served to it
+    // with a permissive CORS header. Nothing is written and no credentials are
+    // attached; it changes only what our own canvas is allowed to read back.
+    await context.route('**/*', async (route) => {
+      if (route.request().resourceType() !== 'image') return route.continue()
+      try {
+        const response = await route.fetch()
+        await route.fulfill({
+          response,
+          headers: { ...response.headers(), 'access-control-allow-origin': '*' },
+        })
+      } catch {
+        // A blocked or failed image is not a failed extraction.
+        await route.continue()
+      }
+    })
+
     const page = await context.newPage()
     await page.goto(url, { waitUntil: 'networkidle', timeout: 30_000 })
     // Web fonts and late-loading heroes change what is painted.
@@ -254,12 +345,12 @@ export const extractBrandFromRender = async (rawUrl: string): Promise<ComputedEx
     const samples: Sample[] = []
     const rejected: ComputedExtraction['rejected'] = []
     for (const c of raw.colors) {
-      const hex = toHex(c.color)
-      if (!hex) {
-        rejected.push({ role: c.role, color: c.color, reason: 'translucent or unresolvable, so what a visitor sees depends on what is behind it' })
+      const parsed = toHex(c.color)
+      if (parsed.hex === null) {
+        rejected.push({ role: c.role, color: c.color, reason: parsed.reason })
         continue
       }
-      samples.push({ role: c.role, color: hex, count: c.count, pixelShare: c.share, source: c.source })
+      samples.push({ role: c.role, color: parsed.hex, count: c.count, pixelShare: c.share, source: c.source })
     }
 
     const { kept, rejected: ruleRejected } = applyRejections(samples)
