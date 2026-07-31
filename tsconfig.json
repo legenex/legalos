@@ -6,6 +6,11 @@
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
+    // The standalone scripts under scripts/ are run by node's type-stripping,
+    // which resolves the real file and so requires the .ts extension in the
+    // import. Safe to allow here because nothing is emitted: noEmit is set, and
+    // the app itself is compiled by Next, which resolves extensionless imports.
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
