@@ -1,4 +1,3 @@
-import 'server-only'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
@@ -19,6 +18,12 @@ import path from 'node:path'
  *
  * Nothing here is committed: `data/` is gitignored, and a screenshot of one
  * server's admin is not a fact about the codebase.
+ *
+ * Deliberately NOT marked `server-only`, unlike most modules that touch the
+ * filesystem. The capture script writes through this same module under plain
+ * node, where that marker does not resolve - it is an alias Next supplies to
+ * its own build. The `node:fs` import already makes a client bundle fail, so
+ * the guarantee is kept; only the friendlier error message is given up.
  */
 
 const CAPTURE_DIR = path.join(process.cwd(), 'data', 'buildlog-captures')
