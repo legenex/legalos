@@ -133,8 +133,22 @@ const highlight = async (page: Page, target: Locator): Promise<void> => {
  * and reported.
  */
 const signIn = async (page: Page): Promise<void> => {
-  await page.goto(`${BASE}/sign-in`, { waitUntil: 'networkidle', timeout: 30_000 })
-  await page.fill('input[name="email"]', EMAIL)
+  await page.goto(`${BASE}/sign-in`, { waitUntil: 'domcontentloaded', timeout: 30_000 })
+
+  // Waited for explicitly rather than filled straight away. networkidle is not
+  // a promise that the form is mounted: this page hydrates, and a fill issued
+  // against an unmounted input fails with a locator timeout that reads like a
+  // missing field rather than a race.
+  const emailField = page.locator('input[name="email"]')
+  try {
+    await emailField.waitFor({ state: 'visible', timeout: 30_000 })
+  } catch {
+    throw new Error(
+      `the sign-in form never appeared at ${BASE}/sign-in. The page loaded, so this is the form failing to mount rather than the wrong URL.`,
+    )
+  }
+
+  await emailField.fill(EMAIL)
   await page.fill('input[name="password"]', PASSWORD)
   await page.click('button[type="submit"]')
 
