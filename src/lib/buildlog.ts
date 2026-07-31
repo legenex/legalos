@@ -197,10 +197,10 @@ export const ENTRIES: BuildLogEntry[] = [
         files: ['src/lib/brand/extract-computed.ts'],
       },
       {
-        title: 'Screenshot capture is written but has never been run',
+        title: 'Screenshot capture has run: 9 of 24 recipes captured',
         status: 'partial',
         detail:
-          'The job drives each evidence recipe, asserts its target is on screen, rings that target so the shot points at itself, and files nothing it could not confirm reaching. It is deployed, type-checked, and verified as far as signing in: with a wrong password it reports the reason as a sentence rather than a stack trace. It has captured zero screenshots, because it needs an admin account and creating one or guessing a password on a production system is not mine to do. One command with real credentials finishes it.',
+          'The job drives each evidence recipe, asserts its target is on screen, rings that target so the shot points at itself, and files nothing it could not confirm reaching. It now has its own account and has run against the live admin: 9 recipes captured, 15 skipped, 2.8MB on disk. The skips are the interpreter meeting prose it cannot turn into a click, which is what the recipes were always written as: "Click a node in the flow grid" and "The extraction panel sits above the colour fields" describe a place to a person, not a control to a machine. Every skip is named with the instruction that defeated it and nothing was filed for any of them. Kept partial rather than shipped because most recipes still have no picture.',
         files: ['scripts/capture-buildlog.ts', 'src/lib/buildlog/captures.ts', 'src/app/api/legalos/buildlog-capture/[id]/route.ts'],
         evidence: [
           {
@@ -255,6 +255,27 @@ export const ENTRIES: BuildLogEntry[] = [
             path: '/admin/sites',
           },
         ],
+      },
+      {
+        title: 'A near miss: the Payload CLI tried to drop a live column',
+        status: 'shipped',
+        detail:
+          'Creating the capture account through pnpm payload run stopped on a prompt: "You are about to delete theme_overrides_removed_20260729 column in funnel_quiz_deployments with 3 items. Accept warnings and push schema to database?" The CLI does not inherit the production flag the running service gets from next start, so Payload treated the call as development and offered to push schema at a production database. Killed rather than answered, and the column and all three rows were checked afterwards and are intact. The prompt defaults to no, so this needed a person to type y, but it should never have been asked in the first place. Re-run with NODE_ENV=production it completes silently. Anyone running a payload CLI command against this server should set that flag, and this is the reason.',
+        files: ['scripts/create-capture-user.ts'],
+      },
+      {
+        title: 'The capture job has its own identity',
+        status: 'shipped',
+        detail:
+          'It signs in as capture@legenex.com rather than borrowing a person\\u2019s account, so captures are attributable to a job in the audit log instead of looking like someone clicking through every screen in the product at once, and the account can be disabled without locking anyone out. Super admin, because the recipes span every Site and a capture that silently skipped screens the account could not see would produce a board that looks complete and is not. The script refuses a password under 24 characters for the same reason, generates nothing itself, and never echoes what it was given.',
+        files: ['scripts/create-capture-user.ts'],
+      },
+      {
+        title: 'Sign-in was raced, not broken',
+        status: 'shipped',
+        detail:
+          'The first capture run failed with a locator timeout on the email field, which reads like a missing field. The field was there: a probe against the same URL found it immediately. The job was filling it as soon as the page reached networkidle, which is not a promise that a hydrating form has mounted. It now waits for the field and, if it truly never appears, says which of the two it was.',
+        files: ['scripts/capture-buildlog.ts'],
       },
       {
         title: 'The summary box border matches the other cards again',
@@ -347,18 +368,20 @@ export const ENTRIES: BuildLogEntry[] = [
       },
       {
         label: 'A screenshot has actually been captured',
-        state: 'not-run',
+        state: 'verified',
         detail:
-          'Zero captures exist. The job is verified up to sign-in and no further, because it needs an admin credential. Until it runs, the board shows recipes without pictures, which is the intended state rather than a failure.',
+          'Nine exist, written and read back. One was pulled off the server and looked at: it shows the right screen, with the Archived tab ringed, and the text the job asserted before saving is visible in the image. An anonymous request for a capture returns 401, so the authentication in front of them is real and not just intended.',
       },
     ],
     deployNotes: [
       'Playwright and Chromium are installed on the server. A future environment needs pnpm install followed by npx playwright install --with-deps chromium.',
-      'To capture: BUILDLOG_CAPTURE_EMAIL and BUILDLOG_CAPTURE_PASSWORD set to an admin account, then node --experimental-strip-types scripts/capture-buildlog.ts https://os.legenex.com',
+      'Capture credentials live in .env on the server. To re-run: set -a; . ./.env; set +a; then node --experimental-strip-types scripts/capture-buildlog.ts https://os.legenex.com',
+      'Any payload CLI command on this server must be run with NODE_ENV=production. Without it the CLI treats the call as development and offers to push schema at the production database, including dropping columns that still hold rows.',
     ],
     openIssues: [
-      'No screenshot has been captured yet. The job needs an admin credential to run.',
-      'Recipes are prose written for humans, so the interpreter that drives them may not reach every screen on the first run. It reports what it could not reach rather than guessing, and those need tightening once there is a real run to look at.',
+      'Fifteen of twenty-four recipes still have no picture. Each names the instruction that defeated the interpreter, so they can be rewritten one at a time against a real run rather than guessed at.',
+      'The stale A record on getwhatyoureowed.co is still live and still dropping roughly half the traffic to that brand. It is a registrar change.',
+      'The four preview domains still have no certificate, because creating a Site writes the Domain row as active without ever calling Plesk. Fixing it means provisioning each host or issuing one wildcard, which is an infrastructure choice.',
       'The handbook records what is true today. It has no automatic link to the code beyond the route check, so the words need a read whenever a screen changes materially.',
     ],
   },
