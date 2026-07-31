@@ -66,9 +66,10 @@ function PageCard({ page, sectionId }: { page: HandbookPage; sectionId: string }
         <StatusChip status={page.status} />
         <Link
           href={page.route}
+          title={page.pattern ? `Opens ${page.route}, since this screen needs a Site` : undefined}
           className="font-mono text-[11px] text-sky-400 hover:text-sky-300 underline underline-offset-2"
         >
-          {page.route}
+          {page.pattern || page.route}
         </Link>
       </div>
 

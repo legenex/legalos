@@ -31,6 +31,15 @@ export const STATUS_LABEL: Record<PageStatus, string> = {
 export type HandbookPage = {
   /** The real route. Rendered as a link, so it must exist. */
   route: string
+  /**
+   * What to SHOW when the real route needs an id you do not have yet.
+   *
+   * Everything under a Site lives at /admin/sites/<slug>/..., which cannot be
+   * linked without picking a Site first. Showing the pattern and linking to the
+   * list is honest about both: the reader learns the real shape of the URL and
+   * still gets somewhere useful by clicking.
+   */
+  pattern?: string
   title: string
   status: PageStatus
   /** One line: what this screen is for. */
@@ -211,6 +220,7 @@ export const SECTIONS: HandbookSection[] = [
       {
         route: '/admin/sites',
         title: 'Site dashboard',
+        pattern: '/admin/sites/:slug',
         status: 'working',
         purpose: 'The home screen for one brand: its pages, domains and lead volume.',
         use: ['Open any Site from the list. Everything scoped to that brand is reachable from here.'],
@@ -222,6 +232,7 @@ export const SECTIONS: HandbookSection[] = [
       {
         route: '/admin/sites',
         title: 'Pages',
+        pattern: '/admin/sites/:slug/pages',
         status: 'working',
         purpose: 'The block based page builder for this Site.',
         use: [
@@ -243,6 +254,7 @@ export const SECTIONS: HandbookSection[] = [
       {
         route: '/admin/sites',
         title: 'Blog',
+        pattern: '/admin/sites/:slug/blog',
         status: 'working',
         purpose: 'Posts for this Site.',
         use: ['Write, schedule and publish posts. They render on the Site under its own domain.'],
@@ -253,6 +265,7 @@ export const SECTIONS: HandbookSection[] = [
       {
         route: '/admin/sites',
         title: 'Call tracking numbers',
+        pattern: '/admin/sites/:slug/numbers',
         status: 'working',
         purpose: 'Which phone number shows on which paths.',
         use: [
@@ -270,6 +283,7 @@ export const SECTIONS: HandbookSection[] = [
       {
         route: '/admin/sites',
         title: 'Settings, General',
+        pattern: '/admin/sites/:slug/settings/general',
         status: 'working',
         purpose: 'Name, slug, vertical and the Site level defaults.',
         use: ['Edit and save. Changes apply to every page on the Site at the next render.'],
@@ -278,6 +292,7 @@ export const SECTIONS: HandbookSection[] = [
       {
         route: '/admin/sites',
         title: 'Settings, Domains',
+        pattern: '/admin/sites/:slug/settings/domains',
         status: 'working',
         purpose: 'Connect and verify hostnames for this Site.',
         use: [
@@ -298,6 +313,7 @@ export const SECTIONS: HandbookSection[] = [
       {
         route: '/admin/sites',
         title: 'Settings, Paths',
+        pattern: '/admin/sites/:slug/settings/paths',
         status: 'working',
         purpose: 'Slug redirects, the sitemap and robots.txt for this Site.',
         use: [
@@ -311,6 +327,7 @@ export const SECTIONS: HandbookSection[] = [
       {
         route: '/admin/sites',
         title: 'Settings, SEO',
+        pattern: '/admin/sites/:slug/settings/seo',
         status: 'placeholder',
         purpose: 'Intended for Site wide SEO defaults, schema generators and default social images.',
         use: [
@@ -322,6 +339,7 @@ export const SECTIONS: HandbookSection[] = [
       {
         route: '/admin/sites',
         title: 'Settings, Tracking and pixels',
+        pattern: '/admin/sites/:slug/settings/tracking',
         status: 'working',
         purpose: 'Pixels, conversion APIs and lead routing for this Site.',
         use: [
@@ -337,6 +355,7 @@ export const SECTIONS: HandbookSection[] = [
       {
         route: '/admin/sites',
         title: 'Settings, Users',
+        pattern: '/admin/sites/:slug/settings/users',
         status: 'placeholder',
         purpose: 'Intended for per Site role bindings: admin, editor, analyst.',
         use: [
@@ -348,6 +367,7 @@ export const SECTIONS: HandbookSection[] = [
       {
         route: '/admin/sites',
         title: 'Settings, Danger zone',
+        pattern: '/admin/sites/:slug/settings/danger-zone',
         status: 'working',
         purpose: 'Pause, archive or delete this Site.',
         use: [
