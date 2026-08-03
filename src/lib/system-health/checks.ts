@@ -169,6 +169,102 @@ const maskDbUrl = (url: string): string => {
   return url.replace(/:\/\/([^:]+):([^@]+)@/, '://$1:***@')
 }
 
+/**
+ * Every collection needs an FK column on `payload_locked_documents_rels`, and a
+ * missing one breaks deletes for the WHOLE app, not just its own collection.
+ *
+ * Payload clears a document's locks as part of deleting it, and that query names
+ * every collection's FK column in a single WHERE clause. One absent column makes
+ * the statement unparseable, so deleting a Domain fails on a column belonging to
+ * build-log comments. Nothing is corrupted - the delete is transactional and
+ * rolls back - but the operation becomes impossible everywhere, and the symptom
+ * points at the wrong subsystem.
+ *
+ * This has shipped twice now (Media, then BuildLogComments), because adding a
+ * collection makes you think about ITS table and nothing else. So check it
+ * directly rather than relying on remembering: derive the column each collection
+ * needs and compare against what the database actually has.
+ *
+ * The derivation assumes the kebab-case slugs this codebase uses and no `dbName`
+ * override, which is true of all twenty collections today. A collection that
+ * broke that assumption would show up here as a false positive naming the exact
+ * column it looked for - loud and trivially checked, which is the right way for
+ * this to be wrong.
+ */
+const lockRelsColumnFor = (slug: string): string => `${slug.replace(/-/g, '_')}_id`
+
+export const checkLockedDocumentRels = async (): Promise<SystemCheck> => {
+  const id = 'db.locked_document_rels'
+  const label = 'Document-lock FK columns'
+  try {
+    const payload = await getPayload({ config })
+    const pool = (payload.db as unknown as { pool?: { query: (q: string) => Promise<{ rows: { column_name: string }[] }> } }).pool
+    if (!pool) {
+      return {
+        id,
+        label,
+        category: 'database',
+        status: 'info',
+        message: 'database adapter exposes no connection pool — cannot inspect schema',
+      }
+    }
+
+    const { rows } = await pool.query(
+      `select column_name from information_schema.columns
+       where table_schema = 'public' and table_name = 'payload_locked_documents_rels'`,
+    )
+    if (rows.length === 0) {
+      return {
+        id,
+        label,
+        category: 'database',
+        status: 'error',
+        message: 'payload_locked_documents_rels does not exist — every delete will fail',
+      }
+    }
+
+    const actual = new Set(rows.map((r) => r.column_name))
+    // Payload's own internal collections (payload-preferences, payload-migrations,
+    // …) are not lockable and get no column here — the live table confirms it.
+    const tracked = payload.config.collections
+      .map((c) => c.slug)
+      .filter((slug) => !slug.startsWith('payload-'))
+      .map((slug) => ({ slug, column: lockRelsColumnFor(slug) }))
+    const missing = tracked.filter(({ column }) => !actual.has(column))
+
+    if (missing.length > 0) {
+      const detail: Record<string, string> = {}
+      for (const m of missing) detail[m.slug] = `${m.column} missing`
+      return {
+        id,
+        label,
+        category: 'database',
+        status: 'error',
+        message: `${missing.length} missing on payload_locked_documents_rels — deleting ANY document will fail until a migration adds ${missing
+          .map((m) => m.column)
+          .join(', ')}`,
+        detail,
+      }
+    }
+
+    return {
+      id,
+      label,
+      category: 'database',
+      status: 'ok',
+      message: `all ${tracked.length} collections have their lock FK column`,
+    }
+  } catch (err) {
+    return {
+      id,
+      label,
+      category: 'database',
+      status: 'error',
+      message: err instanceof Error ? err.message : 'schema inspection failed',
+    }
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                Redis                                        */
 /* -------------------------------------------------------------------------- */

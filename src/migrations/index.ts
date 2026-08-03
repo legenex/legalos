@@ -18,6 +18,7 @@ import * as migration_20260729_170000_brand_token_contract from './20260729_1700
 import * as migration_20260729_200000_drop_deployment_theme from './20260729_200000_drop_deployment_theme';
 import * as migration_20260729_230000_buildlog_comments from './20260729_230000_buildlog_comments';
 import * as migration_20260730_120000_funnel_advertorial_tables from './20260730_120000_funnel_advertorial_tables';
+import * as migration_20260803_120000_locked_documents_buildlog_comments_rel from './20260803_120000_locked_documents_buildlog_comments_rel';
 
 export const migrations = [
   {
@@ -119,5 +120,10 @@ export const migrations = [
     up: migration_20260730_120000_funnel_advertorial_tables.up,
     down: migration_20260730_120000_funnel_advertorial_tables.down,
     name: '20260730_120000_funnel_advertorial_tables',
+  },
+  {
+    up: migration_20260803_120000_locked_documents_buildlog_comments_rel.up,
+    down: migration_20260803_120000_locked_documents_buildlog_comments_rel.down,
+    name: '20260803_120000_locked_documents_buildlog_comments_rel',
   },
 ];
