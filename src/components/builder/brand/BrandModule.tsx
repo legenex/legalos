@@ -22,6 +22,14 @@ import { saveBrandIdentity, createBrandSite, deleteBrandSite, aiGenerateBrand, p
 import {
   DESTINATION_KEYS, DESTINATION_LABELS, DESTINATION_HINTS, DEFAULT_PATHS, isSafeDestinationUrl,
 } from '@/lib/quiz-destinations'
+// The same limits the server enforces, so the picker cannot offer more than the
+// action will accept. The server's check is the control; these are the hint.
+import {
+  MAX_DOCS as MAX_BRAND_DOCS,
+  MAX_IMAGES as MAX_BRAND_IMAGES,
+  DOC_ACCEPT,
+  IMAGE_ACCEPT,
+} from '@/lib/brand/source-limits'
 
 // ============================================================================
 // SEED BRAND (defaults for new + AI merge)
@@ -273,17 +281,58 @@ const CreateBrandModal = ({ onPick, onClose }) => (
 const AIBrandWizard = ({ mode, onClose, onComplete }) => {
   const [urls, setUrls] = useState([''])
   const [repoUrl, setRepoUrl] = useState('')
+  const [docs, setDocs] = useState([])
+  const [images, setImages] = useState([])
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState('')
   const [error, setError] = useState(null)
+  const [notes, setNotes] = useState([])
+  /** A finished brand waiting on the operator to read the notes first. */
+  const [pending, setPending] = useState(null)
+  const docRef = useRef(null)
+  const imgRef = useRef(null)
+
+  const readFiles = (files, as, map) =>
+    Promise.all(
+      files.map(
+        (file) =>
+          new Promise((resolve) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(map(file, String(reader.result || '')))
+            // A file that will not read resolves to null and is filtered out,
+            // so one unreadable attachment cannot hang the whole selection.
+            reader.onerror = () => resolve(null)
+            if (as === 'text') reader.readAsText(file)
+            else reader.readAsDataURL(file)
+          }),
+      ),
+    ).then((r) => r.filter(Boolean))
+
+  const pickDocs = (e) => {
+    const files = [...(e.target.files || [])].slice(0, MAX_BRAND_DOCS)
+    e.target.value = ''
+    if (!files.length) return
+    setError(null)
+    readFiles(files, 'text', (file, text) => ({ name: file.name, text })).then(setDocs)
+  }
+
+  const pickImages = (e) => {
+    const files = [...(e.target.files || [])].slice(0, MAX_BRAND_IMAGES)
+    e.target.value = ''
+    if (!files.length) return
+    setError(null)
+    readFiles(files, 'data', (file, data) => ({ name: file.name, dataBase64: data, mediaType: file.type })).then(setImages)
+  }
 
   const run = async () => {
     setBusy(true)
     setError(null)
+    setNotes([])
     setProgress('Asking Claude...')
     try {
-      const res = await aiGenerateBrand({ mode, urls: urls.filter(Boolean), repoUrl })
+      const res = await aiGenerateBrand({ mode, urls: urls.filter(Boolean), repoUrl, docs, images })
       if (!res.ok) throw new Error(res.error)
+      setNotes(res.notes || [])
       setProgress('Building brand...')
       const parsed = res.brand || {}
       const seed = buildBlankBrand()
@@ -297,7 +346,11 @@ const AIBrandWizard = ({ mode, onClose, onComplete }) => {
         contact: { ...seed.contact, ...(parsed.contact || {}) },
         legal: { ...seed.legal, ...(parsed.legal || {}) },
       }
-      onComplete(built)
+      // onComplete closes this modal and opens the editor, so anything the
+      // reading could not establish would flash past unread. When there is
+      // something to say, hold here and make continuing a deliberate click.
+      if ((res.notes || []).length) setPending(built)
+      else onComplete(built)
     } catch (err) {
       setError(err.message || 'Generation failed')
     } finally {
@@ -308,12 +361,15 @@ const AIBrandWizard = ({ mode, onClose, onComplete }) => {
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 115, backgroundColor: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 600, backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 12, padding: 22 }}>
+      {/* The document and image pickers make this dialog tall enough to run off
+          a laptop screen, so it scrolls inside itself rather than pushing the
+          action buttons out of reach. */}
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 600, maxHeight: '90vh', overflowY: 'auto', backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 12, padding: 22 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
           <div style={{ width: 34, height: 34, borderRadius: 7, backgroundColor: `${T.purple}22`, color: T.purple, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Sparkles size={16} /></div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 16, color: T.text, fontWeight: 700, letterSpacing: '-0.01em' }}>{mode === 'github' ? 'Create Brand from GitHub' : 'Create Brand from URLs'}</div>
-            <div style={{ fontSize: 12, color: T.textMute, marginTop: 2 }}>Claude will scrape and extract a complete brand identity</div>
+            <div style={{ fontSize: 12, color: T.textMute, marginTop: 2 }}>Reads the URLs, documents and images you attach, then fills only what none of them state</div>
           </div>
           <IconBtn icon={X} onClick={onClose} />
         </div>
@@ -337,11 +393,52 @@ const AIBrandWizard = ({ mode, onClose, onComplete }) => {
             <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 10 }}>Tip: include both the homepage and the privacy policy / terms pages for the most complete extraction</div>
           </div>
         )}
+
+        {/* Documents and images are additive to whatever source is selected
+            above, and each is optional. A brand guideline states the palette
+            outright, so it outranks anything read off a live page; images are
+            read for tone and for whatever the other sources leave empty. */}
+        <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <Label>Brand documents · {docs.length}</Label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Btn variant="secondary" size="sm" icon={FileText} onClick={() => docRef.current?.click()}>Add .md files</Btn>
+              <span style={{ fontSize: 11.5, color: T.textMute }}>
+                {docs.length ? docs.map((d) => d.name).join(', ').slice(0, 70) : `Brand guidelines or design tokens, up to ${MAX_BRAND_DOCS}`}
+              </span>
+              {docs.length > 0 && <Btn variant="ghost" size="xs" onClick={() => setDocs([])}>Clear</Btn>}
+              <input ref={docRef} type="file" multiple accept={DOC_ACCEPT} onChange={pickDocs} style={{ display: 'none' }} />
+            </div>
+            <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 6, lineHeight: 1.45 }}>
+              Colours written as <code>Primary: #0B1F3A</code>, in a markdown table, or as CSS custom properties are read exactly and are never rewritten by the model.
+            </div>
+          </div>
+
+          <div>
+            <Label>Brand images · {images.length}</Label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Btn variant="secondary" size="sm" icon={Palette} onClick={() => imgRef.current?.click()}>Add images</Btn>
+              <span style={{ fontSize: 11.5, color: T.textMute }}>
+                {images.length ? images.map((i) => i.name).join(', ').slice(0, 70) : `Logo or screenshots, up to ${MAX_BRAND_IMAGES}, under 3MB each`}
+              </span>
+              {images.length > 0 && <Btn variant="ghost" size="xs" onClick={() => setImages([])}>Clear</Btn>}
+              <input ref={imgRef} type="file" multiple accept={IMAGE_ACCEPT} onChange={pickImages} style={{ display: 'none' }} />
+            </div>
+          </div>
+        </div>
+
+        {notes.length > 0 && <div style={{ marginTop: 14, padding: 10, backgroundColor: `${T.warning}0e`, border: `1px solid ${T.warning}44`, borderRadius: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: T.warning }}>What the documents could not tell us</div>
+          {notes.map((n, i) => <div key={i} style={{ fontSize: 10.5, color: T.textDim, lineHeight: 1.45 }}>{n}</div>)}
+          <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 2 }}>The brand was still created. Everything above can be set by hand in the editor.</div>
+        </div>}
         {progress && <div style={{ marginTop: 14, padding: 10, backgroundColor: `${T.purple}11`, border: `1px solid ${T.purple}55`, borderRadius: 6, fontSize: 12, color: T.purple, display: 'flex', alignItems: 'center', gap: 8 }}><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> {progress}</div>}
         {error && <div style={{ marginTop: 14, padding: 10, backgroundColor: `${T.danger}11`, border: `1px solid ${T.danger}66`, borderRadius: 6, fontSize: 12, color: T.danger }}>Error: {error}</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
           <Btn variant="ghost" size="md" onClick={onClose}>Cancel</Btn>
-          <Btn variant="primary" size="md" icon={busy ? Loader2 : Sparkles} onClick={run} disabled={busy || (mode === 'github' ? !repoUrl : !urls.some(Boolean))}>{busy ? 'Analyzing...' : 'Analyze & Create'}</Btn>
+          {pending
+            ? <Btn variant="primary" size="md" icon={CheckCircle2} onClick={() => onComplete(pending)}>Continue to editor</Btn>
+            : <Btn variant="primary" size="md" icon={busy ? Loader2 : Sparkles} onClick={run} disabled={busy || (!(mode === 'github' ? repoUrl.trim() : urls.some((u) => u.trim())) && !docs.length && !images.length)}>{busy ? 'Analyzing...' : 'Analyze & Create'}</Btn>}
         </div>
         <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       </div>
@@ -370,10 +467,12 @@ const BrandExtractionPanel = ({ onAccept }) => {
   const [urlValue, setUrlValue] = useState('')
   const [promptValue, setPromptValue] = useState('')
   const [image, setImage] = useState(null)
+  const [docs, setDocs] = useState([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [proposal, setProposal] = useState(null)
   const fileRef = useRef(null)
+  const docRef = useRef(null)
 
   const pickImage = (e) => {
     const file = e.target.files?.[0]
@@ -385,6 +484,29 @@ const BrandExtractionPanel = ({ onAccept }) => {
     reader.readAsDataURL(file)
   }
 
+  const pickDocs = (e) => {
+    const files = [...(e.target.files || [])]
+    if (!files.length) return
+    setError('')
+    Promise.all(
+      files.slice(0, MAX_BRAND_DOCS).map(
+        (file) =>
+          new Promise((resolve) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve({ name: file.name, text: String(reader.result || '') })
+            reader.onerror = () => resolve(null)
+            reader.readAsText(file)
+          }),
+      ),
+    ).then((read) => {
+      const kept = read.filter(Boolean)
+      if (kept.length < files.length) setError('Some files could not be read as text.')
+      setDocs(kept)
+    })
+    // Let the same file be chosen again after a reset.
+    e.target.value = ''
+  }
+
   const run = async () => {
     setError(''); setProposal(null); setBusy(true)
     try {
@@ -393,6 +515,7 @@ const BrandExtractionPanel = ({ onAccept }) => {
         value: mode === 'url' ? urlValue : mode === 'prompt' ? promptValue : '',
         imageBase64: mode === 'image' ? image?.base64 : undefined,
         imageMediaType: mode === 'image' ? image?.mediaType : undefined,
+        docs: mode === 'markdown' ? docs : undefined,
       })
       if (res.ok) setProposal(res.proposal)
       else setError(res.error || 'Extraction failed.')
@@ -401,18 +524,20 @@ const BrandExtractionPanel = ({ onAccept }) => {
     } finally { setBusy(false) }
   }
 
-  const canRun = !busy && (mode === 'url' ? urlValue.trim() : mode === 'prompt' ? promptValue.trim() : image)
+  const canRun = !busy && (mode === 'url' ? urlValue.trim() : mode === 'prompt' ? promptValue.trim() : mode === 'markdown' ? docs.length : image)
   const MODES = [
     { id: 'url', label: 'From a URL' },
-    { id: 'prompt', label: 'From a description' },
+    { id: 'markdown', label: 'From a document' },
     { id: 'image', label: 'From an image' },
+    { id: 'prompt', label: 'From a description' },
   ]
 
   return <div style={{ padding: 14, backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 8, marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
     <div style={{ fontSize: 13, color: T.text, fontWeight: 600 }}>Brand extraction</div>
     <div style={{ fontSize: 11.5, color: T.textMute, lineHeight: 1.5 }}>
       Proposes colours and fonts for this brand. Nothing is applied until you accept it, and every value shows where it came from.
-      Reading a URL currently inspects the site&apos;s declared stylesheet, which returns framework defaults on a Tailwind site, so treat that source as a starting point rather than an answer.
+      A brand document is the strongest source, because a guideline that says &quot;Primary: #0B1F3A&quot; is the brand stating the answer rather than us inferring it.
+      A URL is read by rendering the page and sampling what it paints, falling back to its stylesheet when the site blocks that.
     </div>
 
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -424,7 +549,23 @@ const BrandExtractionPanel = ({ onAccept }) => {
     {mode === 'image' && <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <Btn variant="secondary" size="sm" onClick={() => fileRef.current?.click()}>Choose image</Btn>
       <span style={{ fontSize: 11.5, color: T.textMute }}>{image ? image.name : 'JPEG, PNG, GIF or WebP, under 3MB'}</span>
-      <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={pickImage} style={{ display: 'none' }} />
+      <input ref={fileRef} type="file" accept={IMAGE_ACCEPT} onChange={pickImage} style={{ display: 'none' }} />
+    </div>}
+    {mode === 'markdown' && <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <Btn variant="secondary" size="sm" icon={FileText} onClick={() => docRef.current?.click()}>Choose documents</Btn>
+        <span style={{ fontSize: 11.5, color: T.textMute }}>
+          {docs.length ? `${docs.length} file${docs.length === 1 ? '' : 's'}` : `Brand guidelines or design tokens, up to ${MAX_BRAND_DOCS}`}
+        </span>
+        {docs.length > 0 && <Btn variant="ghost" size="xs" onClick={() => setDocs([])}>Clear</Btn>}
+        <input ref={docRef} type="file" multiple accept={DOC_ACCEPT} onChange={pickDocs} style={{ display: 'none' }} />
+      </div>
+      {docs.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+        {docs.map((d) => <span key={d.name} style={{ fontSize: 10.5, color: T.textDim, padding: '3px 7px', borderRadius: 4, backgroundColor: T.bg, border: `1px solid ${T.border}`, fontFamily: '"JetBrains Mono", monospace' }}>{d.name}</span>)}
+      </div>}
+      <div style={{ fontSize: 10.5, color: T.textLow, lineHeight: 1.45 }}>
+        Colours are read from lines like <code>Primary: #0B1F3A</code>, markdown tables, and CSS custom properties. Label each colour with its role, or it is reported rather than applied.
+      </div>
     </div>}
 
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

@@ -232,9 +232,21 @@ export const proposeTokens = (
   return out
 }
 
+/**
+ * Families that name a fallback rather than a brand decision.
+ *
+ * Exported because every source that reads a font has to make the same
+ * judgement: a rendered page whose computed family is "system-ui" and a
+ * document that writes `font-family: 'Sora', system-ui` are both offering a
+ * fallback, and storing one as the brand's typeface is the same mistake either
+ * way. One list, so the two sources cannot drift into disagreeing.
+ */
+export const GENERIC_FONT =
+  /^(inherit|initial|system-ui|sans-serif|serif|monospace|ui-[a-z-]+|-apple-system|blinkmacsystemfont|segoe ui|roboto|helvetica( neue)?|arial)$/i
+
 /** Pick the most-used family per role, ignoring generic stacks. */
 export const proposeFonts = (fonts: FontSample[]): Record<string, TokenProposal> => {
-  const GENERIC = /^(inherit|initial|system-ui|sans-serif|serif|monospace|ui-[a-z-]+|-apple-system|blinkmacsystemfont|segoe ui|roboto|helvetica( neue)?|arial)$/i
+  const GENERIC = GENERIC_FONT
   const out: Record<string, TokenProposal> = {}
   for (const role of ['heading', 'body'] as const) {
     const pool = fonts
