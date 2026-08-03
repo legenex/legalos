@@ -27,9 +27,38 @@ import {
 import {
   MAX_DOCS as MAX_BRAND_DOCS,
   MAX_IMAGES as MAX_BRAND_IMAGES,
+  MAX_DOC_CHARS,
+  MAX_IMAGE_B64,
+  MAX_TOTAL_PAYLOAD,
   DOC_ACCEPT,
   IMAGE_ACCEPT,
+  brandPayloadSize,
+  formatBytes,
 } from '@/lib/brand/source-limits'
+import { prepareBrandImage, MAX_IMAGE_EDGE } from './downscale-image'
+
+/**
+ * Read the picked documents, refusing anything the action could not carry.
+ *
+ * The size check happens here rather than server-side because an oversized
+ * server-action body is rejected by the framework before the action runs, and
+ * that rejection reaches the operator as an unreadable render error. A refusal
+ * naming the file is the difference between "fix this" and "something broke".
+ */
+const readBrandDocs = async (files) => {
+  const docs = []
+  const errors = []
+  for (const file of files) {
+    const text = await file.text().catch(() => null)
+    if (text == null) { errors.push(`${file.name} could not be read as text.`); continue }
+    if (text.length > MAX_DOC_CHARS) {
+      errors.push(`${file.name} is ${formatBytes(text.length)}, over the ${formatBytes(MAX_DOC_CHARS)} limit for one document.`)
+      continue
+    }
+    docs.push({ name: file.name, text })
+  }
+  return { docs, errors }
+}
 
 // ============================================================================
 // SEED BRAND (defaults for new + AI merge)
@@ -292,39 +321,45 @@ const AIBrandWizard = ({ mode, onClose, onComplete }) => {
   const docRef = useRef(null)
   const imgRef = useRef(null)
 
-  const readFiles = (files, as, map) =>
-    Promise.all(
-      files.map(
-        (file) =>
-          new Promise((resolve) => {
-            const reader = new FileReader()
-            reader.onload = () => resolve(map(file, String(reader.result || '')))
-            // A file that will not read resolves to null and is filtered out,
-            // so one unreadable attachment cannot hang the whole selection.
-            reader.onerror = () => resolve(null)
-            if (as === 'text') reader.readAsText(file)
-            else reader.readAsDataURL(file)
-          }),
-      ),
-    ).then((r) => r.filter(Boolean))
-
-  const pickDocs = (e) => {
+  const pickDocs = async (e) => {
     const files = [...(e.target.files || [])].slice(0, MAX_BRAND_DOCS)
     e.target.value = ''
     if (!files.length) return
     setError(null)
-    readFiles(files, 'text', (file, text) => ({ name: file.name, text })).then(setDocs)
+    const { docs: read, errors } = await readBrandDocs(files)
+    setDocs(read)
+    if (errors.length) setError(errors.join(' '))
   }
 
-  const pickImages = (e) => {
+  const pickImages = async (e) => {
     const files = [...(e.target.files || [])].slice(0, MAX_BRAND_IMAGES)
     e.target.value = ''
     if (!files.length) return
     setError(null)
-    readFiles(files, 'data', (file, data) => ({ name: file.name, dataBase64: data, mediaType: file.type })).then(setImages)
+    setProgress('Resizing images...')
+    const kept = []
+    const errors = []
+    for (const file of files) {
+      // Resized in the browser: the model resizes anything over 1568px anyway,
+      // so sending the original only risks the body limit and costs tokens.
+      const res = await prepareBrandImage(file, MAX_IMAGE_B64)
+      if ('error' in res) errors.push(res.error)
+      else kept.push(res)
+    }
+    setImages(kept)
+    setProgress('')
+    if (errors.length) setError(errors.join(' '))
   }
 
+  /** What this request would post, and whether it can be posted at all. */
+  const payloadSize = brandPayloadSize(docs, images)
+  const overBudget = payloadSize > MAX_TOTAL_PAYLOAD
+
   const run = async () => {
+    if (overBudget) {
+      setError(`The attachments total ${formatBytes(payloadSize)}, over the ${formatBytes(MAX_TOTAL_PAYLOAD)} that can be sent at once. Remove a document or an image.`)
+      return
+    }
     setBusy(true)
     setError(null)
     setNotes([])
@@ -424,7 +459,17 @@ const AIBrandWizard = ({ mode, onClose, onComplete }) => {
               {images.length > 0 && <Btn variant="ghost" size="xs" onClick={() => setImages([])}>Clear</Btn>}
               <input ref={imgRef} type="file" multiple accept={IMAGE_ACCEPT} onChange={pickImages} style={{ display: 'none' }} />
             </div>
+            <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 6, lineHeight: 1.45 }}>
+              Resized to {MAX_IMAGE_EDGE}px in your browser before sending, which is the largest size the model reads.
+            </div>
           </div>
+
+          {/* Shown once anything is attached, because the ceiling is on the
+              request as a whole and a per-file limit cannot express it. */}
+          {(docs.length > 0 || images.length > 0) && <div style={{ fontSize: 10.5, color: overBudget ? T.danger : T.textLow }}>
+            {formatBytes(payloadSize)} of {formatBytes(MAX_TOTAL_PAYLOAD)} attached
+            {overBudget ? ' — remove a document or an image to send this.' : ''}
+          </div>}
         </div>
 
         {notes.length > 0 && <div style={{ marginTop: 14, padding: 10, backgroundColor: `${T.warning}0e`, border: `1px solid ${T.warning}44`, borderRadius: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -438,7 +483,7 @@ const AIBrandWizard = ({ mode, onClose, onComplete }) => {
           <Btn variant="ghost" size="md" onClick={onClose}>Cancel</Btn>
           {pending
             ? <Btn variant="primary" size="md" icon={CheckCircle2} onClick={() => onComplete(pending)}>Continue to editor</Btn>
-            : <Btn variant="primary" size="md" icon={busy ? Loader2 : Sparkles} onClick={run} disabled={busy || (!(mode === 'github' ? repoUrl.trim() : urls.some((u) => u.trim())) && !docs.length && !images.length)}>{busy ? 'Analyzing...' : 'Analyze & Create'}</Btn>}
+            : <Btn variant="primary" size="md" icon={busy ? Loader2 : Sparkles} onClick={run} disabled={busy || overBudget || (!(mode === 'github' ? repoUrl.trim() : urls.some((u) => u.trim())) && !docs.length && !images.length)}>{busy ? 'Analyzing...' : 'Analyze & Create'}</Btn>}
         </div>
         <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       </div>
@@ -474,40 +519,36 @@ const BrandExtractionPanel = ({ onAccept }) => {
   const fileRef = useRef(null)
   const docRef = useRef(null)
 
-  const pickImage = (e) => {
+  const pickImage = async (e) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
     setError('')
-    const reader = new FileReader()
-    reader.onload = () => setImage({ name: file.name, base64: String(reader.result || ''), mediaType: file.type })
-    reader.onerror = () => setError('Could not read that file.')
-    reader.readAsDataURL(file)
+    // Downscaled for the same reason the wizard downscales: posting the raw
+    // file exceeds the server-action body limit, which is rejected before the
+    // action runs and cannot be reported from there. This path predates the
+    // wizard and had the same latent fault.
+    const res = await prepareBrandImage(file, MAX_IMAGE_B64)
+    if ('error' in res) { setError(res.error); return }
+    setImage({ name: res.name, base64: res.dataBase64, mediaType: res.mediaType })
   }
 
-  const pickDocs = (e) => {
-    const files = [...(e.target.files || [])]
+  const pickDocs = async (e) => {
+    const files = [...(e.target.files || [])].slice(0, MAX_BRAND_DOCS)
+    e.target.value = ''
     if (!files.length) return
     setError('')
-    Promise.all(
-      files.slice(0, MAX_BRAND_DOCS).map(
-        (file) =>
-          new Promise((resolve) => {
-            const reader = new FileReader()
-            reader.onload = () => resolve({ name: file.name, text: String(reader.result || '') })
-            reader.onerror = () => resolve(null)
-            reader.readAsText(file)
-          }),
-      ),
-    ).then((read) => {
-      const kept = read.filter(Boolean)
-      if (kept.length < files.length) setError('Some files could not be read as text.')
-      setDocs(kept)
-    })
-    // Let the same file be chosen again after a reset.
-    e.target.value = ''
+    const { docs: read, errors } = await readBrandDocs(files)
+    setDocs(read)
+    if (errors.length) setError(errors.join(' '))
   }
 
   const run = async () => {
+    const size = brandPayloadSize(mode === 'markdown' ? docs : [], mode === 'image' && image ? [{ dataBase64: image.base64 }] : [])
+    if (size > MAX_TOTAL_PAYLOAD) {
+      setError(`That is ${formatBytes(size)}, over the ${formatBytes(MAX_TOTAL_PAYLOAD)} that can be sent at once.`)
+      return
+    }
     setError(''); setProposal(null); setBusy(true)
     try {
       const res = await proposeBrandTokens({

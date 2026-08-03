@@ -22,7 +22,15 @@ import {
   type BrandDoc,
   type MarkdownBrandFacts,
 } from '@/lib/brand/markdown-source'
-import { IMAGE_TYPES, MAX_IMAGES, MAX_IMAGE_B64, type BrandImageType } from '@/lib/brand/source-limits'
+import {
+  IMAGE_TYPES,
+  MAX_IMAGES,
+  MAX_IMAGE_B64,
+  MAX_TOTAL_PAYLOAD,
+  brandPayloadSize,
+  formatBytes,
+  type BrandImageType,
+} from '@/lib/brand/source-limits'
 // The one implementation of the WCAG maths, per the house rule against a second.
 import { contrastRatio } from '@/lib/builder/page-lint'
 
@@ -488,7 +496,7 @@ function sanitizeBrandImages(
     const b64 = (entry?.dataBase64 || '').replace(/^data:[^,]+,/, '')
     const mt = entry?.mediaType || ''
     if (!b64) continue
-    if (b64.length > MAX_IMAGE_B64) return { ok: false, error: 'One image is too large. Use images under 3MB.' }
+    if (b64.length > MAX_IMAGE_B64) return { ok: false, error: 'One image is too large even after the browser resized it.' }
     if (!IMAGE_TYPES.includes(mt as BrandImageType)) {
       return { ok: false, error: 'Use JPEG, PNG, GIF or WebP images.' }
     }
@@ -513,6 +521,15 @@ export async function aiGenerateBrand(args: {
   if (!docsIn.ok) return { ok: false, error: docsIn.error }
   const imagesIn = sanitizeBrandImages(args.images)
   if (!imagesIn.ok) return { ok: false, error: imagesIn.error }
+
+  // The framework's own body limit rejects anything larger than this before the
+  // action is reached, so this check catches the narrow band between the two
+  // and, more usefully, guarantees a readable message for a caller that is not
+  // the wizard.
+  const posted = brandPayloadSize(docsIn.docs, imagesIn.images)
+  if (posted > MAX_TOTAL_PAYLOAD) {
+    return { ok: false, error: `The attachments total ${formatBytes(posted)}, over the ${formatBytes(MAX_TOTAL_PAYLOAD)} limit.` }
+  }
 
   const hasUrlSource = args.mode === 'github' ? Boolean(args.repoUrl?.trim()) : (args.urls ?? []).some((u) => u.trim())
   if (!hasUrlSource && docsIn.docs.length === 0 && imagesIn.images.length === 0) {
@@ -816,7 +833,7 @@ export async function proposeBrandTokens(args: {
       const b64 = (args.imageBase64 || '').replace(/^data:[^,]+,/, '')
       const mt = args.imageMediaType || ''
       if (!b64) return { ok: false, error: 'Upload an image to read the brand from.' }
-      if (b64.length > 5_600_000) return { ok: false, error: 'That image is too large. Use one under 3MB.' }
+      if (b64.length > MAX_IMAGE_B64) return { ok: false, error: 'That image is too large even after the browser resized it.' }
       if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mt)) {
         return { ok: false, error: 'Use a JPEG, PNG, GIF or WebP image.' }
       }

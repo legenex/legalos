@@ -27,7 +27,7 @@
 
 import type { BrandToken } from './tokens'
 import { GENERIC_FONT, type TokenProposal } from './extract-score'
-import { MAX_DOCS, MAX_DOC_CHARS, MAX_PROMPT_CHARS } from './source-limits'
+import { MAX_DOCS, MAX_DOC_CHARS, MAX_DOCS_TOTAL_CHARS, MAX_PROMPT_CHARS } from './source-limits'
 
 /** One uploaded document. `text` is the raw markdown. */
 export type BrandDoc = { name: string; text: string }
@@ -47,12 +47,17 @@ export const sanitizeBrandDocs = (
   if (raw.length > MAX_DOCS) return { ok: false, error: `Attach at most ${MAX_DOCS} documents.` }
 
   const docs: BrandDoc[] = []
+  let total = 0
   for (const entry of raw) {
     if (!entry || typeof entry !== 'object') return { ok: false, error: 'One of the documents was not readable.' }
     const { name, text } = entry as { name?: unknown; text?: unknown }
     if (typeof text !== 'string') return { ok: false, error: 'One of the documents had no text.' }
     if (text.length > MAX_DOC_CHARS) {
       return { ok: false, error: `${typeof name === 'string' ? name : 'A document'} is larger than ${Math.round(MAX_DOC_CHARS / 1000)}k characters.` }
+    }
+    total += text.length
+    if (total > MAX_DOCS_TOTAL_CHARS) {
+      return { ok: false, error: `The documents total more than ${Math.round(MAX_DOCS_TOTAL_CHARS / 1000)}k characters. Attach fewer of them.` }
     }
     if (!text.trim()) continue
     docs.push({

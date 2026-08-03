@@ -12,6 +12,17 @@ const nextConfig = {
   eslint: { ignoreDuringBuilds: true },
   experimental: {
     reactCompiler: false,
+    serverActions: {
+      // The brand wizard posts documents and downscaled images in one action,
+      // and Next rejects an oversized body with a 413 BEFORE the action runs -
+      // uncatchable server-side, and shown to the operator as an opaque
+      // "error occurred in the Server Components render". The default 1MB
+      // cannot carry a brand guideline plus a screenshot, so the ceiling is
+      // raised once, here, and every per-file limit in
+      // src/lib/brand/source-limits.ts is sized to add up to less than it.
+      // Keep the two in step: that file's BODY_LIMIT_BYTES mirrors this value.
+      bodySizeLimit: '4mb',
+    },
   },
   // Playwright drives a real Chromium binary and resolves it from its own
   // package directory at runtime. Bundling it would rewrite those paths and
