@@ -163,6 +163,97 @@ export const buildLogEvidenceId = (entry: BuildLogEntry, item: BuildLogItem, ev:
 
 export const ENTRIES: BuildLogEntry[] = [
   {
+    date: '2026-08-03',
+    title: 'Brand documents, a payload ceiling, and a delete that broke everything',
+    summary:
+      'Three pieces of work that shipped on 3 August and were never written up. The board carried nothing between 31 July and today, which is the failure this page exists to prevent, so they are recorded here from the commits and verified against the code rather than reconstructed from memory.',
+    items: [
+      {
+        title: 'Deleting anything failed, and the build log caused it',
+        status: 'shipped',
+        detail:
+          'The BuildLogComments migration created its table but not the matching foreign-key column on payload_locked_documents_rels. Payload clears a document\\u2019s locks as part of deleting it, and that query names every collection\\u2019s column in one WHERE clause, so a single missing column made deletes fail across the whole application: removing a Domain raised an error about a buildlog_comments_id column that does not exist. Deletes are transactional, so they rolled back cleanly and nothing was half-removed. Added the column, key and index, mirroring the identical fix Media needed in May. Verified against the live database inside a rolled-back transaction: up applies, re-runs clean, the failing query shape now plans, and down reverses.',
+        files: ['src/migrations/20260803_120000_locked_documents_buildlog_comments_rel.ts', 'src/migrations/index.ts'],
+      },
+      {
+        title: 'The same omission had shipped twice, so it is now checked',
+        status: 'shipped',
+        detail:
+          'Media needed this exact fix in May and the build-log comments repeated it, which makes it a pattern rather than an accident. System health now compares Payload\\u2019s collection list against the columns that actually exist on the lock table and reports the gap. The next time someone adds a collection and forgets the relationship column, it shows up as a named check rather than as an unrelated delete failing somewhere else in the product.',
+        files: ['src/lib/system-health/checks.ts', 'src/lib/system-health/index.ts'],
+        evidence: [
+          {
+            label: 'The locked-documents check',
+            path: '/admin/settings/system',
+          },
+        ],
+      },
+      {
+        title: 'A brand can be read from its own guidelines',
+        status: 'shipped',
+        detail:
+          'Until now a brand could be read from a URL or an image, and both are inference: a render samples what covers the most pixels, an image asks a model what it sees. A brand guideline that says "Primary: #0B1F3A" is not inference, and it was the one source the extractor could not read. Markdown documents are now a source in both places brands are built, with precedence documents over scraped over generated. Understood formats are labelled lines, markdown tables, CSS custom properties and JSON token exports, in hex, three-digit hex and rgb(). Role labels are matched most-specific-first, so "text on primary", "secondary text" and "card background" are not misread as primary, accent and page background. Status colours are reported and deliberately not applied, because success and danger are fixed across brands. Unlabelled or contradictory values are reported rather than guessed at.',
+        files: ['src/lib/brand/markdown-source.ts', 'src/app/(app)/admin/(top)/brands/brand-identities/actions.ts'],
+        evidence: [
+          {
+            label: 'Reading a brand from a document',
+            path: '/admin/brands/brand-identities',
+          },
+        ],
+      },
+      {
+        title: 'The documents are parsed, not handed to the model',
+        status: 'shipped',
+        detail:
+          'Passing markdown to the model and asking it to pull the colours out would reintroduce the near-miss hex the whole feature exists to remove. Every hard value is taken deterministically first and re-applied over the model\\u2019s answer afterwards; the model only ever sees the prose, for the things a document states in sentences. That is also what makes an uploaded file unable to steer the result: its values are fixed before the model runs and restored after it returns, so a document instructing the model to use red changes nothing. One mapping rule had to change with it. The scrape mapper only accepted a near-white card surface, which is right for a scrape and wrong for a document, because a dark brand stating "Card surface: #151B2B" means it. Stated surfaces are kept now and refused only when indistinguishable from their own backdrop, at a cutoff that was measured rather than guessed.',
+        files: ['src/lib/brand/markdown-source.ts', 'src/lib/brand/extract-score.ts'],
+      },
+      {
+        title: 'The wizard posted more than a server action can carry',
+        status: 'shipped',
+        detail:
+          'Attaching a document and a screenshot together failed with a bare server render error. The cause was mine: the framework caps a server action body at 1MB by default, and the limits set for images and documents were internally consistent while being unable to cross that transport. The framework rejects an oversized body before the action runs, so no server code could catch it or explain it. Fixed at the cause rather than by raising the ceiling and hoping. Images are downscaled in the browser to 1568 pixels, which is the largest size the vision model reads before resizing anyway, turning a 3.8MB post into 305KB; the original was spending bandwidth and tokens on detail the model discards. Transparency is preserved for logos by keeping PNG where it fits and compositing on white rather than black where it does not. Every limit now derives from one stated budget so the numbers cannot drift apart again, and the client refuses an over-budget selection by name while showing a running total, so the limit is visible before it is hit. The server keeps its own check for callers that are not the wizard. This also fixed the same latent fault in the older image extractor, which had always posted the raw file and would have failed on anything over roughly 700KB.',
+        files: ['src/lib/brand/source-limits.ts', 'src/components/builder/brand/downscale-image.ts', 'src/components/builder/brand/BrandModule.tsx', 'next.config.mjs'],
+      },
+      {
+        title: 'Nothing reached the board for three days',
+        status: 'shipped',
+        detail:
+          'Twenty-one commits were logged on 31 July and three more landed on 3 August with no entry at all, so the newest thing on the board was four days behind the code and the gap was found by being asked about it rather than by the board. Written up now from the commits and checked against the code: the migration is registered, the health check is wired, and all three new modules are present. The lesson is the same one this page keeps making: work that is not recorded reads as work that did not happen.',
+        files: ['src/lib/buildlog.ts'],
+      },
+    ],
+    verification: [
+      {
+        label: 'The migration is registered and reversible',
+        state: 'verified',
+        detail:
+          'Applied against the live database inside a rolled-back transaction, so the check cost nothing. Up applies, a second run is clean, the query shape that was failing now plans, and down reverses. Confirmed again here that the file is in the migration index, which is what actually runs rather than the directory listing.',
+      },
+      {
+        label: 'The document parser against real and hostile input',
+        state: 'verified',
+        detail:
+          'Standalone harnesses over prose, markdown tables, CSS custom properties, JSON token exports, dark and light brands, contradictory values, hostile instructions and empty input. 42 parser assertions and 17 mapping assertions, all passing.',
+      },
+      {
+        label: 'The payload budget closes',
+        state: 'verified',
+        detail:
+          'The arithmetic leaves 1MB of margin inside the transport limit, and the exact combination that used to fail now posts. Downscaling was measured rather than assumed: 3.8MB becomes 305KB.',
+      },
+      {
+        label: 'All three pieces still present in the deployed code',
+        state: 'verified',
+        detail:
+          'Checked while writing this entry rather than trusted from the commit messages: the migration is in the index, checkLockedDocumentRels is in the health checks, and markdown-source, source-limits and downscale-image all exist at the sizes their commits describe.',
+      },
+    ],
+    openIssues: [
+      'The board went four days without an entry. Nothing enforces that a commit touching src/ has a corresponding item, so the same silence can happen again.',
+    ],
+  },
+  {
     date: '2026-07-31',
     title: 'Brand extraction, screenshot capture, and a handbook',
     summary:
@@ -1229,6 +1320,54 @@ export const ENTRIES: BuildLogEntry[] = [
     ],
     openIssues: [
       'Advertorials were not touched. They have the same brandless-authoring shape and will need the same treatment.',
+    ],
+  },
+  {
+    date: '2026-07-27',
+    title: 'The Agent Plan board and the review agents behind it',
+    summary:
+      'Backfilled. This shipped three days before the build log existed, which is why it was never written up, and it stayed invisible until a coverage check went looking. It is on the sidebar, so a board that omitted it was describing a smaller product than the one people use.',
+    items: [
+      {
+        title: 'A live board for the audit findings',
+        status: 'shipped',
+        detail:
+          'The standing audit produced 50 confirmed findings across the codebase. /admin/plan turns that into a surface: which finding belongs to which subsystem reviewer, and what each one is currently doing. Assignments are generated from the audit rather than typed by hand, so the board cannot disagree with the document it came from. It is restricted to super admins, because it describes the state of the code rather than the state of a tenant.',
+        files: ['src/app/(app)/admin/(top)/plan/page.tsx', 'src/app/(app)/admin/(top)/plan/PlanBoard.tsx', 'src/lib/agent-plan/plan.ts'],
+        evidence: [
+          {
+            label: 'The plan board',
+            path: '/admin/plan',
+          },
+        ],
+      },
+      {
+        title: 'Status is one file per agent, so concurrent writers cannot collide',
+        status: 'shipped',
+        detail:
+          'Runtime status is written as a separate file per agent rather than one shared document. Several agents report at once, and a shared file would mean a read, a change and a write racing each other, where the last writer silently discards whatever landed in between. Deliberately not stored as normal application data: it is a development surface with no tenant meaning, and making it one would have cost a migration and put engineering bookkeeping inside customer records.',
+        files: ['src/lib/agent-plan/store.ts', 'src/app/api/legalos/agent-plan/route.ts'],
+      },
+      {
+        title: 'Sixteen subsystem reviewers, checked in',
+        status: 'shipped',
+        detail:
+          'Fifteen reviewers scoped to specific paths, plus an adversarial verifier whose only job is to try to refute a reported finding before anyone acts on it. They are committed rather than kept as personal setup, so a review of the lead pipeline is the same review whoever runs it, and a finding has to survive someone actively trying to kill it before it becomes work.',
+        files: ['.claude/agents/'],
+      },
+    ],
+    verification: [
+      {
+        label: 'The board reads the audit rather than a copy of it',
+        state: 'verified',
+        detail: 'Assignments are generated from the audit document, so the two cannot drift apart.',
+      },
+      {
+        label: 'Backfilled from the commit, not from memory',
+        state: 'verified',
+        detail:
+          'Written from the commit and its files, and the routes were confirmed to still exist. This is a reconstruction of work that shipped before the board did, and it is labelled as one.',
+      },
     ],
   },
   {

@@ -10,6 +10,7 @@
     "start": "cross-env NODE_OPTIONS=--no-deprecation next start",
     "lint": "next lint",
     "lint:tokens": "node scripts/lint-brand-tokens.mjs",
+    "check:buildlog": "node --experimental-strip-types scripts/check-buildlog-coverage.ts",
     "check:handbook": "node --experimental-strip-types scripts/check-handbook-routes.ts",
     "test:brand": "node --experimental-strip-types scripts/test-brand-extract.ts",
     "typecheck": "tsc --noEmit",
