@@ -13,13 +13,80 @@ import {
 } from 'lucide-react'
 import { T, genId, brandShortName } from '../ui'
 import { relativeLuminance } from '@/lib/builder/page-lint'
-import { onPrimaryText } from '@/lib/builder/color-system'
+import { onPrimaryText, getSafeTextColor, getSafeMutedColor, rgbToHsl, hslToHex, parseHex } from '@/lib/builder/color-system'
 import { QuizRuntime } from '@/components/public/quiz/QuizRuntime'
 
 // A template's canvas is "dark" when its luminance is below the midpoint.
 // Replaces the brittle canvas === '#0f172a' string-equality that only
 // recognised one specific hex and broke for any brand-driven canvas.
 const tokensAreDark = (tokens) => (relativeLuminance(tokens?.canvas) ?? 1) < 0.5
+
+/**
+ * Build a template's palette FROM THE BRAND, keeping only its character.
+ *
+ * The templates used to carry fixed hex values, so a landing page rendered in
+ * slate and indigo whatever brand it was deployed under. A navy-and-gold brand
+ * came out purple, which is the opposite of what deploying one page across many
+ * brands is for: the template is meant to decide the SHAPE, and the brand the
+ * COLOUR.
+ *
+ * What survives from the template is its mood - whether the hero sits on a dark
+ * ground or a light one, whether it carries a gradient, and its typography. The
+ * colours themselves are the brand's, and every text colour is derived against
+ * the surface it will actually sit on rather than assumed, so a light brand in
+ * a dark template cannot produce white on white.
+ */
+/**
+ * Re-light a brand colour to a TARGET lightness, keeping its hue.
+ *
+ * Shifting by a fixed delta was wrong: a brand whose primary is already dark,
+ * like a #0F1E3D navy, clamps straight to pure black and the brand disappears
+ * into a colour it never chose. Setting the lightness instead means a navy
+ * brand gets a deep navy ground and a burgundy brand a deep burgundy, which is
+ * what makes the dark template still read as that brand rather than as the
+ * absence of one.
+ *
+ * A brand with no saturation stays grey, and that is honest: it has not chosen
+ * a hue, so inventing one would be the bug.
+ */
+const atLightness = (hex, target) => {
+  const rgb = parseHex(hex)
+  if (!rgb) return hex
+  const [h, sat] = rgbToHsl(rgb)
+  return hslToHex(h, sat, Math.max(0, Math.min(1, target)))
+}
+
+const deriveTemplateTokens = (tpl, brand) => {
+  const base = tpl.tokens
+  const c = brand?.colors || {}
+  const primary = c.primary || base.canvas
+  const wantsDark = tokensAreDark(base)
+
+  // A dark template grounds itself in the brand's own primary rather than in a
+  // borrowed slate, so the darkness still reads as this brand.
+  const canvas = wantsDark ? atLightness(primary, 0.1) : c.background || base.canvas
+  const surface = wantsDark ? atLightness(primary, 0.17) : c.cardBg || base.surface
+  const text = getSafeTextColor(canvas).hex
+  const textMute = getSafeMutedColor(text, canvas).hex
+
+  // A gradient stays a gradient, built from the brand instead of from indigo.
+  const heroBg = base.heroBg
+    ? `linear-gradient(135deg, ${canvas} 0%, ${atLightness(primary, 0.2)} 60%, ${canvas} 100%)`
+    : undefined
+
+  return {
+    ...base,
+    canvas,
+    surface,
+    text,
+    textMute,
+    ...(heroBg ? { heroBg } : {}),
+    headlineFont: brand?.typography?.headlineFont
+      ? `"${brand.typography.headlineFont}", ${base.headlineFont}`
+      : base.headlineFont,
+    bodyFont: brand?.typography?.bodyFont ? `"${brand.typography.bodyFont}", ${base.bodyFont}` : base.bodyFont,
+  }
+}
 
 // ============================================================================
 // LANDING PAGE TEMPLATES
@@ -667,8 +734,10 @@ export const PREVIEW_BRAND_DEFAULT = {
  */
 export const LivePreview = ({ landingPage, brand, quizDepLabel, quiz, onEditSection, editable = true, quizCtx = null }) => {
   const tpl = TEMPLATES.find((t) => t.id === landingPage.templateId) || TEMPLATES[0]
-  const tk = tpl.tokens
   const previewBrand = brand || PREVIEW_BRAND_DEFAULT
+  // Derived per render rather than read off the template, so the page wears the
+  // brand it is deployed under instead of the palette it was authored in.
+  const tk = deriveTemplateTokens(tpl, previewBrand)
   const rootClass = editable ? 'lp-preview-root' : 'lp-preview-root lp-public-root'
   const frame = editable
     ? { borderRadius: 10, overflow: 'hidden', boxShadow: '0 8px 32px -12px rgba(0,0,0,0.4)', border: `1px solid ${T.border}` }
