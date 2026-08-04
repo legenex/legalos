@@ -31,6 +31,7 @@ import {
 } from '@/app/(app)/admin/(top)/quizzes/actions'
 import { buildQuizEmbedSnippet, QUIZ_EMBED_INCOMPLETE } from '@/lib/quiz-embed'
 import { selectableOptions } from '@/lib/selectable'
+import { BrandQuickEdit } from '../brand/BrandQuickEdit'
 import {
   DESTINATION_KEYS, DESTINATION_LABELS, resolveDestination, destinationOrigin, isSafeDestinationUrl,
 } from '@/lib/quiz-destinations'
@@ -346,7 +347,7 @@ const DestinationsPanel = ({ draft, brand, onChange }) => {
   </div>
 }
 
-const DeploymentEditor = ({ deployment, isDraft, quizzes, brands, onSave, onBack }) => {
+const DeploymentEditor = ({ deployment, isDraft, quizzes, brands, onBrandSaved, onSave, onBack }) => {
   const [draft, setDraft] = useState(deployment)
   const [dirty, setDirty] = useState(isDraft || false)
   const [tab, setTab] = useState('basics')
@@ -442,7 +443,16 @@ const DeploymentEditor = ({ deployment, isDraft, quizzes, brands, onSave, onBack
                 This deployment points at an archived quiz. Restore it on the Quizzes tab, or pick another. It is kept here rather than dropped so the reference is not lost silently.
               </div>}
             </div>
-            <div><Label>Brand</Label><Select value={draft.brandId} onChange={(e) => update({ brandId: e.target.value })}><option value="">- pick brand -</option>{brands.map((b) => <option key={b.id} value={b.id}>{b.displayName}</option>)}</Select></div>
+            <div><Label>Brand</Label>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Select value={draft.brandId} onChange={(e) => update({ brandId: e.target.value })}><option value="">- pick brand -</option>{brands.map((b) => <option key={b.id} value={b.id}>{b.displayName}</option>)}</Select>
+                </div>
+                {/* Beside the picker, because the moment you notice a colour is
+                    wrong is the moment you are looking at which brand is set. */}
+                <BrandQuickEdit brand={brands.find((b) => b.id === draft.brandId)} onSaved={onBrandSaved} align="right" />
+              </div>
+            </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
             <div>
@@ -617,7 +627,11 @@ const EmbedCodeModal = ({ deployment, onClose }) => {
 // ============================================================================
 // ORCHESTRATOR
 // ============================================================================
-export function QuizBuilderApp({ initialQuizzes, initialDeployments, brands }) {
+export function QuizBuilderApp({ initialQuizzes, initialDeployments, brands: initialBrands }) {
+  // Held locally so a brand edit made from inside the builder repaints the
+  // preview at once instead of after a reload.
+  const [brands, setBrands] = useState(initialBrands)
+  const onBrandSaved = (next) => setBrands((prev) => prev.map((b) => (b.siteId === next.siteId ? { ...b, ...next } : b)))
   const router = useRouter()
   const [tab, setTab] = useState('quizzes')
   const [quizScope, setQuizScope] = useState('active')
@@ -1117,7 +1131,7 @@ export function QuizBuilderApp({ initialQuizzes, initialDeployments, brands }) {
 
     {view === 'preview' && currentQuiz && <QuizPreviewView quiz={currentQuiz} brand={previewBrand} deployment={previewDep} brands={brands} deployments={deployments} onBackToBuilder={() => setView('builder')} />}
 
-    {view === 'deploymentEdit' && currentDeployment && <DeploymentEditor deployment={currentDeployment} isDraft={!!draftDeployment} quizzes={quizzes} brands={brands} onSave={persistDeployment} onBack={() => { setView('list'); setTab('deployments'); setDraftDeployment(null); setCurrentDeploymentId(null) }} />}
+    {view === 'deploymentEdit' && currentDeployment && <DeploymentEditor onBrandSaved={onBrandSaved} deployment={currentDeployment} isDraft={!!draftDeployment} quizzes={quizzes} brands={brands} onSave={persistDeployment} onBack={() => { setView('list'); setTab('deployments'); setDraftDeployment(null); setCurrentDeploymentId(null) }} />}
 
     {selectedNode && <NodeEditorModal
       node={selectedNode}

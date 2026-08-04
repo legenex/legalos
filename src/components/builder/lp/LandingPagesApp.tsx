@@ -22,6 +22,7 @@ import {
   TEMPLATES, ANGLES, SECTION_TYPES, SECTION_TYPE_META, SEED_SECTION_COPY, buildSeedSections,
   LivePreview, PREVIEW_BRAND_DEFAULT,
 } from './render'
+import { BrandQuickEdit } from '../brand/BrandQuickEdit'
 import { createLP, saveLP, cloneLP, deleteLP, saveDeployment, deleteDeployment, generateLPCopy, aiRewriteSection } from '@/app/(app)/admin/(top)/landing-pages/actions'
 
 // ============================================================================
@@ -589,12 +590,15 @@ const AINewLPWizard = ({ open, onClose, onCreate }) => {
 // ============================================================================
 // LANDING PAGE BUILDER (3-pane)
 // ============================================================================
-export const LandingPageBuilder = ({ landingPage, brands, quizDeployments, quizzes, onBack, onUpdate, onTogglePublish, onSetTemplate, onPreview }) => {
+export const LandingPageBuilder = ({ landingPage, brands, onBrandSaved, quizDeployments, quizzes, onBack, onUpdate, onTogglePublish, onSetTemplate, onPreview }) => {
   const [editingSectionId, setEditingSectionId] = useState(null)
   const [addOpen, setAddOpen] = useState(false)
   const [galleryOpen, setGalleryOpen] = useState(false)
   const [previewBrandId, setPreviewBrandId] = useState(brands[0]?.id || null)
   const previewBrand = brands.find((b) => b.id === previewBrandId) || PREVIEW_BRAND_DEFAULT
+  // Sits with the preview-brand selector, which is where someone looking at a
+  // wrong colour is already standing.
+  const brandEditor = <BrandQuickEdit brand={brands.find((b) => b.id === previewBrandId)} onSaved={onBrandSaved} />
   const matchingQuizDeps = quizDeployments.filter((qd) => qd.brandId === previewBrandId)
   const [previewQuizDepId, setPreviewQuizDepId] = useState(matchingQuizDeps[0]?.id || null)
   useEffect(() => {
@@ -701,6 +705,7 @@ export const LandingPageBuilder = ({ landingPage, brands, quizDeployments, quizz
                 toRecord: (b) => ({ id: b.id, label: b.displayName, status: b.status === 'archived' ? 'archived' : 'published' }),
               }).map((o) => <option key={o.id} value={o.id} disabled={o.disabled}>{o.label}{o.archived ? ' - ARCHIVED' : ''}</option>)}
             </Select>
+            {brandEditor}
             <div style={{ fontSize: 10.5, color: T.textMute, marginTop: 6, lineHeight: 1.5 }}>The page is brandless. Pick a brand here just to see how it will render. Brand and domain attach at deploy time.</div>
             {previewBrandId && (
               <div style={{ marginTop: 10 }}>
@@ -916,7 +921,12 @@ const LPPreviewModal = ({ previewState, landingPages, brands, lpDeployments, qui
 // ============================================================================
 // ORCHESTRATOR
 // ============================================================================
-export function LandingPagesApp({ initialLandingPages, initialDeployments, brands, domains, quizzes = [], quizDeployments = [] }) {
+export function LandingPagesApp({ initialLandingPages, initialDeployments, brands: initialBrands, domains, quizzes = [], quizDeployments = [] }) {
+  // Held locally so an edit made from inside the builder repaints the preview
+  // at once. The server copy is authoritative on the next load; this only
+  // closes the gap between saving and seeing.
+  const [brands, setBrands] = useState(initialBrands)
+  const onBrandSaved = (next) => setBrands((prev) => prev.map((b) => (b.siteId === next.siteId ? { ...b, ...next } : b)))
   const router = useRouter()
   const [landingPages, setLandingPages] = useState(initialLandingPages)
   const [lpDeployments, setLpDeployments] = useState(initialDeployments)
@@ -1053,6 +1063,7 @@ export function LandingPagesApp({ initialLandingPages, initialDeployments, brand
   if (subView === 'lp_builder' && editingLP) {
     body = (
       <LandingPageBuilder
+        onBrandSaved={onBrandSaved}
         landingPage={editingLP}
         brands={brands}
         quizDeployments={quizDeployments}
