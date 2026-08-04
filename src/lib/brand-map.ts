@@ -75,8 +75,12 @@ export function siteToBrand(s: Record<string, unknown>, domainList: DomainLite[]
   // them), and reading both is how two stores drift apart.
   let tokens: ReturnType<typeof resolveBrandTokens> | null = null
   let missingTokens: string[] = []
-  try {
-    tokens = resolveBrandTokens({
+
+  // Built once so the catch below can retry with the SAME authored values and
+  // patch only what was missing. Rebuilding a neutral set from scratch there is
+  // what threw away a brand's real colours because one unrelated token was
+  // absent.
+  const authored = {
       primary: str(brand.primary),
       primary_ink: str(brand.primary_ink),
       accent: str(brand.accent),
@@ -94,17 +98,44 @@ export function siteToBrand(s: Record<string, unknown>, domainList: DomainLite[]
       radius: str(brand.radius),
       radius_lg: str(brand.radius_lg),
       shadow: str(brand.shadow),
-    })
+  }
+
+  try {
+    tokens = resolveBrandTokens(authored)
   } catch (err) {
     missingTokens = err instanceof MissingBrandTokenError ? err.missing : ['primary']
-    // A brand with no colours set resolves to a TRUE NEUTRAL grey, no hue at
-    // all, deliberately.
-    // The builders need something to render, but an invented brand palette is
-    // the bug: grey reads as "this brand has no colours yet", where a blue
-    // would read as a finished brand that happens to be wrong. Even a blue-grey
-    // could pass for a deliberate choice, so the placeholder carries zero
-    // saturation. `incomplete` below is what the UI should surface.
-    tokens = resolveBrandTokens({ primary: '#737373', cta: '#737373', bg: '#f5f5f5', ink: '#171717' })
+
+    // Substitute ONLY the tokens that are actually missing, and keep every
+    // value the brand really set.
+    //
+    // This used to replace the whole palette with grey the moment any single
+    // required token was absent, which meant a brand with a perfectly good
+    // navy primary rendered entirely grey because nothing had written its
+    // background. Saving from the editor could not fix it either, so it looked
+    // exactly like a save that silently reverted.
+    //
+    // The substitutes are a TRUE NEUTRAL, no hue at all, and that part was
+    // right: grey reads as "not set yet", where an invented blue reads as a
+    // finished brand that happens to be wrong. `incomplete` and `missingTokens`
+    // are what the UI surfaces so the gap is visible rather than merely absent.
+    const NEUTRAL: Record<string, string> = {
+      primary: '#737373',
+      cta: '#737373',
+      bg: '#f5f5f5',
+      ink: '#171717',
+    }
+    const patched: Record<string, string | undefined> = { ...authored }
+    for (const key of missingTokens) {
+      if (NEUTRAL[key]) patched[key] = NEUTRAL[key]
+    }
+
+    try {
+      tokens = resolveBrandTokens(patched)
+    } catch {
+      // A second failure means the missing list did not describe the whole
+      // problem. Falling all the way back is right here, and only here.
+      tokens = resolveBrandTokens(NEUTRAL)
+    }
   }
 
   const v = tokens.vars

@@ -48,10 +48,22 @@ const slugify = (input: string): string =>
 
 // Strip transient client-only linkage fields (siteId/siteSlug and any __ keys
 // like __domains/__domainCount) before persisting the JSON.
+/**
+ * Keys that siteToBrand COMPUTES on read and must never be written back.
+ *
+ * The editor loads a mapped brand, which carries these alongside the authored
+ * values, and saving returned the whole object. That persisted derived data as
+ * if a person had chosen it: when a brand was missing a required token and
+ * resolved to grey, the grey was written into the record and became
+ * indistinguishable from a real choice. Stored derived values also go stale the
+ * moment the resolver changes, which is the usual reason not to store them.
+ */
+const DERIVED_KEYS = new Set(['tokens', 'contrast', 'incomplete', 'missingTokens', 'status'])
+
 const cleanBrand = (brand: Record<string, unknown>): Record<string, unknown> => {
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(brand ?? {})) {
-    if (k === 'siteId' || k === 'siteSlug' || k.startsWith('__')) continue
+    if (k === 'siteId' || k === 'siteSlug' || k.startsWith('__') || DERIVED_KEYS.has(k)) continue
     out[k] = v
   }
   return out
@@ -78,6 +90,18 @@ const brandTokensFromIdentity = (brand: Record<string, unknown>): Record<string,
   return {
     primary: isHex(colors.primary) ? colors.primary.trim() : SITE_BRAND_DEFAULT.primary,
     accent: isHex(colors.accent) ? colors.accent.trim() : SITE_BRAND_DEFAULT.accent,
+    // cta and bg are REQUIRED by the token resolver, alongside primary and ink.
+    // They were not written here, so every brand saved from this editor was
+    // missing two of the four and resolved to grey no matter what the user
+    // typed. Saving again could not help, which is what made it look like the
+    // save was reverting.
+    //
+    // cta falls back to primary because a brand that has not chosen a separate
+    // action colour is saying its action colour is its brand colour. bg falls
+    // back to the same light page ground as surface, which is what the brands
+    // that already render correctly happen to have.
+    cta: isHex(colors.cta) ? colors.cta.trim() : isHex(colors.primary) ? colors.primary.trim() : SITE_BRAND_DEFAULT.primary,
+    bg: isHex(colors.cardBg) ? (colors.cardBg as string).trim() : SITE_BRAND_DEFAULT.surface,
     // brand_identity.colors.background is the DARK card backdrop in the
     // funnel-artifact model — the colour the quiz / advertorial / LP
     // preview paint behind their cards. It maps to Site.brand.ink (which
