@@ -213,7 +213,28 @@ export const resolveBrandTokens = (
   const accentInk = hex(b.accent_ink) ?? getSafeTextColor(accent).hex
   const ctaInk = hex(b.cta_ink) ?? getSafeTextColor(cta).hex
   const inkMuted = hex(b.ink_muted) ?? getSafeMutedColor(ink, bg).hex
-  const border = hex(b.border) ?? shiftLightness(bg, mode === 'dark' ? 0.12 : -0.12)
+  // Two borders, because one token was being asked to do two jobs at two
+  // different standards.
+  //
+  // A hairline separating sections only has to be PERCEPTIBLE. Holding it to
+  // the 3:1 that WCAG requires for control boundaries failed every brand in the
+  // system on the same pair, and a publish gate that always fails is a gate
+  // nobody can use - it gets bypassed, and then it protects nothing.
+  //
+  // The boundary of a control a person has to find, an input or a button edge,
+  // genuinely does need 3:1. That is what borderStrong is for, and it is
+  // derived rather than authored so it cannot be set to something invisible.
+  const HAIRLINE_MIN = 1.2
+  const authoredBorder = hex(b.border)
+  const steppedBorder = shiftLightness(bg, mode === 'dark' ? 0.12 : -0.12)
+  const border =
+    authoredBorder && (contrastRatio(authoredBorder, bg) ?? 0) >= HAIRLINE_MIN ? authoredBorder : steppedBorder
+
+  // Walked away from the page until it clears 3:1, rather than guessed at.
+  let borderStrong = border
+  for (let step = 1; step <= 12 && (contrastRatio(borderStrong, bg) ?? 0) < CONTRAST_MIN_LARGE; step += 1) {
+    borderStrong = shiftLightness(bg, (mode === 'dark' ? 0.06 : -0.06) * step)
+  }
 
   const fontHeading = String(b.font_heading ?? 'Inter')
   const fontBody = String(b.font_body ?? 'Inter')
@@ -235,6 +256,7 @@ export const resolveBrandTokens = (
     '--site-ink': ink,
     '--site-ink-muted': inkMuted,
     '--site-border': border,
+    '--site-border-strong': borderStrong,
     '--site-font-heading': `${fontHeading},system-ui,sans-serif`,
     '--site-font-body': `${fontBody},system-ui,sans-serif`,
     '--site-radius': `${radiusBase}px`,
@@ -312,7 +334,10 @@ export const resolveBrandTokens = (
     check('Text on primary', primaryInk, primary, CONTRAST_MIN_BODY),
     check('Text on call to action', ctaInk, cta, CONTRAST_MIN_BODY),
     check('Text on accent', accentInk, accent, CONTRAST_MIN_BODY),
-    check('Border against background', border, bg, CONTRAST_MIN_LARGE),
+    // Held to perceptibility, which is what a hairline is for.
+    check('Section hairline against background', border, bg, HAIRLINE_MIN),
+    // Held to the real standard, because this is what outlines a control.
+    check('Control border against background', borderStrong, bg, CONTRAST_MIN_LARGE),
   ]
 
   const css = Object.entries(vars)
