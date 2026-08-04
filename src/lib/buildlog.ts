@@ -169,6 +169,26 @@ export const ENTRIES: BuildLogEntry[] = [
       'Reported as "I change the colours, click save, and it reverts". It was not reverting. The value was written every time and then thrown away on the way back out, by two bugs that only bite together.',
     items: [
       {
+        title: 'Templates imposed a palette, so no brand ever showed through',
+        status: 'shipped',
+        detail:
+          'Each landing page template carried its own canvas, surface, text, muted and hero gradient as fixed hex values, so a navy and gold brand rendered in slate and indigo. A template now declares only its mood, dark ground or light and gradient hero or flat, and takes every colour from the brand. Mood is declared rather than read back out of the canvas hex, because inferring it only worked while templates carried hexes and carrying them is what caused this. The quiz templates had the same fault in three places, a tan button border, a darker gold check and a cream paper fallback, imposing a warmth no brand had chosen. Render scope drops from 158 hardcoded colours to 140 and the budget is ratcheted so it cannot climb back.',
+        files: ['src/components/builder/lp/render.tsx', 'src/components/builder/quiz/templates.tsx'],
+        evidence: [
+          {
+            label: 'A deployment wearing its brand',
+            path: '/admin/landing-pages',
+          },
+        ],
+      },
+      {
+        title: 'The brand colour was painted as text onto a ground made from it',
+        status: 'shipped',
+        detail:
+          'Eyebrows, stat figures, trust icons and the highlighted headline phrase used the brand primary directly. On a dark template that ground is derived from the primary, so a navy brand wrote navy on navy and half a headline was simply absent from the live page. Twelve places in one file. There is now a derived accent that walks away from the ground in lightness until it clears 4.5 to 1, keeping hue so the highlight still reads as the brand. The first attempt at the ground itself was wrong in the same family: shifting lightness by a fixed delta clamped an already dark navy to pure black, losing the brand entirely, so it re-lights to a target instead.',
+        files: ['src/components/builder/lp/render.tsx'],
+      },
+      {
         title: 'The save wrote two of the four required tokens',
         status: 'shipped',
         detail:
