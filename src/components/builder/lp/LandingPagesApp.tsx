@@ -23,6 +23,7 @@ import {
   LivePreview, PREVIEW_BRAND_DEFAULT,
 } from './render'
 import { BrandQuickEdit } from '../brand/BrandQuickEdit'
+import { SECTION_TONES } from './render'
 import { createLP, saveLP, cloneLP, deleteLP, saveDeployment, deleteDeployment, generateLPCopy, aiRewriteSection } from '@/app/(app)/admin/(top)/landing-pages/actions'
 
 // ============================================================================
@@ -151,6 +152,40 @@ const SectionEditorModal = ({ open, section, onClose, onSave, onDelete }) => {
   const [aiBusy, setAiBusy] = useState(false)
   const [aiError, setAiError] = useState(null)
   const [aiResult, setAiResult] = useState(null)
+
+  // Rendered inside the manual tab below. Kept here so the draft setter is in
+  // scope without threading it through another component.
+  const tonePicker = draft ? (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: T.textMute, marginBottom: 5 }}>
+        Section colour
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {SECTION_TONES.map((t) => {
+          const active = (draft.tone || 'default') === t.id
+          return (
+            <button
+              key={t.id}
+              onClick={() => setDraft({ ...draft, tone: t.id })}
+              title={t.desc}
+              style={{
+                padding: '6px 11px', borderRadius: 6, cursor: 'pointer', fontSize: 12,
+                backgroundColor: active ? T.bgElev2 : T.bgElev,
+                border: `1px solid ${active ? T.primary : T.border}`,
+                color: active ? T.text : T.textMute,
+              }}
+            >
+              {t.label}
+            </button>
+          )
+        })}
+      </div>
+      <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 5, lineHeight: 1.45 }}>
+        Colours come from the brand, so a section can be re-toned without leaving it. Text is derived against
+        whichever ground you pick, which is why there is no free colour field here.
+      </div>
+    </div>
+  ) : null
 
   useEffect(() => {
     if (section) {
@@ -355,7 +390,7 @@ const SectionEditorModal = ({ open, section, onClose, onSave, onDelete }) => {
         </div>
 
         <div style={{ padding: 22, overflowY: 'auto', flex: 1 }}>
-          {tab === 'manual' && <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>{renderManualEditor()}</div>}
+          {tab === 'manual' && <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>{tonePicker}{renderManualEditor()}</div>}
           {tab === 'ai' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>

@@ -52,6 +52,40 @@ const tokensAreDark = (tokens) => (tokens?.mood ? tokens.mood === 'dark' : (rela
  * A brand with no saturation stays grey, and that is honest: it has not chosen
  * a hue, so inventing one would be the bug.
  */
+/**
+ * Resolve a section's chosen TONE into real colours.
+ *
+ * Sections can be recoloured, but the choice is a role rather than a hex. Give
+ * someone a colour picker per section and a landing page becomes eight
+ * unrelated colours, half of them unreadable; give them "page", "card",
+ * "brand" or "inverted" and every choice still comes out of the brand and
+ * every text colour is derived against the ground it lands on. The operator
+ * gets the control they asked for and cannot produce white on white with it.
+ */
+export const SECTION_TONES = [
+  { id: 'default', label: 'Page', desc: 'The page ground' },
+  { id: 'surface', label: 'Card', desc: 'One step off the page' },
+  { id: 'brand', label: 'Brand', desc: 'Filled with the brand colour' },
+  { id: 'inverse', label: 'Inverted', desc: 'Flipped light or dark' },
+]
+
+const toneFor = (tone, tk, brand) => {
+  const primary = brand?.colors?.primary || tk.canvas
+  if (tone === 'brand') {
+    const bg = primary
+    return { bg, text: getSafeTextColor(bg).hex, muted: getSafeMutedColor(getSafeTextColor(bg).hex, bg).hex }
+  }
+  if (tone === 'inverse') {
+    const dark = (relativeLuminance(tk.canvas) ?? 1) < 0.5
+    const bg = atLightness(primary, dark ? 0.95 : 0.1)
+    return { bg, text: getSafeTextColor(bg).hex, muted: getSafeMutedColor(getSafeTextColor(bg).hex, bg).hex }
+  }
+  if (tone === 'surface') {
+    return { bg: tk.surface, text: getSafeTextColor(tk.surface).hex, muted: getSafeMutedColor(getSafeTextColor(tk.surface).hex, tk.surface).hex }
+  }
+  return { bg: tk.canvas, text: tk.text, muted: tk.textMute }
+}
+
 const atLightness = (hex, target) => {
   const rgb = parseHex(hex)
   if (!rgb) return hex
@@ -781,7 +815,14 @@ export const LivePreview = ({ landingPage, brand, quizDepLabel, quiz, onEditSect
         const Renderer = SECTION_RENDERERS[section.type]
         if (!Renderer) return null
         const filled = { ...section, copy: fillAll(section.copy, previewBrand) }
-        return <Renderer key={section.id} section={filled} tokens={tk} brand={previewBrand} quizDepLabel={quizDepLabel} quiz={quiz} onEditSection={editable ? onEditSection : undefined} quizCtx={quizCtx} />
+        // A section's tone overrides only the ground and the text derived from
+        // it. Everything else still comes from the brand, so a recoloured
+        // section is a variation on the brand rather than an exception to it.
+        const tone = toneFor(section.tone || 'default', tk, previewBrand)
+        const sectionTokens = section.tone && section.tone !== 'default'
+          ? { ...tk, canvas: tone.bg, surface: tone.bg === tk.surface ? tk.canvas : tk.surface, text: tone.text, textMute: tone.muted, heroBg: tone.bg }
+          : tk
+        return <Renderer key={section.id} section={filled} tokens={sectionTokens} brand={previewBrand} quizDepLabel={quizDepLabel} quiz={quiz} onEditSection={editable ? onEditSection : undefined} quizCtx={quizCtx} />
       })}
       <style>{`
         .lp-preview-root section:hover .lp-section-overlay,
