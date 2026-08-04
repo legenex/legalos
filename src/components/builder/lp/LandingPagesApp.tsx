@@ -24,6 +24,7 @@ import {
 } from './render'
 import { BrandQuickEdit } from '../brand/BrandQuickEdit'
 import { SECTION_TONES } from './render'
+import { contrastRatio } from '@/lib/builder/page-lint'
 import { createLP, saveLP, cloneLP, deleteLP, saveDeployment, deleteDeployment, generateLPCopy, aiRewriteSection } from '@/app/(app)/admin/(top)/landing-pages/actions'
 
 // ============================================================================
@@ -155,34 +156,94 @@ const SectionEditorModal = ({ open, section, onClose, onSave, onDelete }) => {
 
   // Rendered inside the manual tab below. Kept here so the draft setter is in
   // scope without threading it through another component.
+  //
+  // These are free colour fields, not a list of presets. The contrast figure
+  // beside them warns rather than blocks: the judgement is the operator's, and
+  // a tool that silently corrects a colour someone picked on purpose is worse
+  // than one that tells them plainly what they have done.
+  const secColors = draft?.colors || {}
+  const setColor = (k, v) => {
+    const next = { ...secColors }
+    if (v) next[k] = v
+    else delete next[k]
+    setDraft({ ...draft, colors: Object.keys(next).length ? next : undefined })
+  }
+
+  const effBg = secColors.bg || null
+  const effText = secColors.text || null
+  const ratio = effBg && effText ? contrastRatio(effText, effBg) : null
+  const ratioBad = ratio !== null && ratio < 4.5
+
+  const COLOR_FIELDS = [
+    { key: 'bg', label: 'Background', hint: 'Leave empty to use the brand' },
+    { key: 'text', label: 'Text', hint: 'Derived from the background if empty' },
+    { key: 'surface', label: 'Cards', hint: 'Panels inside this section' },
+    { key: 'accent', label: 'Accent', hint: 'Eyebrow, stats, highlighted words' },
+  ]
+
   const tonePicker = draft ? (
     <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: T.textMute, marginBottom: 5 }}>
-        Section colour
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+        <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: T.textMute }}>
+          Section colours
+        </div>
+        {Object.keys(secColors).length > 0 && (
+          <button
+            onClick={() => setDraft({ ...draft, colors: undefined, tone: 'default' })}
+            style={{ background: 'none', border: 'none', color: T.textMute, fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}
+          >
+            Reset to brand
+          </button>
+        )}
       </div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {SECTION_TONES.map((t) => {
-          const active = (draft.tone || 'default') === t.id
-          return (
-            <button
-              key={t.id}
-              onClick={() => setDraft({ ...draft, tone: t.id })}
-              title={t.desc}
-              style={{
-                padding: '6px 11px', borderRadius: 6, cursor: 'pointer', fontSize: 12,
-                backgroundColor: active ? T.bgElev2 : T.bgElev,
-                border: `1px solid ${active ? T.primary : T.border}`,
-                color: active ? T.text : T.textMute,
-              }}
-            >
-              {t.label}
-            </button>
-          )
-        })}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
+        {COLOR_FIELDS.map((f) => (
+          <div key={f.key}>
+            <div style={{ fontSize: 10, color: T.textMute, marginBottom: 3 }}>{f.label}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <input
+                type="color"
+                value={/^#[0-9a-fA-F]{6}$/.test(secColors[f.key] || '') ? secColors[f.key] : '#000000'}
+                onChange={(e) => setColor(f.key, e.target.value)}
+                style={{ width: 28, height: 24, padding: 0, border: `1px solid ${T.border}`, borderRadius: 4, background: 'none', cursor: 'pointer', flexShrink: 0 }}
+              />
+              <input
+                value={secColors[f.key] || ''}
+                onChange={(e) => setColor(f.key, e.target.value)}
+                placeholder="brand"
+                style={{ flex: 1, minWidth: 0, padding: '4px 7px', backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 4, color: T.text, fontSize: 11.5, fontFamily: '"JetBrains Mono", monospace' }}
+              />
+              {secColors[f.key] && (
+                <button onClick={() => setColor(f.key, null)} title="Back to the brand colour"
+                  style={{ background: 'none', border: 'none', color: T.textMute, cursor: 'pointer', padding: 2, lineHeight: 1, flexShrink: 0 }}>x</button>
+              )}
+            </div>
+            <div style={{ fontSize: 9.5, color: T.textLow, marginTop: 2 }}>{f.hint}</div>
+          </div>
+        ))}
       </div>
-      <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 5, lineHeight: 1.45 }}>
-        Colours come from the brand, so a section can be re-toned without leaving it. Text is derived against
-        whichever ground you pick, which is why there is no free colour field here.
+
+      {ratio !== null && (
+        <div style={{ marginTop: 8, padding: '6px 9px', borderRadius: 5, fontSize: 11,
+          backgroundColor: ratioBad ? `${T.danger}18` : `${T.success}15`,
+          border: `1px solid ${ratioBad ? T.danger + '55' : T.success + '44'}`,
+          color: ratioBad ? T.danger : T.textMute }}>
+          Text on background: {ratio.toFixed(2)}:1{' '}
+          {ratioBad ? '- below the 4.5:1 needed for body copy. Readable to you may not mean readable to everyone.' : '- passes for body copy.'}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 5, marginTop: 9, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 10, color: T.textLow }}>Or start from:</span>
+        {SECTION_TONES.map((t) => (
+          <button key={t.id} onClick={() => setDraft({ ...draft, tone: t.id, colors: undefined })} title={t.desc}
+            style={{ padding: '3px 8px', borderRadius: 5, cursor: 'pointer', fontSize: 10.5,
+              backgroundColor: (draft.tone || 'default') === t.id && !Object.keys(secColors).length ? T.bgElev2 : 'transparent',
+              border: `1px solid ${T.border}`, color: T.textMute }}>
+            {t.label}
+          </button>
+        ))}
       </div>
     </div>
   ) : null

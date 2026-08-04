@@ -69,6 +69,43 @@ export const SECTION_TONES = [
   { id: 'inverse', label: 'Inverted', desc: 'Flipped light or dark' },
 ]
 
+/**
+ * Apply a section's own colours over the brand-derived ones.
+ *
+ * Any of these may be set, and anything left unset stays derived from the
+ * brand, so a section that only overrides its background still gets brand
+ * typography and brand-correct everything else. Overriding is per property
+ * rather than all-or-nothing.
+ *
+ * These are FREE values, chosen deliberately: the builder shows a live contrast
+ * reading next to them and warns, rather than refusing. The judgement is the
+ * operator's to make, and a tool that silently corrects a colour someone picked
+ * on purpose is worse than one that tells them what they have done.
+ */
+const applySectionColors = (tk, colors) => {
+  if (!colors) return tk
+  const out = { ...tk }
+  if (colors.bg) {
+    out.canvas = colors.bg
+    out.heroBg = colors.bg
+    // The card still has to sit ON the chosen background, so it is re-derived
+    // rather than carried over from a ground that no longer exists.
+    out.surface = colors.surface || atLightness(colors.bg, (relativeLuminance(colors.bg) ?? 1) < 0.5 ? 0.17 : 0.97)
+  }
+  if (colors.surface) out.surface = colors.surface
+  if (colors.text) {
+    out.text = colors.text
+    out.textMute = getSafeMutedColor(colors.text, out.canvas).hex
+  } else if (colors.bg) {
+    // Background changed but text did not: derive it, or the previous text
+    // colour survives onto a ground it was never checked against.
+    out.text = getSafeTextColor(out.canvas).hex
+    out.textMute = getSafeMutedColor(out.text, out.canvas).hex
+  }
+  if (colors.accent) out.accentOn = colors.accent
+  return out
+}
+
 const toneFor = (tone, tk, brand) => {
   const primary = brand?.colors?.primary || tk.canvas
   if (tone === 'brand') {
@@ -819,9 +856,11 @@ export const LivePreview = ({ landingPage, brand, quizDepLabel, quiz, onEditSect
         // it. Everything else still comes from the brand, so a recoloured
         // section is a variation on the brand rather than an exception to it.
         const tone = toneFor(section.tone || 'default', tk, previewBrand)
-        const sectionTokens = section.tone && section.tone !== 'default'
+        const toned = section.tone && section.tone !== 'default'
           ? { ...tk, canvas: tone.bg, surface: tone.bg === tk.surface ? tk.canvas : tk.surface, text: tone.text, textMute: tone.muted, heroBg: tone.bg }
           : tk
+        // Explicit colours win over a tone, and both win over the brand.
+        const sectionTokens = applySectionColors(toned, section.colors)
         return <Renderer key={section.id} section={filled} tokens={sectionTokens} brand={previewBrand} quizDepLabel={quizDepLabel} quiz={quiz} onEditSection={editable ? onEditSection : undefined} quizCtx={quizCtx} />
       })}
       <style>{`
