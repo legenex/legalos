@@ -23,13 +23,34 @@ import { ENTRIES } from '../src/lib/buildlog.ts'
 const SINCE = process.argv.find((a) => /^\d{4}-\d{2}-\d{2}$/.test(a)) ?? '2026-07-27'
 const STRICT = process.argv.includes('--strict')
 
-/** Paths whose changes are shipped behaviour rather than bookkeeping. */
-const SHIPPED = /^(src\/|scripts\/|next\.config|package\.json|tailwind|payload\.config)/
+/**
+ * Paths whose changes are shipped behaviour rather than bookkeeping.
+ *
+ * package.json is deliberately absent. Adding a script to it is not something
+ * anyone using the product could notice, and counting it meant this check
+ * reported a gap every time it gained a script of its own. A dependency that
+ * does matter arrives with the source change that uses it, and that is what
+ * gets counted. A check that cries wolf trains people to ignore it, which would
+ * leave the board worse off than no check at all.
+ */
+const SHIPPED = /^(src\/|scripts\/|next\.config|tailwind|payload\.config)/
 /** The board and its own tooling. Editing these is the write-up, not the work. */
 const BOOKKEEPING = /^(src\/lib\/buildlog|src\/lib\/handbook|src\/app\/\(app\)\/admin\/\(top\)\/(buildlog|handbook)\/|scripts\/check-(buildlog|handbook))/
 
 const git = (...args: string[]): string =>
   execFileSync('git', args, { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })
+
+// The deploy directory on the server is a Plesk checkout target, not a clone,
+// so it has no .git and this check has nothing to compare against. That is not
+// a failure of the board; it is the wrong place to ask. Detected up front so
+// the run says so instead of dying inside a git call.
+try {
+  execFileSync('git', ['rev-parse', '--is-inside-work-tree'], { stdio: 'ignore' })
+} catch {
+  console.log('Not a git repository, so there is no commit history to compare the board against.')
+  console.log('Run this from a clone. The deployed copy is a checkout target and has no .git.')
+  process.exit(0)
+}
 
 // One line per commit: "<date> <sha>", newest first.
 const commits = git('log', `--since=${SINCE}`, '--format=%ad %H', '--date=short')
