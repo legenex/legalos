@@ -100,7 +100,12 @@ const brandTokensFromIdentity = (brand: Record<string, unknown>): Record<string,
     // action colour is saying its action colour is its brand colour. bg falls
     // back to the same light page ground as surface, which is what the brands
     // that already render correctly happen to have.
-    cta: isHex(colors.cta) ? colors.cta.trim() : isHex(colors.primary) ? colors.primary.trim() : SITE_BRAND_DEFAULT.primary,
+    // The editor offers ONE field, labelled "Primary / CTA", so primary is the
+    // only value a person can actually set here. Reading a stored cta back
+    // would preserve whatever an earlier bug left in it - which is exactly what
+    // kept a brand's buttons grey after its primary had been fixed to navy -
+    // and would silently diverge from the field the user is looking at.
+    cta: isHex(colors.primary) ? colors.primary.trim() : SITE_BRAND_DEFAULT.primary,
     bg: isHex(colors.cardBg) ? (colors.cardBg as string).trim() : SITE_BRAND_DEFAULT.surface,
     // brand_identity.colors.background is the DARK card backdrop in the
     // funnel-artifact model — the colour the quiz / advertorial / LP

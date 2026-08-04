@@ -170,14 +170,40 @@ export const resolveBrandTokens = (
   // 2. Dark mode is the same authored set resolved onto an inverted ground, not
   //    a second set of authored values. One brand, two resolutions.
   const bg = mode === 'dark' ? shiftLightness(authoredBg, -(0.72 - 0)) : authoredBg
-  const ink = mode === 'dark' ? getSafeTextColor(bg).hex : authoredInk
+
+  // Body ink is DERIVED AND VERIFIED, never taken on trust.
+  //
+  // Dark mode always derived it; light mode used the authored value verbatim,
+  // which is how a brand ended up with #F7F5F0 text on an #F7F5F0 page. The
+  // audit below reported the failure and nothing acted on it, so the promise
+  // three comments down - that unreadable text is structurally unreachable -
+  // was true of every ink except the one that carries the actual body copy.
+  //
+  // An authored ink that reads is kept, because a brand that has chosen a
+  // near-black or a warm off-black means it. One that cannot be read on its own
+  // page is replaced rather than rendered, since a page nobody can read is not
+  // a branding decision.
+  const ink =
+    mode === 'dark'
+      ? getSafeTextColor(bg).hex
+      : (contrastRatio(authoredInk, bg) ?? 0) >= CONTRAST_MIN_BODY
+        ? authoredInk
+        : getSafeTextColor(bg).hex
 
   const accent = hex(b.accent) ?? primary
 
   // 3. Surfaces step off the background rather than being invented, so a card
   //    always reads as a layer above the page it sits on whatever the brand is.
   const surfaceDelta = mode === 'dark' ? 0.05 : -0.035
-  const surface = hex(b.surface) ?? shiftLightness(bg, surfaceDelta)
+  const steppedSurface = shiftLightness(bg, surfaceDelta)
+  const authoredSurface = hex(b.surface)
+  // A card must read as a layer above the page. An authored surface equal to
+  // the page ground is not a layer, it is the same colour twice, and a brand
+  // whose background and card background are both #F7F5F0 has said nothing
+  // about cards. The 1.03 floor is measured rather than guessed: contrast ratio
+  // compresses badly at small deltas, and an off-white card on white is 1.05.
+  const surface =
+    authoredSurface && (contrastRatio(authoredSurface, bg) ?? 1) >= 1.03 ? authoredSurface : steppedSurface
   const surface2 = hex(b.surface_2) ?? shiftLightness(surface, surfaceDelta)
 
   // 4. Every _ink is derived against the surface it will actually sit on. This
