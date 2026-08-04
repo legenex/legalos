@@ -169,6 +169,33 @@ export const ENTRIES: BuildLogEntry[] = [
       'Reported as "I change the colours, click save, and it reverts". It was not reverting. The value was written every time and then thrown away on the way back out, by two bugs that only bite together.',
     items: [
       {
+        title: 'The brand is editable from inside the builders',
+        status: 'shipped',
+        detail:
+          'Changing a colour meant leaving the page you were looking at, editing it on the Brand Identity screen, and coming back to find out whether it worked. That is the wrong shape for a decision made BY looking at the page. Both builders now carry a brand colour editor beside the brand picker, writing to the same record through the same action, so it is not a second store that can disagree with the first. The panel says out loud that an edit here changes the brand everywhere, because someone would reasonably assume a colour changed inside one landing page was scoped to that page. The saved brand is handed back so the preview repaints at once, since a save that works but looks like it did not is the exact bug reported earlier the same day.',
+        files: ['src/components/builder/brand/BrandQuickEdit.tsx', 'src/components/builder/lp/LandingPagesApp.tsx', 'src/components/builder/quiz/QuizBuilderApp.tsx'],
+        evidence: [
+          {
+            label: 'Editing a brand from the builder',
+            path: '/admin/landing-pages',
+          },
+        ],
+      },
+      {
+        title: 'Section colours: built the wrong thing first, then the right one',
+        status: 'shipped',
+        detail:
+          'Asked for per-section colour control, I shipped four named tones instead, on the reasoning that free hex fields would let a page become eight unrelated colours and undo the brand consistency work. The owner said plainly that presets were not what was wanted. That was the right call to overrule: four tones cannot express what someone has in mind for a specific section, and being told the tool knows better is not an answer. Background, text, cards and accent are now free colour fields, each independent, so a section overriding only its background still gets everything else from the brand. Two protections were kept because they are protections rather than restrictions: changing a background without setting a text colour re-derives the text, so an old colour cannot survive onto a ground it was never checked against, and the contrast figure is shown live and warns below 4.5 to 1 rather than blocking.',
+        files: ['src/components/builder/lp/LandingPagesApp.tsx', 'src/components/builder/lp/render.tsx'],
+      },
+      {
+        title: 'The first colour panel was bad, and shipping it unlooked-at is why',
+        status: 'shipped',
+        detail:
+          'Four cramped inputs, each showing a black swatch and the word brand in a monospace box. A black square on an unset field reads as "black is selected", which is the opposite of what it meant, so the panel could not answer the one question it existed for: what is this section painted with now. Rebuilt as a row per colour with a large swatch showing the colour ACTUALLY in use, inherited from the brand until overridden, a placeholder carrying the real inherited value, and a button reading Brand or Reset. Overridden rows are ringed. The brand had to be passed into the section editor for any of this, which is why it fell back to black before. The underlying cause was mine: four interface changes shipped in one day on a typecheck alone, without opening any of them in a browser, on a server where the tooling to do that already exists.',
+        files: ['src/components/builder/lp/LandingPagesApp.tsx'],
+      },
+      {
         title: 'Templates imposed a palette, so no brand ever showed through',
         status: 'shipped',
         detail:
@@ -246,6 +273,8 @@ export const ENTRIES: BuildLogEntry[] = [
     openIssues: [
       'The stored identity for SettlementAssist contains grey values that the old bug persisted as if they were chosen. Re-running extraction, or setting the colours by hand and saving, replaces them.',
       'invokeLLM has no timeout and retries up to three times behind a 120 second proxy limit. Nothing today was caused by it, but a slow model call would surface as a failed fetch with nothing in the log.',
+      'The coverage check works at day granularity, so once a day has any entry the rest of that day is invisible to it. Four commits went unlogged today and it reported nothing missing. It catches a silent day, not a silent afternoon.',
+      'Four interface changes shipped today were verified by typecheck and build only. The capture account and a browser exist on the server; they should be driven before handing a screen over, not after the owner finds it.',
     ],
   },
   {
