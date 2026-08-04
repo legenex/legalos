@@ -12,7 +12,7 @@ import {
   CheckCircle2, ListChecks, HelpCircle, Megaphone, FileText,
 } from 'lucide-react'
 import { T, genId, brandShortName } from '../ui'
-import { relativeLuminance } from '@/lib/builder/page-lint'
+import { relativeLuminance, contrastRatio } from '@/lib/builder/page-lint'
 import { onPrimaryText, getSafeTextColor, getSafeMutedColor, rgbToHsl, hslToHex, parseHex } from '@/lib/builder/color-system'
 import { QuizRuntime } from '@/components/public/quiz/QuizRuntime'
 
@@ -69,6 +69,32 @@ const deriveTemplateTokens = (tpl, brand) => {
   const text = getSafeTextColor(canvas).hex
   const textMute = getSafeMutedColor(text, canvas).hex
 
+  // The brand colour AS TEXT, lifted until it can actually be read on this
+  // ground.
+  //
+  // Eyebrows, stat figures and highlighted headline words were painted in
+  // brand.colors.primary directly. On a dark template that ground is derived
+  // FROM the primary, so a navy brand wrote navy text on a navy page and the
+  // words simply were not there. Using a brand token as a text colour without
+  // deriving it against the surface it sits on is the one thing the colour
+  // system exists to prevent, and this file was doing it in twelve places.
+  //
+  // Lightness is walked away from the ground, hue and saturation kept, so the
+  // highlight still reads as the brand rather than becoming a generic tint.
+  let accentOn = c.accent || primary
+  if ((contrastRatio(accentOn, canvas) ?? 0) < 4.5) {
+    const goingLighter = (relativeLuminance(canvas) ?? 0) < 0.5
+    for (let step = 1; step <= 18; step += 1) {
+      const target = goingLighter ? 0.5 + step * 0.025 : 0.5 - step * 0.025
+      const candidate = atLightness(c.accent || primary, target)
+      if ((contrastRatio(candidate, canvas) ?? 0) >= 4.5) {
+        accentOn = candidate
+        break
+      }
+      accentOn = candidate
+    }
+  }
+
   // A gradient stays a gradient, built from the brand instead of from indigo.
   const heroBg = base.heroBg
     ? `linear-gradient(135deg, ${canvas} 0%, ${atLightness(primary, 0.2)} 60%, ${canvas} 100%)`
@@ -80,6 +106,7 @@ const deriveTemplateTokens = (tpl, brand) => {
     surface,
     text,
     textMute,
+    accentOn,
     ...(heroBg ? { heroBg } : {}),
     headlineFont: brand?.typography?.headlineFont
       ? `"${brand.typography.headlineFont}", ${base.headlineFont}`
@@ -399,13 +426,13 @@ const TemplateHero = ({ section, tokens, brand, quizDepLabel, quiz, onEditSectio
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
       <div style={{ maxWidth: 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 40, alignItems: 'center' }}>
         <div>
-          <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={brand.colors.primary} />
+          <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={tokens.accentOn || brand.colors.primary} />
           <h1 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 44, lineHeight: 1.1, color: tokens.text, letterSpacing: '-0.02em', margin: '14px 0 16px' }}>{renderAccent(c.headline, c.accent_phrase, brand.colors.primary)}</h1>
           <p style={{ fontSize: 16, color: tokens.textMute, lineHeight: 1.5, marginBottom: 24, maxWidth: 540 }}>{c.subheadline}</p>
           <div style={{ display: 'flex', gap: 24, marginBottom: 22, flexWrap: 'wrap' }}>
             {['1', '2', '3'].map((n) => c[`stat${n}_num`] && (
               <div key={n}>
-                <div style={{ fontSize: 24, fontWeight: 800, color: brand.colors.primary, fontFamily: tokens.headlineFont }}>{c[`stat${n}_num`]}</div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: tokens.accentOn || brand.colors.primary, fontFamily: tokens.headlineFont }}>{c[`stat${n}_num`]}</div>
                 <div style={{ fontSize: 11, color: tokens.textMute, marginTop: 2, fontWeight: 500 }}>{c[`stat${n}_label`]}</div>
               </div>
             ))}
@@ -444,11 +471,11 @@ const TemplateTicker = ({ section, tokens, brand, onEditSection }) => {
     <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '20px 32px', backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)', borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`, cursor: 'pointer', overflow: 'hidden' }}>
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
       <div style={{ display: 'flex', gap: 28, alignItems: 'center', maxWidth: 1180, margin: '0 auto', flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: brand.colors.primary, letterSpacing: '0.12em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{c.eyebrow}</div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: tokens.accentOn || brand.colors.primary, letterSpacing: '0.12em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{c.eyebrow}</div>
         {(c.items || []).map((it, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: tokens.textMute, whiteSpace: 'nowrap' }}>
             <span>{it.location}</span>
-            <span style={{ color: brand.colors.primary, fontWeight: 700, fontFamily: '"JetBrains Mono", monospace' }}>{it.amount}</span>
+            <span style={{ color: tokens.accentOn || brand.colors.primary, fontWeight: 700, fontFamily: '"JetBrains Mono", monospace' }}>{it.amount}</span>
           </div>
         ))}
       </div>
@@ -463,7 +490,7 @@ const TemplateAuthority = ({ section, tokens, brand, onEditSection }) => {
     <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '48px 32px', backgroundColor: tokens.surface, color: tokens.text, cursor: 'pointer' }}>
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
       <div style={{ maxWidth: 980, margin: '0 auto', textAlign: 'center' }}>
-        <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={brand.colors.primary} />
+        <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={tokens.accentOn || brand.colors.primary} />
         <h2 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 28, color: tokens.text, margin: '14px 0 12px', letterSpacing: '-0.01em' }}>{c.headline}</h2>
         <p style={{ fontSize: 14, color: tokens.textMute, lineHeight: 1.6, maxWidth: 680, margin: '0 auto 24px' }}>{c.subhead}</p>
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -485,7 +512,7 @@ const TemplateStory = ({ section, tokens, brand, onEditSection }) => {
     <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '56px 32px', backgroundColor: tokens.canvas, color: tokens.text, cursor: 'pointer' }}>
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
       <div style={{ maxWidth: 780, margin: '0 auto' }}>
-        <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={brand.colors.primary} />
+        <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={tokens.accentOn || brand.colors.primary} />
         <h2 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 32, color: tokens.text, margin: '14px 0 22px', letterSpacing: '-0.01em' }}>{c.headline}</h2>
         {(c.paragraphs || []).map((p, i) => (
           <p key={i} style={{ fontSize: 15, color: tokens.textMute, lineHeight: 1.65, marginBottom: 14 }}>{p}</p>
@@ -503,7 +530,7 @@ const TemplateEligibility = ({ section, tokens, brand, onEditSection }) => {
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
       <div style={{ maxWidth: 760, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={brand.colors.primary} />
+          <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={tokens.accentOn || brand.colors.primary} />
           <h2 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 28, color: tokens.text, margin: '14px 0 0', letterSpacing: '-0.01em' }}>{c.headline}</h2>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -529,7 +556,7 @@ const TemplateHowItWorks = ({ section, tokens, brand, onEditSection }) => {
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
       <div style={{ maxWidth: 1080, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 36 }}>
-          <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={brand.colors.primary} />
+          <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={tokens.accentOn || brand.colors.primary} />
           <h2 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 30, color: tokens.text, margin: '14px 0 0', letterSpacing: '-0.01em' }}>{c.headline}</h2>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(3, (c.steps || []).length || 1)}, 1fr)`, gap: 18 }}>
@@ -554,14 +581,14 @@ const TemplateSettlements = ({ section, tokens, brand, onEditSection }) => {
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
       <div style={{ maxWidth: 1080, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={brand.colors.primary} />
+          <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={tokens.accentOn || brand.colors.primary} />
           <h2 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 28, color: tokens.text, margin: '14px 0 0', letterSpacing: '-0.01em' }}>{c.headline}</h2>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
           {(c.items || []).map((it, i) => (
             <div key={i} style={{ padding: 20, backgroundColor: tokens.canvas, border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`, borderRadius: tokens.radius }}>
               <Trophy size={20} color={brand.colors.accent} />
-              <div style={{ fontSize: 28, fontWeight: 800, color: brand.colors.primary, marginTop: 12, fontFamily: tokens.headlineFont }}>{it.amount}</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: tokens.accentOn || brand.colors.primary, marginTop: 12, fontFamily: tokens.headlineFont }}>{it.amount}</div>
               <div style={{ fontSize: 13, fontWeight: 600, color: tokens.text, marginTop: 6 }}>{it.case_type}</div>
               <div style={{ fontSize: 11, color: tokens.textMute, marginTop: 4 }}>{it.location}</div>
             </div>
@@ -580,7 +607,7 @@ const TemplateTestimonials = ({ section, tokens, brand, onEditSection }) => {
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
       <div style={{ maxWidth: 1080, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={brand.colors.primary} />
+          <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={tokens.accentOn || brand.colors.primary} />
           <h2 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 28, color: tokens.text, margin: '14px 0 0', letterSpacing: '-0.01em' }}>{c.headline}</h2>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
@@ -638,7 +665,7 @@ const TemplateFaq = ({ section, tokens, brand, onEditSection }) => {
       <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
       <div style={{ maxWidth: 760, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={brand.colors.primary} />
+          <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={tokens.accentOn || brand.colors.primary} />
           <h2 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 28, color: tokens.text, margin: '14px 0 0', letterSpacing: '-0.01em' }}>{c.headline}</h2>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
