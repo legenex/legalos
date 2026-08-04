@@ -427,7 +427,7 @@ const TemplateHero = ({ section, tokens, brand, quizDepLabel, quiz, onEditSectio
       <div style={{ maxWidth: 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 40, alignItems: 'center' }}>
         <div>
           <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={tokens.accentOn || brand.colors.primary} />
-          <h1 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 44, lineHeight: 1.1, color: tokens.text, letterSpacing: '-0.02em', margin: '14px 0 16px' }}>{renderAccent(c.headline, c.accent_phrase, brand.colors.primary)}</h1>
+          <h1 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 44, lineHeight: 1.1, color: tokens.text, letterSpacing: '-0.02em', margin: '14px 0 16px' }}>{renderAccent(c.headline, c.accent_phrase, tokens.accentOn || brand.colors.primary)}</h1>
           <p style={{ fontSize: 16, color: tokens.textMute, lineHeight: 1.5, marginBottom: 24, maxWidth: 540 }}>{c.subheadline}</p>
           <div style={{ display: 'flex', gap: 24, marginBottom: 22, flexWrap: 'wrap' }}>
             {['1', '2', '3'].map((n) => c[`stat${n}_num`] && (
@@ -439,7 +439,7 @@ const TemplateHero = ({ section, tokens, brand, quizDepLabel, quiz, onEditSectio
           </div>
           {c.trust_line && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: tokens.textMute }}>
-              <ShieldCheck size={14} color={brand.colors.primary} /> {c.trust_line}
+              <ShieldCheck size={14} color={tokens.accentOn || brand.colors.primary} /> {c.trust_line}
             </div>
           )}
         </div>
@@ -496,7 +496,7 @@ const TemplateAuthority = ({ section, tokens, brand, onEditSection }) => {
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
           {(c.badges || []).map((b, i) => (
             <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', border: `1px solid ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'}`, borderRadius: 999, fontSize: 12, fontWeight: 600, color: tokens.text }}>
-              <Scale size={13} color={brand.colors.primary} /> {b}
+              <Scale size={13} color={tokens.accentOn || brand.colors.primary} /> {b}
             </div>
           ))}
         </div>
@@ -537,7 +537,7 @@ const TemplateEligibility = ({ section, tokens, brand, onEditSection }) => {
           {(c.criteria || []).map((cr, i) => (
             <div key={i} style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, backgroundColor: tokens.canvas, border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`, borderRadius: tokens.radius }}>
               <div style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: `${brand.colors.primary}26`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Check size={13} color={brand.colors.primary} strokeWidth={3} />
+                <Check size={13} color={tokens.accentOn || brand.colors.primary} strokeWidth={3} />
               </div>
               <span style={{ fontSize: 14, color: tokens.text }}>{cr}</span>
             </div>
