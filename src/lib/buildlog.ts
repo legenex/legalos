@@ -163,6 +163,72 @@ export const buildLogEvidenceId = (entry: BuildLogEntry, item: BuildLogItem, ev:
 
 export const ENTRIES: BuildLogEntry[] = [
   {
+    date: '2026-08-04',
+    title: 'Saving brand colours had no chance of working',
+    summary:
+      'Reported as "I change the colours, click save, and it reverts". It was not reverting. The value was written every time and then thrown away on the way back out, by two bugs that only bite together.',
+    items: [
+      {
+        title: 'The save wrote two of the four required tokens',
+        status: 'shipped',
+        detail:
+          'The resolver requires primary, cta, bg and ink. The mapping that writes a brand identity onto the Site wrote primary and ink but never cta or bg, so every brand saved from that editor was structurally incomplete the moment it was saved. On this server that is exactly the state SettlementAssist was in: primary #0F1E3D stored in the database while every field on screen read #737373. cta now falls back to primary, because a brand that has not chosen a separate action colour is saying its action colour is its brand colour, and bg to the same light ground the brands that already render correctly have.',
+        files: ['src/app/(app)/admin/(top)/brands/brand-identities/actions.ts'],
+        evidence: [
+          {
+            label: 'The colour fields',
+            path: '/admin/brands/brand-identities',
+          },
+        ],
+      },
+      {
+        title: 'One missing token discarded every colour that was set',
+        status: 'shipped',
+        detail:
+          'The brand mapper replaced the whole palette with neutral grey as soon as any single required token was absent. A brand with a perfectly good navy primary therefore rendered entirely grey because nothing had written its background, and saving again could not help, because saving is what left it incomplete. That closed loop is what made it look like a save that silently reverted. Substitution is now per token: what the brand actually set is kept, only what is missing is filled, and the substitutes stay a true neutral so grey still reads as "not set yet" rather than as an invented palette. Verified against all three brands on this server: the navy survives and is reported as incomplete with cta and bg named, while the two complete brands are untouched.',
+        files: ['src/lib/brand-map.ts'],
+      },
+      {
+        title: 'Computed values were being stored as if a person had chosen them',
+        status: 'shipped',
+        detail:
+          'The editor loads a mapped brand, which carries derived fields next to the authored ones, and saving returned the whole object. So tokens, contrast, incomplete, missingTokens and status were written into the stored identity, and the grey the resolver had substituted was persisted as a real decision, no longer distinguishable from one. Derived keys are now stripped on save. Stored derived values also go stale the moment the resolver changes, which is the usual reason not to keep them.',
+        files: ['src/app/(app)/admin/(top)/brands/brand-identities/actions.ts'],
+      },
+      {
+        title: 'Six restarts in twenty minutes, while someone was working',
+        status: 'shipped',
+        detail:
+          'Two wizard failures reported earlier in the day, one an unexpected server response and one a failed fetch with a 503, both landed within a minute of a deploy restart. The service log shows six stops and starts inside twenty minutes, every one of them mine, and no crashes. The application never errored because it was not running to error. Deploys during a working session are not free, and the cost lands on whoever is using the product rather than on the person deploying.',
+        files: [],
+      },
+    ],
+    verification: [
+      {
+        label: 'All three brands resolved through the real mapper',
+        state: 'verified',
+        detail:
+          'Run against the live database after deploying. SettlementAssist now resolves primary #0F1E3D rather than grey, and reports incomplete with cta and bg named. The two brands that already worked resolve exactly as before, so the change fixes the broken case without touching the working ones.',
+      },
+      {
+        label: 'The database showed which brands were incomplete and why',
+        state: 'verified',
+        detail:
+          'The token columns were read directly. Two brands carried all four required values and one carried two, which is what separated the brand that rendered correctly from the brand that rendered grey. The diagnosis came from that table rather than from reading the save path and guessing.',
+      },
+      {
+        label: 'An existing incomplete brand fully repaired',
+        state: 'not-run',
+        detail:
+          'SettlementAssist still has null cta and bg columns and will keep substituting for them until it is saved once more. The next save writes both, because that is the bug that was fixed. Nothing was backfilled on the owner\u2019s behalf: the stored identity also contains grey values the old bug wrote in as if chosen, and quietly rewriting someone\u2019s brand colours is not a repair.',
+      },
+    ],
+    openIssues: [
+      'The stored identity for SettlementAssist contains grey values that the old bug persisted as if they were chosen. Re-running extraction, or setting the colours by hand and saving, replaces them.',
+      'invokeLLM has no timeout and retries up to three times behind a 120 second proxy limit. Nothing today was caused by it, but a slow model call would surface as a failed fetch with nothing in the log.',
+    ],
+  },
+  {
     date: '2026-08-03',
     title: 'Brand documents, a payload ceiling, and a delete that broke everything',
     summary:
