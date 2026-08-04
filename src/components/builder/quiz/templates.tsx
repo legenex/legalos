@@ -57,7 +57,10 @@ const editorialRule = (brand) => {
 /** Push any colour up to a paper-like lightness without losing its hue. */
 const lightenToPaper = (hex) => {
   const rgb = parseHex(hex)
-  if (!rgb) return '#f7f4ee'
+  // Reached only when the brand colour will not parse. A cream here asserted a
+  // warmth the brand had not chosen, and on an unconfigured brand that read as
+  // a finished editorial look rather than as a missing value.
+  if (!rgb) return '#ffffff'
   const [h, sat] = rgbToHsl(rgb)
   return hslToHex(h, Math.min(sat, 0.28), 0.94)
 }
@@ -340,8 +343,8 @@ export const renderAnswerButton = (a, idx, isSelected, onClick, tc, brand) => {
     </button>
   }
   if (tc.buttonStyle === 'square-check') {
-    return <button key={a.id || idx} onClick={onClick} className="quiz-btn quiz-btn-square-check" style={{ ...baseStyle, padding: '18px 20px', borderRadius: tc.buttonRadius, border: `${isSelected ? '2px' : '1px'} solid ${isSelected ? primary : '#c9b88a'}`, backgroundColor: isSelected ? `${primary}10` : 'rgba(0,0,0,0.02)', color: pal.text, fontSize: 'clamp(15px, 3vw, 17px)', fontWeight: 500, fontFamily: tc.headlineFamily(brand) }}>
-      <div style={{ width: 18, height: 18, borderRadius: 3, border: `2px solid ${isSelected ? primary : '#8b7a4e'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, backgroundColor: isSelected ? primary : 'transparent' }}>{isSelected && <Check size={11} color={onPrimary} />}</div>
+    return <button key={a.id || idx} onClick={onClick} className="quiz-btn quiz-btn-square-check" style={{ ...baseStyle, padding: '18px 20px', borderRadius: tc.buttonRadius, border: `${isSelected ? '2px' : '1px'} solid ${isSelected ? primary : getSafeMutedColor(pal.text, pal.surfaceBase).hex}`, backgroundColor: isSelected ? `${primary}10` : 'rgba(0,0,0,0.02)', color: pal.text, fontSize: 'clamp(15px, 3vw, 17px)', fontWeight: 500, fontFamily: tc.headlineFamily(brand) }}>
+      <div style={{ width: 18, height: 18, borderRadius: 3, border: `2px solid ${isSelected ? primary : getSafeMutedColor(pal.text, pal.surfaceBase).hex}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, backgroundColor: isSelected ? primary : 'transparent' }}>{isSelected && <Check size={11} color={onPrimary} />}</div>
       <span style={{ flex: 1 }}>{a.label}</span>
     </button>
   }

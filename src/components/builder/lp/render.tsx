@@ -19,7 +19,10 @@ import { QuizRuntime } from '@/components/public/quiz/QuizRuntime'
 // A template's canvas is "dark" when its luminance is below the midpoint.
 // Replaces the brittle canvas === '#0f172a' string-equality that only
 // recognised one specific hex and broke for any brand-driven canvas.
-const tokensAreDark = (tokens) => (relativeLuminance(tokens?.canvas) ?? 1) < 0.5
+// A template declares whether it grounds on dark or light. It used to be
+// inferred from the canvas hex, which only worked while templates carried
+// hexes - and carrying them is exactly what made every brand render in slate.
+const tokensAreDark = (tokens) => (tokens?.mood ? tokens.mood === 'dark' : (relativeLuminance(tokens?.canvas) ?? 1) < 0.5)
 
 /**
  * Build a template's palette FROM THE BRAND, keeping only its character.
@@ -64,8 +67,8 @@ const deriveTemplateTokens = (tpl, brand) => {
 
   // A dark template grounds itself in the brand's own primary rather than in a
   // borrowed slate, so the darkness still reads as this brand.
-  const canvas = wantsDark ? atLightness(primary, 0.1) : c.background || base.canvas
-  const surface = wantsDark ? atLightness(primary, 0.17) : c.cardBg || base.surface
+  const canvas = wantsDark ? atLightness(primary, 0.1) : c.background || '#ffffff'
+  const surface = wantsDark ? atLightness(primary, 0.17) : c.cardBg || atLightness(c.background || '#ffffff', 0.97)
   const text = getSafeTextColor(canvas).hex
   const textMute = getSafeMutedColor(text, canvas).hex
 
@@ -96,9 +99,10 @@ const deriveTemplateTokens = (tpl, brand) => {
   }
 
   // A gradient stays a gradient, built from the brand instead of from indigo.
-  const heroBg = base.heroBg
-    ? `linear-gradient(135deg, ${canvas} 0%, ${atLightness(primary, 0.2)} 60%, ${canvas} 100%)`
-    : undefined
+  const heroBg =
+    base.hero === 'gradient'
+      ? `linear-gradient(135deg, ${canvas} 0%, ${atLightness(primary, wantsDark ? 0.2 : 0.92)} 60%, ${canvas} 100%)`
+      : canvas
 
   return {
     ...base,
@@ -126,7 +130,8 @@ export const TEMPLATES = [
     blurb: 'Quiz above the fold in a dark gradient hero. Results-led, big stats. Best for cold PPC traffic.',
     hookExample: '$50M+ recovered. Was your accident worth more?',
     tokens: {
-      canvas: '#0f172a', surface: '#1e293b', text: '#f8fafc', textMute: '#94a3b8',
+      mood: 'dark',
+      hero: 'gradient',
       headlineFont: '"Inter", system-ui, sans-serif',
       bodyFont: '"Inter", system-ui, sans-serif',
       headlineWeight: 800,
@@ -142,7 +147,8 @@ export const TEMPLATES = [
     blurb: 'Navy + serif. Trust badges, scale-of-justice motifs. Built to feel like a real firm.',
     hookExample: 'Trusted by 50,000 accident victims since 2018.',
     tokens: {
-      canvas: '#f8f7f4', surface: '#ffffff', text: '#1c2231', textMute: '#566075',
+      mood: 'light',
+      hero: 'gradient',
       headlineFont: 'Georgia, "Times New Roman", serif',
       bodyFont: '"Inter", system-ui, sans-serif',
       headlineWeight: 700,
@@ -158,13 +164,13 @@ export const TEMPLATES = [
     blurb: 'Paper cream canvas, Lora serif, rule-line eyebrows. Reads like an investigative article.',
     hookExample: 'Most accident victims never learn they qualified.',
     tokens: {
-      canvas: '#f4ede0', surface: '#fbf6ec', text: '#2a1f0f', textMute: '#7a6f5a',
+      mood: 'light',
+      hero: 'flat',
       headlineFont: '"Lora", Georgia, serif',
       bodyFont: '"Lora", Georgia, serif',
       headlineWeight: 600,
       eyebrowStyle: 'rule_line',
       radius: 2,
-      heroBg: '#f4ede0',
     },
   },
   {
@@ -174,13 +180,13 @@ export const TEMPLATES = [
     blurb: 'White canvas. Flame-tag eyebrows. Statute-of-limitations urgency.',
     hookExample: 'Deadlines vary by state. Some are as short as one year.',
     tokens: {
-      canvas: '#ffffff', surface: '#f8fafc', text: '#0f172a', textMute: '#64748b',
+      mood: 'light',
+      hero: 'flat',
       headlineFont: '"Inter", system-ui, sans-serif',
       bodyFont: '"Inter", system-ui, sans-serif',
       headlineWeight: 900,
       eyebrowStyle: 'flame_tag',
       radius: 8,
-      heroBg: '#ffffff',
     },
   },
 ]
