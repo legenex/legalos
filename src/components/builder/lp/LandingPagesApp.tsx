@@ -146,7 +146,7 @@ const LPDeploymentListView = ({ deployments, landingPages, brands, quizDeploymen
 // ============================================================================
 // SECTION EDITOR MODAL
 // ============================================================================
-const SectionEditorModal = ({ open, section, onClose, onSave, onDelete }) => {
+const SectionEditorModal = ({ open, section, brand, onClose, onSave, onDelete }) => {
   const [draft, setDraft] = useState(section || null)
   const [tab, setTab] = useState('manual')
   const [aiInstruction, setAiInstruction] = useState('')
@@ -169,82 +169,73 @@ const SectionEditorModal = ({ open, section, onClose, onSave, onDelete }) => {
     setDraft({ ...draft, colors: Object.keys(next).length ? next : undefined })
   }
 
-  const effBg = secColors.bg || null
-  const effText = secColors.text || null
-  const ratio = effBg && effText ? contrastRatio(effText, effBg) : null
+  // What the section is ACTUALLY painted with right now, so an untouched field
+  // shows the brand colour it is inheriting instead of a black square. A black
+  // swatch on an unset field reads as "black is selected", which is the
+  // opposite of what it means.
+  const bc = brand?.colors || {}
+  const INHERITED = { bg: bc.background, text: bc.ink, surface: bc.cardBg, accent: bc.accent || bc.primary }
+  const effective = (k) => secColors[k] || INHERITED[k] || '#000000'
+
+  const ratio = contrastRatio(effective('text'), effective('bg'))
   const ratioBad = ratio !== null && ratio < 4.5
 
   const COLOR_FIELDS = [
-    { key: 'bg', label: 'Background', hint: 'Leave empty to use the brand' },
-    { key: 'text', label: 'Text', hint: 'Derived from the background if empty' },
-    { key: 'surface', label: 'Cards', hint: 'Panels inside this section' },
-    { key: 'accent', label: 'Accent', hint: 'Eyebrow, stats, highlighted words' },
+    { key: 'bg', label: 'Background' },
+    { key: 'text', label: 'Text' },
+    { key: 'surface', label: 'Cards' },
+    { key: 'accent', label: 'Accent' },
   ]
 
   const tonePicker = draft ? (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
-        <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: T.textMute }}>
-          Section colours
-        </div>
-        {Object.keys(secColors).length > 0 && (
-          <button
-            onClick={() => setDraft({ ...draft, colors: undefined, tone: 'default' })}
-            style={{ background: 'none', border: 'none', color: T.textMute, fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}
-          >
-            Reset to brand
+    <div style={{ marginBottom: 16, padding: 12, backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: T.text }}>Section colours</span>
+        {Object.keys(secColors).length > 0 ? (
+          <button onClick={() => setDraft({ ...draft, colors: undefined, tone: 'default' })}
+            style={{ background: 'none', border: 'none', color: T.primary, fontSize: 11, cursor: 'pointer' }}>
+            Reset all to brand
           </button>
+        ) : (
+          <span style={{ fontSize: 10.5, color: T.textLow }}>All inherited from the brand</span>
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
-        {COLOR_FIELDS.map((f) => (
-          <div key={f.key}>
-            <div style={{ fontSize: 10, color: T.textMute, marginBottom: 3 }}>{f.label}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <input
-                type="color"
-                value={/^#[0-9a-fA-F]{6}$/.test(secColors[f.key] || '') ? secColors[f.key] : '#000000'}
-                onChange={(e) => setColor(f.key, e.target.value)}
-                style={{ width: 28, height: 24, padding: 0, border: `1px solid ${T.border}`, borderRadius: 4, background: 'none', cursor: 'pointer', flexShrink: 0 }}
-              />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {COLOR_FIELDS.map((f) => {
+          const overridden = Boolean(secColors[f.key])
+          const val = effective(f.key)
+          return (
+            <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <label style={{ position: 'relative', width: 34, height: 34, borderRadius: 6, flexShrink: 0, cursor: 'pointer', backgroundColor: val, border: `1px solid ${overridden ? T.primary : T.border}`, boxShadow: overridden ? `0 0 0 2px ${T.primary}33` : 'none' }}>
+                <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(val) ? val : '#000000'}
+                  onChange={(e) => setColor(f.key, e.target.value)}
+                  style={{ opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
+              </label>
+              <div style={{ width: 78, flexShrink: 0, fontSize: 12, color: T.text }}>{f.label}</div>
               <input
                 value={secColors[f.key] || ''}
                 onChange={(e) => setColor(f.key, e.target.value)}
-                placeholder="brand"
-                style={{ flex: 1, minWidth: 0, padding: '4px 7px', backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 4, color: T.text, fontSize: 11.5, fontFamily: '"JetBrains Mono", monospace' }}
+                placeholder={INHERITED[f.key] || 'inherited'}
+                style={{ flex: 1, minWidth: 0, padding: '6px 9px', backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 5, fontSize: 12, fontFamily: '"JetBrains Mono", monospace', color: overridden ? T.text : T.textLow }}
               />
-              {secColors[f.key] && (
-                <button onClick={() => setColor(f.key, null)} title="Back to the brand colour"
-                  style={{ background: 'none', border: 'none', color: T.textMute, cursor: 'pointer', padding: 2, lineHeight: 1, flexShrink: 0 }}>x</button>
-              )}
+              <button onClick={() => setColor(f.key, null)} disabled={!overridden} title="Back to the brand colour"
+                style={{ width: 62, flexShrink: 0, padding: '5px 0', backgroundColor: 'transparent', border: `1px solid ${overridden ? T.border : 'transparent'}`, borderRadius: 5, color: overridden ? T.textMute : T.textLow, fontSize: 10.5, cursor: overridden ? 'pointer' : 'default' }}>
+                {overridden ? 'Reset' : 'Brand'}
+              </button>
             </div>
-            <div style={{ fontSize: 9.5, color: T.textLow, marginTop: 2 }}>{f.hint}</div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {ratio !== null && (
-        <div style={{ marginTop: 8, padding: '6px 9px', borderRadius: 5, fontSize: 11,
-          backgroundColor: ratioBad ? `${T.danger}18` : `${T.success}15`,
-          border: `1px solid ${ratioBad ? T.danger + '55' : T.success + '44'}`,
+        <div style={{ marginTop: 10, padding: '7px 10px', borderRadius: 5, fontSize: 11, lineHeight: 1.45,
+          backgroundColor: ratioBad ? `${T.danger}18` : `${T.success}12`,
+          border: `1px solid ${ratioBad ? T.danger + '55' : T.success + '33'}`,
           color: ratioBad ? T.danger : T.textMute }}>
-          Text on background: {ratio.toFixed(2)}:1{' '}
-          {ratioBad ? '- below the 4.5:1 needed for body copy. Readable to you may not mean readable to everyone.' : '- passes for body copy.'}
+          Text on background is {ratio.toFixed(2)}:1{ratioBad ? '. Body copy needs 4.5:1, so some readers will struggle with this.' : ', which passes for body copy.'}
         </div>
       )}
-
-      <div style={{ display: 'flex', gap: 5, marginTop: 9, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 10, color: T.textLow }}>Or start from:</span>
-        {SECTION_TONES.map((t) => (
-          <button key={t.id} onClick={() => setDraft({ ...draft, tone: t.id, colors: undefined })} title={t.desc}
-            style={{ padding: '3px 8px', borderRadius: 5, cursor: 'pointer', fontSize: 10.5,
-              backgroundColor: (draft.tone || 'default') === t.id && !Object.keys(secColors).length ? T.bgElev2 : 'transparent',
-              border: `1px solid ${T.border}`, color: T.textMute }}>
-            {t.label}
-          </button>
-        ))}
-      </div>
     </div>
   ) : null
 
@@ -828,7 +819,7 @@ export const LandingPageBuilder = ({ landingPage, brands, onBrandSaved, quizDepl
         </div>
       </div>
 
-      <SectionEditorModal open={!!editingSection} section={editingSection} onClose={() => setEditingSectionId(null)} onSave={updateSection} onDelete={deleteSection} />
+      <SectionEditorModal open={!!editingSection} section={editingSection} brand={previewBrand} onClose={() => setEditingSectionId(null)} onSave={updateSection} onDelete={deleteSection} />
       <AddSectionModal open={addOpen} existingTypes={landingPage.sections.map((s) => s.type)} onClose={() => setAddOpen(false)} onAdd={addSection} />
       <TemplateGalleryModal open={galleryOpen} currentTemplateId={landingPage.templateId} onClose={() => setGalleryOpen(false)} onPick={(tplId) => onSetTemplate(landingPage.id, tplId)} />
     </div>
