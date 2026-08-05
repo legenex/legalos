@@ -579,7 +579,9 @@ const FormNode = ({ el, ctx }: { el: LpElement; ctx: NodeCtx }) => {
               deployment={(ctx.quizCtx?.deployment ?? null) as never}
               site={(ctx.quizCtx?.site ?? null) as never}
               inline
-              surfaceColor={s.card}
+              // QuizRuntime is ported and untyped, so its optional props infer
+              // from their `null` defaults rather than being declared.
+              surfaceColor={s.card as never}
               previewMode={ctx.quizCtx ? ctx.quizCtx.preview !== false : true}
             />
           ) : (

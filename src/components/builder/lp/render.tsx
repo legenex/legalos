@@ -119,6 +119,16 @@ export const LivePreview = ({
   quizCtx = null,
   selectedId = null,
   onSelectNode,
+}: {
+  landingPage: { templateId?: string; sections?: unknown }
+  brand?: unknown
+  quizDepLabel?: string
+  quiz?: unknown
+  /** False on a public page: no handlers, no affordances, no placeholders. */
+  editable?: boolean
+  quizCtx?: unknown
+  selectedId?: string | null
+  onSelectNode?: (nodeId: string) => void
 }) => {
   const template = templateFor(landingPage.templateId)
   const identity = template.identity || getLpIdentity(landingPage.templateId)
