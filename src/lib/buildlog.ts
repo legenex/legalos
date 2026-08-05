@@ -204,11 +204,32 @@ export const ENTRIES: BuildLogEntry[] = [
         ],
       },
       {
-        title: 'A, C and D have their look but not their shape',
-        status: 'partial',
+        title: 'All four structures are built, and no two are alike',
+        status: 'shipped',
         detail:
-          'Only B has a skeleton. The other three keep their identities, so a page assigned to one renders in its palette, faces and radii, and the gallery says plainly that its structure is not built rather than offering a button that would hand out a copy of B. Seeding three lookalikes and calling the job done is the exact failure this change exists to fix, so they are absent rather than approximated. The four reference layouts are agreed; A, C and D are the next piece of work.',
+          'A puts the form beside the argument rather than above it and alternates dark and light the whole way down, with an icon-bulleted list and a split whose second column is a map. C opens on dark with a pill row and a two-tone headline, then drops the form onto a light band of its own, and carries a rule through its three-step row and a flat card row after it. D keeps the form in the fold, follows it straight with a trust bar, and splits twice in opposite directions: once against a dark inset panel and once against a single figure. Read back out of the DOM rather than eyeballed, the four give twelve, nine, nine and eleven sections with different ground sequences, different split positions and different grid patterns. No two share a section list, which was the whole point: before this, picking a template picked a palette.',
         files: ['src/lib/lp-skeletons/index.ts'],
+        evidence: [
+          {
+            label: 'Four structures, one renderer',
+            path: '/admin/landing-pages',
+            steps: ['Blank LP', 'Template', 'Use this structure'],
+          },
+        ],
+      },
+      {
+        title: 'The form was the one thing not taking the template colour',
+        status: 'shipped',
+        detail:
+          'Every section, heading, card and button on a landing page draws in the template identity. The embedded quiz did not: it used the SITE brand\'s palette, which is exactly right for a quiz served on its own URL and wrong inside a host that has already chosen one, so a cornflower page had a red form in the middle of it. It now draws in the identity\'s colours and keeps the brand it belongs to, so the number it shows and the place the lead goes are unchanged. The dark-ground remap several identities publish is used where the card is dark, and the ink is still verified against the card rather than the page behind it. Standalone quiz deployments are untouched, which was checked rather than assumed.',
+        files: ['src/lib/lp-nodes/quiz-brand.ts', 'src/components/builder/lp/nodes/ElementNode.tsx'],
+      },
+      {
+        title: 'Two layout capabilities the three new structures needed',
+        status: 'shipped',
+        detail:
+          'A strip lays its contents out in a row instead of grouping them, because a run of ticks is a one-column list in a band and four claims across in a trust bar, and the grouping rule was right for one and wrong for the other. And a band can run narrow, which is what centres a form on an open ground: C puts the form on a light band of its own rather than in the hero, and at full width it would have sat as a very wide card in a very empty section.',
+        files: ['src/components/builder/lp/nodes/SectionNode.tsx', 'src/lib/lp-nodes/model.ts'],
       },
       {
         title: 'Pages already live keep rendering, and were not rewritten',
@@ -285,9 +306,16 @@ export const ENTRIES: BuildLogEntry[] = [
           'Verified only after the owner found it broken. A fresh skeleton previewed as seven empty coloured bands because I checked the builder and a written page but never the crossing of the two. It now renders three sections - header, form, footer - which is what a visitor gets from a page nobody has written yet. Counted in the DOM rather than eyeballed.',
       },
       {
-        label: 'Skeletons A, C and D',
-        state: 'not-run',
-        detail: 'Not built. Those three templates carry their identity and no structure, and say so in the gallery.',
+        label: 'All four structures, driven',
+        state: 'verified',
+        detail:
+          'Each structure applied to a page through the real gallery flow, then the section list, resolved ground, split positions and grid widths read back out of the DOM. Twelve, nine, nine and eleven sections, no two lists alike. Screenshots at four scroll positions each.',
+      },
+      {
+        label: 'Colour ownership',
+        state: 'verified',
+        detail:
+          'Measured, not looked at. The form on a Matchline landing page draws in rgb(200,240,60), the identity\'s volt; the same brand\'s standalone quiz at /s/don-t-settle still draws in rgb(43,134,122), its own teal. The template owns the page\'s colour, the brand owns the quiz on its own URL, and the two do not leak into each other.',
       },
       {
         label: 'Reordering and deleting under load',
@@ -297,7 +325,6 @@ export const ENTRIES: BuildLogEntry[] = [
       },
     ],
     openIssues: [
-      'Skeletons A, C and D are not built. Their templates apply a look only.',
       'Preview shows a visitor\'s view, so an unwritten page looks nearly blank there while the builder shows the whole skeleton. That is correct rather than a bug, but there is no way to preview the shape itself.',
       'Reordering is one step at a time with arrows. There is no drag, and no way to move an element from one section to another.',
       'The funnel_* tables still have no committed migration (F001). Nothing here changes that: sections are a json column that already existed.',
