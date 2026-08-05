@@ -166,7 +166,7 @@ export const ENTRIES: BuildLogEntry[] = [
     date: '2026-08-05',
     title: 'A landing page is a tree of nodes, and a template is a structure',
     summary:
-      'Two problems with one cause. You could delete a whole section and nothing smaller, and all four templates looked identical apart from colour. Both followed from sections storing copy under fixed names that thirteen subject-specific renderers read back by name.',
+      'Two problems with one cause. You could delete a whole section and nothing smaller, and all four templates looked identical apart from colour. Both followed from sections storing copy under fixed names that thirteen subject-specific renderers read back by name. Ends with the ownership of colour corrected: the brand decides it, the template decides the shape.',
     items: [
       {
         title: 'Every element on the page is its own thing',
@@ -218,10 +218,31 @@ export const ENTRIES: BuildLogEntry[] = [
         ],
       },
       {
-        title: 'The form was the one thing not taking the template colour',
+        title: 'The brand decides the colour. I had it the wrong way round.',
         status: 'shipped',
         detail:
-          'Every section, heading, card and button on a landing page draws in the template identity. The embedded quiz did not: it used the SITE brand\'s palette, which is exactly right for a quiz served on its own URL and wrong inside a host that has already chosen one, so a cornflower page had a red form in the middle of it. It now draws in the identity\'s colours and keeps the brand it belongs to, so the number it shows and the place the lead goes are unchanged. The dark-ground remap several identities publish is used where the card is dark, and the ink is still verified against the card rather than the page behind it. Standalone quiz deployments are untouched, which was checked rather than assumed.',
+          'Reported as "the template is not using the brand colours at all", and it was not. Asked earlier to take colours from the brand identity, I read it as "each template takes colour from its own identity" - which is a no-op, and should have been the clue that it was the wrong reading. The correction: colour resolves from the brand, with the template identity as the fallback so a brandless preview and the gallery still look like something and a brand that has only set a primary does not collapse to grey. What a template keeps is everything that is not a hue: the faces, the display weight and tracking, the radii, the border weight, the eyebrow treatment, the geometry of its mark, and the structure of the page. Counterweight under a teal brand is still compressed poster caps on square corners with an argument on the left and the form on the right, in teal.',
+        files: ['src/lib/lp-nodes/palette.ts', 'src/lib/lp-nodes/surface.ts', 'src/components/builder/lp/render.tsx'],
+        evidence: [
+          {
+            label: 'One page, two brands',
+            path: '/admin/landing-pages',
+            steps: ['Edit on MVA Pain First', 'Preview as'],
+          },
+        ],
+      },
+      {
+        title: 'Two things a brand never states, derived rather than invented',
+        status: 'shipped',
+        detail:
+          'No brand token says what its DARK ground is, and half the page needs one. It is derived from the brand\'s own hue with its chroma capped, which gives a near-black that carries the brand instead of a dark red. Nor does a brand state a lifted primary for use on that dark ground, so the primary is raised until it clears 4.5 to 1 there, keeping its hue so it still reads as the brand\'s colour. The identity marks are recoloured by the ROLE each path was playing, matched against the identity\'s own tokens, so the path that was its primary becomes the brand\'s primary and the dot that was its accent becomes the brand\'s accent, without the design handoff having had to label them.',
+        files: ['src/lib/lp-nodes/palette.ts'],
+      },
+      {
+        title: 'The form agrees with the page it is standing in',
+        status: 'shipped',
+        detail:
+          'A quiz on its own URL derives its palette from its brand\'s raw tokens. Inside a landing page it is handed the page\'s already-resolved palette instead, because the two would otherwise drift: the page\'s dark band and the quiz\'s idea of dark would be different colours, both defensible, neither matching. It is the same brand colour either way, and the brand is otherwise untouched, so the number the form shows and the place the lead goes are unchanged. Measured on the live page: the landing page form and the standalone quiz at /s/don-t-settle both draw in rgb(43,134,122), the brand\'s own teal.',
         files: ['src/lib/lp-nodes/quiz-brand.ts', 'src/components/builder/lp/nodes/ElementNode.tsx'],
       },
       {
@@ -312,10 +333,10 @@ export const ENTRIES: BuildLogEntry[] = [
           'Each structure applied to a page through the real gallery flow, then the section list, resolved ground, split positions and grid widths read back out of the DOM. Twelve, nine, nine and eleven sections, no two lists alike. Screenshots at four scroll positions each.',
       },
       {
-        label: 'Colour ownership',
+        label: 'Colour follows the brand, structure does not move',
         state: 'verified',
         detail:
-          'Measured, not looked at. The form on a Matchline landing page draws in rgb(200,240,60), the identity\'s volt; the same brand\'s standalone quiz at /s/don-t-settle still draws in rgb(43,134,122), its own teal. The template owns the page\'s colour, the brand owns the quiz on its own URL, and the two do not leak into each other.',
+          'One page rendered under two brands and both halves asserted from the DOM. Don\'t Settle paints its brand band rgb(43,134,122) and Auto Claim Eval paints the same band rgb(236,4,4), their own primaries; the section list is thirteen sections in the same order both times. The public deployment and the standalone quiz now agree on the same teal, where before the landing page drew in the template\'s colour and the quiz in the brand\'s.',
       },
       {
         label: 'Reordering and deleting under load',
