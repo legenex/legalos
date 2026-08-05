@@ -149,7 +149,16 @@ export const LivePreview = ({
   return (
     <div
       className={editable ? 'lp-preview-root' : 'lp-preview-root lp-public-root'}
-      style={{ backgroundColor: pageSurface.bg, color: pageSurface.text, fontFamily: look.body, ...frame }}
+      style={{
+        backgroundColor: pageSurface.bg,
+        color: pageSurface.text,
+        fontFamily: look.body,
+        // Named so the rules below can target this container explicitly rather
+        // than whichever ancestor happens to be nearest.
+        containerType: 'inline-size',
+        containerName: 'lp',
+        ...frame,
+      }}
     >
       {/* The identities specify their own faces, and substituting a fallback
           would change what separates them. React hoists this into the head. */}
@@ -181,20 +190,29 @@ export const LivePreview = ({
         /* The public render must not offer an affordance the visitor cannot use. */
         .lp-public-root .lp-section-overlay { display: none !important; }
         .lp-public-root section { cursor: default !important; }
-        @media (max-width: 900px) {
-          .lp-preview-root .lp-split { grid-template-columns: 1fr !important; gap: 32px !important; }
-          .lp-preview-root section { padding-left: 24px !important; padding-right: 24px !important; }
+
+        /* Container queries, not viewport ones. The builder shows the page in a
+           pane roughly a third of the window wide, so a viewport media query is
+           answering the wrong question: it reports a desktop and the page keeps
+           a two-column hero and three-across stats inside 600 pixels, which
+           collide. Asking the CONTAINER means the preview and the live page
+           behave the same at the same content width, which is the only way a
+           preview can be trusted. */
+        @container lp (max-width: 900px) {
+          .lp-split { grid-template-columns: 1fr !important; gap: 30px !important; }
+          section { padding-left: 26px !important; padding-right: 26px !important; }
+          h1 { font-size: clamp(30px, 5.2cqw, 46px) !important; line-height: 1.12 !important; }
         }
-        @media (max-width: 640px) {
-          .lp-preview-root h1 { font-size: clamp(28px, 8vw, 38px) !important; line-height: 1.14 !important; }
-          .lp-preview-root h2 { font-size: clamp(22px, 6.5vw, 28px) !important; line-height: 1.22 !important; }
-          .lp-preview-root h3 { font-size: clamp(17px, 5vw, 20px) !important; }
-          .lp-preview-root section {
+        @container lp (max-width: 660px) {
+          section {
             padding-top: 44px !important; padding-bottom: 44px !important;
             padding-left: 18px !important; padding-right: 18px !important;
           }
-          .lp-preview-root [style*="grid-template-columns"] { grid-template-columns: 1fr !important; gap: 16px !important; }
-          .lp-preview-root a[href^="tel:"], .lp-preview-root button, .lp-preview-root a[href="#lp-form"] { min-height: 48px; }
+          h1 { font-size: clamp(26px, 7cqw, 36px) !important; }
+          h2 { font-size: clamp(21px, 5.6cqw, 30px) !important; line-height: 1.22 !important; }
+          h3 { font-size: clamp(16px, 4.4cqw, 20px) !important; }
+          [style*="grid-template-columns"] { grid-template-columns: 1fr !important; gap: 16px !important; }
+          a[href^="tel:"], button, a[href="#lp-form"] { min-height: 48px; }
         }
       `}</style>
     </div>

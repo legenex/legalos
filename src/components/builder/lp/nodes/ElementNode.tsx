@@ -20,7 +20,7 @@ import { Check, ChevronDown, ChevronUp, Star } from 'lucide-react'
 import { QuizRuntime } from '@/components/public/quiz/QuizRuntime'
 import type { LpIdentity } from '@/lib/lp-identities'
 import { elementSpec, isEmptyElement, type LpElement } from '@/lib/lp-nodes/model'
-import type { Look, Surface } from '@/lib/lp-nodes/surface'
+import { deriveSurface, type Look, type Surface } from '@/lib/lp-nodes/surface'
 import { iconFor } from './icons'
 
 export type NodeCtx = {
@@ -105,7 +105,10 @@ const Placeholder = ({ el, ctx, inline }: { el: LpElement; ctx: NodeCtx; inline?
     <Shell el={el} ctx={ctx} inline={inline}>
       <div
         style={{
-          display: inline ? 'inline-flex' : 'flex',
+          // Always inline-flex: a full-width box cannot show whether the
+          // section it is in is centred or left-aligned, which is most of what
+          // an operator is looking at while a page is still empty.
+          display: 'inline-flex',
           alignItems: 'center',
           gap: 6,
           padding: inline ? '5px 10px' : '10px 12px',
@@ -309,7 +312,7 @@ const PhoneNode = ({ el, ctx }: { el: LpElement; ctx: NodeCtx }) => {
 const Stat = ({ el, ctx }: { el: LpElement; ctx: NodeCtx }) => (
   <Shell el={el} ctx={ctx}>
     <div style={{ textAlign: ctx.align === 'center' ? 'center' : 'left' }}>
-      <div style={{ fontFamily: ctx.look.display, fontWeight: ctx.look.displayWeight, fontSize: 34, lineHeight: 1.05, color: ctx.surface.accent, letterSpacing: ctx.look.headingTracking }}>{str(el.value)}</div>
+      <div style={{ fontFamily: ctx.look.display, fontWeight: ctx.look.displayWeight, fontSize: 30, lineHeight: 1.05, color: ctx.surface.accent, letterSpacing: ctx.look.headingTracking, overflowWrap: 'anywhere' }}>{str(el.value)}</div>
       <div style={{ fontFamily: ctx.look.utility, fontSize: 12, color: ctx.surface.muted, marginTop: 6, fontWeight: 500 }}>{str(el.label)}</div>
     </div>
   </Shell>
@@ -555,21 +558,57 @@ const Logo = ({ el, ctx }: { el: LpElement; ctx: NodeCtx }) => {
  * gets the safe behaviour - no lead written, no redirect followed - rather than
  * the dangerous one.
  */
+/**
+ * Whether a quiz has anything a visitor would actually be asked.
+ *
+ * Node types differ in whether they are visible by default - a webhook or a
+ * decision never is - so "has steps" is not the same question as "has steps
+ * someone will see". A quiz built entirely of hidden nodes would otherwise
+ * render as an empty runtime rather than as the placeholder that says a quiz
+ * still needs attaching.
+ */
+const VISIBLE_BY_DEFAULT: Record<string, boolean> = {
+  question: true, form: true, transition: true, endpoint: true, custom: true,
+  webhook: false, decision: false, verification: false,
+}
+
+const quizHasVisibleSteps = (quiz: unknown): boolean => {
+  const q = quiz as { steps?: Array<{ key?: string }>; nodes?: Array<Record<string, unknown>> } | null | undefined
+  if (!q || !Array.isArray(q.steps) || q.steps.length === 0) return false
+  const nodes = Array.isArray(q.nodes) ? q.nodes : []
+  return q.steps.some((step) => {
+    const forStep = nodes.filter((n) => n.stepKey === step.key)
+    const shared = forStep.find((n) => !Array.isArray(n.tiers) || (n.tiers as unknown[]).length === 0)
+    const n = shared || forStep[0]
+    if (!n) return false
+    return (n.isVisible !== false && VISIBLE_BY_DEFAULT[String(n.type)] !== false) || n.isVisible === true
+  })
+}
+
 const FormNode = ({ el, ctx }: { el: LpElement; ctx: NodeCtx }) => {
   const { surface: s, look } = ctx
-  const quiz = ctx.quiz as { steps?: unknown[] } | null | undefined
-  const hasQuiz = Boolean(quiz && Array.isArray(quiz.steps) && quiz.steps.length > 0)
+  const quiz = ctx.quiz
+  const hasQuiz = quizHasVisibleSteps(quiz)
   const label = str(el.label) || ctx.quizDepLabel || ''
+
+  // A card asked to contrast with its section gets a full surface of its own,
+  // derived from the identity's opposite ground and verified there, rather than
+  // an inverted colour picked by hand. Both sides therefore read, and the quiz
+  // is handed the opaque colour it will actually sit on so its own text is
+  // derived against the card rather than against the section behind it.
+  const card = str(el.ground) === 'contrast'
+    ? deriveSurface(s.isDark ? ctx.identity.surface : ctx.identity.surfaceDark, ctx.identity)
+    : { bg: s.card, text: s.cardText, muted: s.cardMuted, line: s.line }
 
   return (
     <Shell el={el} ctx={ctx}>
       <div
         id="lp-form"
         onClick={(e) => { if (!ctx.editable) return; e.stopPropagation(); ctx.onSelect?.(el.id) }}
-        style={{ backgroundColor: s.card, border: `${look.borderWidth} solid ${s.line}`, borderRadius: look.radiusLg, padding: 26, boxShadow: s.isDark ? '0 24px 64px -20px rgba(0,0,0,0.6)' : '0 18px 44px -20px rgba(0,0,0,0.24)', textAlign: 'left' }}
+        style={{ backgroundColor: card.bg, border: `${look.borderWidth} solid ${card.line}`, borderRadius: look.radiusLg, padding: 26, boxShadow: s.isDark ? '0 24px 64px -20px rgba(0,0,0,0.6)' : '0 18px 44px -20px rgba(0,0,0,0.24)', textAlign: 'left' }}
       >
         {label ? (
-          <div style={{ fontFamily: look.utility, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: s.cardMuted, marginBottom: 14 }}>{label}</div>
+          <div style={{ fontFamily: look.utility, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: card.muted, marginBottom: 14 }}>{label}</div>
         ) : null}
         <div onClick={(e) => e.stopPropagation()}>
           {hasQuiz ? (
@@ -581,16 +620,16 @@ const FormNode = ({ el, ctx }: { el: LpElement; ctx: NodeCtx }) => {
               inline
               // QuizRuntime is ported and untyped, so its optional props infer
               // from their `null` defaults rather than being declared.
-              surfaceColor={s.card as never}
+              surfaceColor={card.bg as never}
               previewMode={ctx.quizCtx ? ctx.quizCtx.preview !== false : true}
             />
           ) : (
-            <div style={{ fontFamily: look.body, fontSize: 13.5, color: s.cardMuted, lineHeight: 1.6 }}>
+            <div style={{ fontFamily: look.body, fontSize: 13.5, color: card.muted, lineHeight: 1.6 }}>
               Attach a quiz to this deployment and it runs here.
             </div>
           )}
         </div>
-        {str(el.note) ? <div style={{ fontFamily: look.body, fontSize: 11.5, color: s.cardMuted, marginTop: 14, textAlign: 'center' }}>{str(el.note)}</div> : null}
+        {str(el.note) ? <div style={{ fontFamily: look.body, fontSize: 11.5, color: card.muted, marginTop: 14, textAlign: 'center' }}>{str(el.note)}</div> : null}
       </div>
     </Shell>
   )

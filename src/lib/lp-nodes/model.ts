@@ -237,6 +237,17 @@ export const ELEMENT_SPECS: Record<ElementType, ElementSpec> = {
     fields: [
       { key: 'label', label: 'Card label', kind: 'text' },
       { key: 'note', label: 'Note under the form', kind: 'text' },
+      {
+        // Figure and ground. A form card that contrasts with its section is a
+        // structural choice rather than a colour one, which is why a skeleton
+        // can state it: it is what makes a pale card carry the eye on a dark
+        // fold. Both sides are derived and verified, so neither can go unread.
+        key: 'ground', label: 'Card ground', kind: 'select',
+        options: [
+          { id: 'match', label: 'Match the section' },
+          { id: 'contrast', label: 'Opposite of the section' },
+        ],
+      },
     ],
   },
   stat: {
@@ -507,12 +518,18 @@ export const groupElements = (elements: LpElement[], columnsOverride?: number): 
 export const isEmptyElement = (el: LpElement): boolean => {
   const spec = elementSpec(el.type)
   if (!spec) return true
-  // These carry no copy and are never empty in the sense that matters.
+  // These draw something regardless: a rule is a rule, a form is a form, and a
+  // logo and a phone number both come from the brand rather than from copy.
   if (el.type === 'divider' || el.type === 'form' || el.type === 'logo' || el.type === 'phone') return false
-  if (spec.fields.length === 0) return false
-  return !spec.fields.some((f) => {
+  // Only COPY fields count. A skeleton sets structural values - a heading's
+  // level, a button's role - and counting those as content made every empty
+  // node in a fresh skeleton look filled, so it rendered as an invisible
+  // heading and a button with no label instead of as a placeholder.
+  const copy = spec.fields.filter((f) => f.kind === 'text' || f.kind === 'textarea')
+  if (copy.length === 0) return false
+  return !copy.some((f) => {
     const v = el[f.key]
-    return typeof v === 'string' ? v.trim().length > 0 : v !== undefined && v !== null && v !== ''
+    return typeof v === 'string' && v.trim().length > 0
   })
 }
 

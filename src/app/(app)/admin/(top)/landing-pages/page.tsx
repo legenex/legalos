@@ -72,7 +72,18 @@ export default async function LandingPagesPage() {
   })
 
   // Real quizzes + quiz deployments so the LP deployment editor's quiz picker populates.
-  const quizzes = quizRes.docs.map((r) => ({ id: String(r.id), name: r.name }))
+  // The whole quiz, not just its name. The hero form runs the REAL quiz runtime
+  // rather than a drawing of one, so without the steps and nodes the builder
+  // shows an empty card where the most important thing on the page goes, and
+  // the layout cannot be judged.
+  const quizzes = quizRes.docs.map((r) => ({
+    id: String(r.id),
+    name: r.name,
+    tiers: Array.isArray(r.tiers) ? r.tiers : [],
+    steps: Array.isArray(r.steps) ? r.steps : [],
+    nodes: Array.isArray(r.nodes) ? r.nodes : [],
+    customFields: Array.isArray(r.custom_fields) ? r.custom_fields : [],
+  }))
   const quizDeployments = quizDepRes.docs.map((r) => {
     const siteId = relId(r.site)
     const domId = relId(r.domain)

@@ -88,7 +88,7 @@ const SKELETON_B: LpSkeleton = {
       type: 'hero',
       tone: 'dark',
       props: { variant: 'centered', align: 'center' },
-      elements: [e('note'), e('heading', { level: '1' }), e('text'), e('form'), e('note')],
+      elements: [e('note'), e('heading', { level: '1' }), e('text'), e('form', { ground: 'contrast' }), e('note')],
     },
     {
       type: 'band',
