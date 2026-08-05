@@ -15,6 +15,7 @@ import { T, genId, brandShortName } from '../ui'
 import { relativeLuminance, contrastRatio } from '@/lib/builder/page-lint'
 import { onPrimaryText, getSafeTextColor, getSafeMutedColor, rgbToHsl, hslToHex, parseHex } from '@/lib/builder/color-system'
 import { QuizRuntime } from '@/components/public/quiz/QuizRuntime'
+import { LP_IDENTITIES } from '@/lib/lp-identities'
 
 // A template's canvas is "dark" when its luminance is below the midpoint.
 // Replaces the brittle canvas === '#0f172a' string-equality that only
@@ -133,47 +134,35 @@ const atLightness = (hex, target) => {
 const deriveTemplateTokens = (tpl, brand) => {
   const base = tpl.tokens
   const c = brand?.colors || {}
-  const primary = c.primary || base.canvas
-  const wantsDark = tokensAreDark(base)
 
-  // A dark template grounds itself in the brand's own primary rather than in a
-  // borrowed slate, so the darkness still reads as this brand.
-  const canvas = wantsDark ? atLightness(primary, 0.1) : c.background || '#ffffff'
-  const surface = wantsDark ? atLightness(primary, 0.17) : c.cardBg || atLightness(c.background || '#ffffff', 0.97)
-  const text = getSafeTextColor(canvas).hex
-  const textMute = getSafeMutedColor(text, canvas).hex
+  // The identity owns the palette. This is the reversal the owner asked for:
+  // a template is the look, so Counterweight stays vermilion on warm grey
+  // under any brand. The brand is consulted only where the identity is silent,
+  // which is how a template without one still renders.
+  const canvas = base.canvas || c.background || '#ffffff'
+  const surface = base.surfaceAlt || c.cardBg || canvas
 
-  // The brand colour AS TEXT, lifted until it can actually be read on this
-  // ground.
-  //
-  // Eyebrows, stat figures and highlighted headline words were painted in
-  // brand.colors.primary directly. On a dark template that ground is derived
-  // FROM the primary, so a navy brand wrote navy text on a navy page and the
-  // words simply were not there. Using a brand token as a text colour without
-  // deriving it against the surface it sits on is the one thing the colour
-  // system exists to prevent, and this file was doing it in twelve places.
-  //
-  // Lightness is walked away from the ground, hue and saturation kept, so the
-  // highlight still reads as the brand rather than becoming a generic tint.
-  let accentOn = c.accent || primary
+  // Text stays DERIVED and verified, which is the one rule that survives the
+  // change of ownership. An identity states its ink, and that ink is kept when
+  // it can be read on its own ground and replaced when it cannot, so no
+  // combination of identity and override can produce unreadable copy.
+  const statedInk = base.text || c.ink
+  const text = statedInk && (contrastRatio(statedInk, canvas) ?? 0) >= 4.5 ? statedInk : getSafeTextColor(canvas).hex
+  const textMute = base.textMute && (contrastRatio(base.textMute, canvas) ?? 0) >= 3
+    ? base.textMute
+    : getSafeMutedColor(text, canvas).hex
+
+  // The accent as TEXT, lifted until it reads. An identity's accent is chosen
+  // against its own surface, but a section can be re-toned under it.
+  const statedAccent = base.primary || c.primary || text
+  let accentOn = statedAccent
   if ((contrastRatio(accentOn, canvas) ?? 0) < 4.5) {
-    const goingLighter = (relativeLuminance(canvas) ?? 0) < 0.5
+    const lighter = (relativeLuminance(canvas) ?? 0) < 0.5
     for (let step = 1; step <= 18; step += 1) {
-      const target = goingLighter ? 0.5 + step * 0.025 : 0.5 - step * 0.025
-      const candidate = atLightness(c.accent || primary, target)
-      if ((contrastRatio(candidate, canvas) ?? 0) >= 4.5) {
-        accentOn = candidate
-        break
-      }
-      accentOn = candidate
+      accentOn = atLightness(statedAccent, lighter ? 0.5 + step * 0.025 : 0.5 - step * 0.025)
+      if ((contrastRatio(accentOn, canvas) ?? 0) >= 4.5) break
     }
   }
-
-  // A gradient stays a gradient, built from the brand instead of from indigo.
-  const heroBg =
-    base.hero === 'gradient'
-      ? `linear-gradient(135deg, ${canvas} 0%, ${atLightness(primary, wantsDark ? 0.2 : 0.92)} 60%, ${canvas} 100%)`
-      : canvas
 
   return {
     ...base,
@@ -182,85 +171,68 @@ const deriveTemplateTokens = (tpl, brand) => {
     text,
     textMute,
     accentOn,
-    ...(heroBg ? { heroBg } : {}),
-    headlineFont: brand?.typography?.headlineFont
-      ? `"${brand.typography.headlineFont}", ${base.headlineFont}`
-      : base.headlineFont,
-    bodyFont: brand?.typography?.bodyFont ? `"${brand.typography.bodyFont}", ${base.bodyFont}` : base.bodyFont,
+    heroBg: base.hero === 'gradient'
+      ? `linear-gradient(135deg, ${canvas} 0%, ${atLightness(base.primary || canvas, 0.92)} 60%, ${canvas} 100%)`
+      : canvas,
+    headlineFont: base.headlineFont,
+    bodyFont: base.bodyFont,
   }
 }
 
 // ============================================================================
 // LANDING PAGE TEMPLATES
 // ============================================================================
-export const TEMPLATES = [
-  {
-    id: 'bold_modern',
-    name: 'Bold Modern',
-    angleDefault: 'pain',
-    blurb: 'Quiz above the fold in a dark gradient hero. Results-led, big stats. Best for cold PPC traffic.',
-    hookExample: '$50M+ recovered. Was your accident worth more?',
-    tokens: {
-      mood: 'dark',
-      hero: 'gradient',
-      headlineFont: '"Inter", system-ui, sans-serif',
-      bodyFont: '"Inter", system-ui, sans-serif',
-      headlineWeight: 800,
-      eyebrowStyle: 'pill_dot',
-      radius: 10,
-      heroBg: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 60%, #0f172a 100%)',
-    },
+/**
+ * The four landing-page templates, each one a complete identity.
+ *
+ * These replace the previous four, which declared only a mood and took every
+ * colour from the brand. The owner chose the opposite model for these: a
+ * template IS the look, palette and faces included, so a page deployed under
+ * Counterweight is vermilion on warm grey whatever the Site's own tokens say.
+ *
+ * Built from LP_IDENTITIES rather than restated here, so the design handoff
+ * stays the single source and a corrected hex cannot be right in one file and
+ * stale in the other.
+ */
+const ANGLE_FOR_POSITION = { adversary: 'pain', clarity: 'community', authority: 'authority', direct: 'urgency' }
+const EYEBROW_FOR_POSITION = { adversary: 'flame_tag', clarity: 'rule_line', authority: 'uppercase_caps', direct: 'pill_dot' }
+
+export const TEMPLATES = LP_IDENTITIES.map((i) => ({
+  id: i.id,
+  name: i.name,
+  identity: i,
+  angleDefault: ANGLE_FOR_POSITION[i.position] || 'pain',
+  blurb: `${i.position} - ${i.tagline}`,
+  hookExample: i.tagline,
+  tokens: {
+    // The identity's own values, not a mood the brand then fills in.
+    canvas: i.surface,
+    surfaceAlt: i.surfaceAlt,
+    surface: i.surface,
+    surfaceDark: i.surfaceDark,
+    text: i.ink,
+    textMute: i.inkMuted,
+    line: i.line,
+    primary: i.primary,
+    primaryInk: i.primaryInk,
+    accent: i.accent,
+    headlineFont: i.fontDisplay,
+    bodyFont: i.fontBody,
+    utilityFont: i.fontUtility,
+    headlineWeight: i.fdw,
+    h1tt: i.h1tt,
+    h1ls: i.h1ls,
+    wmTt: i.wmTt,
+    wmLs: i.wmLs,
+    eyebrowStyle: EYEBROW_FOR_POSITION[i.position] || 'pill_dot',
+    radius: parseInt(i.rMd, 10) || 8,
+    radiusPill: i.rPill,
+    radiusLg: i.rLg,
+    borderWeight: i.bw,
+    mood: 'light',
+    hero: 'flat',
   },
-  {
-    id: 'classic_authority',
-    name: 'Classic Authority',
-    angleDefault: 'authority',
-    blurb: 'Navy + serif. Trust badges, scale-of-justice motifs. Built to feel like a real firm.',
-    hookExample: 'Trusted by 50,000 accident victims since 2018.',
-    tokens: {
-      mood: 'light',
-      hero: 'gradient',
-      headlineFont: 'Georgia, "Times New Roman", serif',
-      bodyFont: '"Inter", system-ui, sans-serif',
-      headlineWeight: 700,
-      eyebrowStyle: 'uppercase_caps',
-      radius: 4,
-      heroBg: 'linear-gradient(180deg, #f8f7f4 0%, #f0ede5 100%)',
-    },
-  },
-  {
-    id: 'editorial_investigation',
-    name: 'Editorial Investigation',
-    angleDefault: 'community',
-    blurb: 'Paper cream canvas, Lora serif, rule-line eyebrows. Reads like an investigative article.',
-    hookExample: 'Most accident victims never learn they qualified.',
-    tokens: {
-      mood: 'light',
-      hero: 'flat',
-      headlineFont: '"Lora", Georgia, serif',
-      bodyFont: '"Lora", Georgia, serif',
-      headlineWeight: 600,
-      eyebrowStyle: 'rule_line',
-      radius: 2,
-    },
-  },
-  {
-    id: 'urgent_streamlined',
-    name: 'Urgent Streamlined',
-    angleDefault: 'urgency',
-    blurb: 'White canvas. Flame-tag eyebrows. Statute-of-limitations urgency.',
-    hookExample: 'Deadlines vary by state. Some are as short as one year.',
-    tokens: {
-      mood: 'light',
-      hero: 'flat',
-      headlineFont: '"Inter", system-ui, sans-serif',
-      bodyFont: '"Inter", system-ui, sans-serif',
-      headlineWeight: 900,
-      eyebrowStyle: 'flame_tag',
-      radius: 8,
-    },
-  },
-]
+}))
 
 export const ANGLES = [
   { id: 'pain', label: 'Pain First', desc: 'Acknowledge what happened. Lean into emotion and consequences.' },

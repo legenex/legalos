@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&family=Lexend:wght@400;500;600;700&family=Public+Sans:wght@400;500;600;700&family=Libre+Caslon+Text:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:wght@400;500;600;700&family=Sora:wght@400;600;700;800&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+body{margin:0;background:#E8E7E3;color:#1E1E1C;}
+a{color:#3A506B;text-decoration:none;}
+a:hover{color:#22364A;}
+input::placeholder{color:inherit;opacity:.5;}
+</style>
+</helmet>
+
+<section data-screen-label="Plan" style="padding:56px 64px 16px;font-family:'Public Sans',sans-serif;max-width:1760px;">
+  <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#77766F;font-weight:600;">LegalOS template system</div>
+  <h1 style="font-size:34px;font-weight:700;margin:10px 0 6px;letter-spacing:-0.01em;">Four brand identities, four token sets</h1>
+  <p style="max-width:760px;font-size:15px;line-height:1.55;color:#55544E;margin:0 0 28px;">Each brand is an independent token set for the fixed template system. The plan below names each brand's position on the four axes. No two brands overlap on more than one axis, and none reuses the Don't Settle palette, faces, or checkmark mark.</p>
+  <div style="display:grid;grid-template-columns:220px 1fr 1fr 1fr 1fr;gap:0;border:1px solid #D6D5CF;background:#FDFDFB;border-radius:10px;overflow:hidden;font-size:13.5px;">
+    <div style="display:contents;">
+      <div style="padding:12px 16px;background:#F1F0EB;font-weight:700;">Brand</div>
+      <div style="padding:12px 16px;background:#F1F0EB;font-weight:700;">Palette temperature</div>
+      <div style="padding:12px 16px;background:#F1F0EB;font-weight:700;">Type personality</div>
+      <div style="padding:12px 16px;background:#F1F0EB;font-weight:700;">Shape language</div>
+      <div style="padding:12px 16px;background:#F1F0EB;font-weight:700;">Mark idea</div>
+    </div>
+    <sc-for list="{{ brands }}" as="b" hint-placeholder-count="4">
+      <div style="display:contents;">
+        <div style="padding:14px 16px;border-top:1px solid #E4E3DD;font-weight:700;">{{ b.label }}<div style="font-weight:400;color:#77766F;font-size:12px;">{{ b.position }}</div></div>
+        <div style="padding:14px 16px;border-top:1px solid #E4E3DD;color:#44433E;">{{ b.axisPalette }}</div>
+        <div style="padding:14px 16px;border-top:1px solid #E4E3DD;color:#44433E;">{{ b.axisType }}</div>
+        <div style="padding:14px 16px;border-top:1px solid #E4E3DD;color:#44433E;">{{ b.axisShape }}</div>
+        <div style="padding:14px 16px;border-top:1px solid #E4E3DD;color:#44433E;">{{ b.axisMark }}</div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section data-screen-label="Comparison sheet" style="padding:40px 64px 16px;font-family:'Public Sans',sans-serif;max-width:1760px;">
+  <h2 style="font-size:22px;font-weight:700;margin:0 0 4px;">Comparison sheet</h2>
+  <p style="font-size:14px;color:#66655F;margin:0 0 20px;">All four side by side. They should not read as a family.</p>
+  <div style="display:flex;gap:20px;align-items:stretch;">
+    <sc-for list="{{ brands }}" as="b" hint-placeholder-count="4">
+      <div style="width:392px;flex:none;border:1px solid #D6D5CF;border-radius:12px;overflow:hidden;background:#FFFFFF;display:flex;flex-direction:column;--bp:{{ b.primary }};--bpi:{{ b.primaryInk }};--ba:{{ b.accent }};--bsu:{{ b.surface }};--bsd:{{ b.surfaceDark }};--bi:{{ b.ink }};--fd:{{ b.fontDisplay }};--fb:{{ b.fontBody }};">
+        <div style="padding:24px 24px 18px;background:var(--bsu);flex:1;">
+          <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#8A8983;font-weight:600;font-family:'Public Sans',sans-serif;">{{ b.label }} · {{ b.position }}</div>
+          <div style="display:flex;align-items:center;gap:12px;margin:16px 0 8px;">
+            <svg viewBox="0 0 40 40" width="40" height="40"><path d="{{ b.l1d }}" fill="{{ b.l1f }}" stroke="{{ b.l1s }}" stroke-width="{{ b.l1sw }}" stroke-linecap="round" stroke-linejoin="round"></path><path d="{{ b.l2d }}" fill="{{ b.l2f }}"></path></svg>
+            <div style="font-family:var(--fd);font-weight:{{ b.fdw }};font-size:{{ b.wmSize }};letter-spacing:{{ b.wmLs }};text-transform:{{ b.wmTt }};color:var(--bi);">{{ b.wordmark }}</div>
+          </div>
+          <div style="font-family:var(--fb);font-size:13.5px;color:var(--bi);opacity:.75;margin-bottom:16px;">{{ b.tagline }}</div>
+          <div style="display:flex;gap:6px;margin-bottom:14px;">
+            <div style="height:34px;flex:2;border-radius:6px;background:{{ b.primary }};"></div>
+            <div style="height:34px;flex:1;border-radius:6px;background:{{ b.accent }};"></div>
+            <div style="height:34px;flex:1;border-radius:6px;background:{{ b.surfaceAlt }};border:1px solid #00000014;"></div>
+            <div style="height:34px;flex:1;border-radius:6px;background:{{ b.surfaceDark }};"></div>
+          </div>
+          <div style="font-family:var(--fd);font-weight:{{ b.fdw }};text-transform:{{ b.wmTt }};font-size:20px;color:var(--bi);line-height:1.2;">{{ b.typeSample }}</div>
+          <div style="font-family:var(--fb);font-size:13px;color:var(--bi);opacity:.7;margin-top:6px;">{{ b.fontDisplayName }} + {{ b.fontBodyName }}</div>
+          <div style="display:flex;gap:8px;margin-top:14px;align-items:center;">
+            <div style="width:52px;height:26px;border:{{ b.bw }} solid var(--bi);border-radius:{{ b.rMd }};"></div>
+            <div style="width:52px;height:26px;border:{{ b.bw }} solid var(--bi);border-radius:{{ b.rPill }};"></div>
+            <div style="font-family:'Public Sans',sans-serif;font-size:11.5px;color:#8A8983;">{{ b.shapeChipNote }}</div>
+          </div>
+        </div>
+        <div style="padding:16px 24px;background:{{ b.surfaceDark }};display:flex;align-items:center;gap:12px;">
+          <svg viewBox="0 0 40 40" width="30" height="30"><path d="{{ b.l1d }}" fill="{{ b.l1fD }}" stroke="{{ b.l1sD }}" stroke-width="{{ b.l1sw }}" stroke-linecap="round" stroke-linejoin="round"></path><path d="{{ b.l2d }}" fill="{{ b.l2fD }}"></path></svg>
+          <div style="font-family:var(--fd);font-weight:{{ b.fdw }};font-size:15px;letter-spacing:{{ b.wmLs }};text-transform:{{ b.wmTt }};color:#FFFFFFE6;">{{ b.wordmark }}</div>
+          <div style="margin-left:auto;display:flex;gap:5px;">
+            <div style="width:22px;height:22px;border-radius:5px;background:{{ b.primaryDark }};"></div>
+            <div style="width:22px;height:22px;border-radius:5px;background:{{ b.accent }};"></div>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section data-screen-label="Spec sheets" style="padding:40px 64px 16px;font-family:'Public Sans',sans-serif;max-width:1760px;">
+  <h2 style="font-size:22px;font-weight:700;margin:0 0 20px;">Brand spec sheets</h2>
+  <div style="display:flex;flex-direction:column;gap:24px;">
+    <sc-for list="{{ brands }}" as="b" hint-placeholder-count="4">
+      <div style="width:1560px;flex:none;border:1px solid #D6D5CF;border-radius:12px;background:#FFFFFF;overflow:hidden;--bp:{{ b.primary }};--bi:{{ b.ink }};--fd:{{ b.fontDisplay }};--fb:{{ b.fontBody }};">
+        <div style="display:grid;grid-template-columns:430px 470px 1fr;gap:0;">
+          <div style="padding:28px;background:{{ b.surface }};border-right:1px solid #E4E3DD;">
+            <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#8A8983;font-weight:600;">{{ b.label }} · {{ b.position }}</div>
+            <div style="display:flex;align-items:center;gap:14px;margin:18px 0 6px;">
+              <svg viewBox="0 0 40 40" width="56" height="56"><path d="{{ b.l1d }}" fill="{{ b.l1f }}" stroke="{{ b.l1s }}" stroke-width="{{ b.l1sw }}" stroke-linecap="round" stroke-linejoin="round"></path><path d="{{ b.l2d }}" fill="{{ b.l2f }}"></path></svg>
+              <div>
+                <div style="font-family:var(--fd);font-weight:{{ b.fdw }};font-size:{{ b.wmSizeLg }};letter-spacing:{{ b.wmLs }};text-transform:{{ b.wmTt }};color:var(--bi);line-height:1.05;">{{ b.wordmark }}</div>
+                <div style="font-family:var(--fb);font-size:13px;color:var(--bi);opacity:.7;margin-top:4px;">{{ b.tagline }}</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;margin:18px 0;">
+              <div style="flex:1;border:1px solid #E0DFD9;border-radius:8px;background:#FDFDFB;padding:12px;display:flex;flex-direction:column;align-items:center;gap:8px;">
+                <div style="display:flex;align-items:end;gap:10px;">
+                  <svg viewBox="0 0 40 40" width="40" height="40"><path d="{{ b.l1d }}" fill="{{ b.l1f }}" stroke="{{ b.l1s }}" stroke-width="{{ b.l1sw }}" stroke-linecap="round" stroke-linejoin="round"></path><path d="{{ b.l2d }}" fill="{{ b.l2f }}"></path></svg>
+                  <svg viewBox="0 0 40 40" width="32" height="32"><path d="{{ b.l1d }}" fill="{{ b.l1f }}" stroke="{{ b.l1s }}" stroke-width="{{ b.l1sw }}" stroke-linecap="round" stroke-linejoin="round"></path><path d="{{ b.l2d }}" fill="{{ b.l2f }}"></path></svg>
+                </div>
+                <div style="font-size:10.5px;color:#8A8983;">On light · 40px and 32px</div>
+              </div>
+              <div style="flex:1;border-radius:8px;background:{{ b.surfaceDark }};padding:12px;display:flex;flex-direction:column;align-items:center;gap:8px;">
+                <div style="display:flex;align-items:end;gap:10px;">
+                  <svg viewBox="0 0 40 40" width="40" height="40"><path d="{{ b.l1d }}" fill="{{ b.l1fD }}" stroke="{{ b.l1sD }}" stroke-width="{{ b.l1sw }}" stroke-linecap="round" stroke-linejoin="round"></path><path d="{{ b.l2d }}" fill="{{ b.l2fD }}"></path></svg>
+                  <svg viewBox="0 0 40 40" width="32" height="32"><path d="{{ b.l1d }}" fill="{{ b.l1fD }}" stroke="{{ b.l1sD }}" stroke-width="{{ b.l1sw }}" stroke-linecap="round" stroke-linejoin="round"></path><path d="{{ b.l2d }}" fill="{{ b.l2fD }}"></path></svg>
+                </div>
+                <div style="font-size:10.5px;color:#FFFFFF99;">On dark · footer and top bar</div>
+              </div>
+            </div>
+            <div style="font-size:12.5px;line-height:1.55;color:#55544E;"><strong>Mark:</strong> {{ b.markSpec }}</div>
+            <div style="font-size:12.5px;line-height:1.55;color:#55544E;margin-top:8px;"><strong>Wordmark:</strong> {{ b.wmSpec }}</div>
+          </div>
+          <div style="padding:28px;border-right:1px solid #E4E3DD;">
+            <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#8A8983;font-weight:600;margin-bottom:14px;">Token set</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <sc-for list="{{ b.tokens }}" as="t" hint-placeholder-count="10">
+                <div style="display:flex;align-items:center;gap:10px;font-size:12.5px;">
+                  <div style="width:26px;height:26px;border-radius:6px;background:{{ t.v }};border:1px solid #00000014;flex:none;"></div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#33322E;width:172px;flex:none;">{{ t.n }}</div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#8A8983;width:70px;flex:none;">{{ t.v }}</div>
+                  <div style="color:#77766F;font-size:11.5px;">{{ t.c }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:16px;padding-top:14px;border-top:1px solid #ECEBE6;font-family:'JetBrains Mono',monospace;font-size:11.5px;line-height:1.8;color:#33322E;">
+              <div>--font-display: {{ b.fontDisplayCss }}</div>
+              <div>--font-body: {{ b.fontBodyCss }}</div>
+              <div>--font-utility: {{ b.fontUtilityCss }}</div>
+              <div>--radius-sm: {{ b.rSm }} · --radius-md: {{ b.rMd }} · --radius-lg: {{ b.rLg }} · --radius-pill: {{ b.rPill }}</div>
+              <div>--border-weight: {{ b.bw }}</div>
+            </div>
+          </div>
+          <div style="padding:28px;">
+            <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#8A8983;font-weight:600;margin-bottom:12px;">Type</div>
+            <div style="font-family:var(--fd);font-weight:{{ b.fdw }};font-size:30px;text-transform:{{ b.wmTt }};letter-spacing:{{ b.h1ls }};color:var(--bi);line-height:1.15;">{{ b.typeSample }}</div>
+            <div style="font-family:var(--fb);font-size:13.5px;line-height:1.55;color:#44433E;margin:8px 0 4px;">{{ b.bodySample }}</div>
+            <div style="font-size:11.5px;color:#8A8983;">{{ b.typeSpecNote }}</div>
+            <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#8A8983;font-weight:600;margin:20px 0 8px;">Voice</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <sc-for list="{{ b.voice }}" as="v" hint-placeholder-count="4">
+                <div style="font-size:12.5px;line-height:1.5;color:#44433E;display:flex;gap:8px;"><span style="color:{{ b.primary }};flex:none;">·</span><span>{{ v }}</span></div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#8A8983;font-weight:600;margin:18px 0 6px;">Dark mode</div>
+            <div style="font-size:12.5px;line-height:1.5;color:#44433E;">{{ b.darkNote }}</div>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section data-screen-label="Rendered proofs" style="padding:40px 64px 80px;font-family:'Public Sans',sans-serif;">
+  <h2 style="font-size:22px;font-weight:700;margin:0 0 4px;">Rendered proofs</h2>
+  <p style="font-size:14px;color:#66655F;margin:0 0 24px;">The same two fixed templates repainted from each brand's tokens: a long form on a light surface and a short form with a dark hero.</p>
+  <div style="display:flex;flex-direction:column;gap:48px;">
+    <sc-for list="{{ visibleBrands }}" as="b" hint-placeholder-count="4">
+      <div style="--bp:{{ b.primary }};--bpi:{{ b.primaryInk }};--ba:{{ b.accent }};--bsu:{{ b.surface }};--bsa:{{ b.surfaceAlt }};--bsd:{{ b.surfaceDark }};--bi:{{ b.ink }};--bim:{{ b.inkMuted }};--bl:{{ b.line }};--fd:{{ b.fontDisplay }};--fb:{{ b.fontBody }};--fu:{{ b.fontUtility }};--rsm:{{ b.rSm }};--rmd:{{ b.rMd }};--rlg:{{ b.rLg }};--rp:{{ b.rPill }};--bw:{{ b.bw }};">
+        <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#8A8983;font-weight:600;margin-bottom:12px;">{{ b.label }} · {{ b.name }} · long form (template 02) and short form (template 07)</div>
+        <div style="display:flex;gap:28px;align-items:flex-start;">
+
+          <div style="width:1024px;flex:none;background:var(--bsu);font-family:var(--fb);color:var(--bi);border:1px solid #CFCEC8;border-radius:8px;overflow:hidden;box-shadow:0 2px 10px #00000012;">
+            <div style="background:var(--bsd);color:#FFFFFFB8;font-size:12px;text-align:center;padding:7px 16px;">A free matching service. Not a law firm.</div>
+            <div style="display:flex;align-items:center;gap:24px;padding:16px 40px;border-bottom:var(--bw) solid var(--bl);">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <svg viewBox="0 0 40 40" width="30" height="30"><path d="{{ b.l1d }}" fill="{{ b.l1f }}" stroke="{{ b.l1s }}" stroke-width="{{ b.l1sw }}" stroke-linecap="round" stroke-linejoin="round"></path><path d="{{ b.l2d }}" fill="{{ b.l2f }}"></path></svg>
+                <span style="font-family:var(--fd);font-weight:{{ b.fdw }};font-size:17px;letter-spacing:{{ b.wmLs }};text-transform:{{ b.wmTt }};">{{ b.wordmark }}</span>
+              </div>
+              <div style="margin-left:auto;display:flex;gap:22px;font-size:14px;color:var(--bim);font-weight:500;">
+                <span>How it works</span><span>Attorneys</span><span>FAQ</span>
+              </div>
+              <div style="background:var(--bp);color:var(--bpi);font-weight:700;font-size:14px;padding:10px 20px;border-radius:var(--rp);">{{ b.ctaLong }}</div>
+            </div>
+            <div style="padding:72px 40px 64px;max-width:760px;">
+              <h1 style="font-family:var(--fd);font-weight:{{ b.fdw }};font-size:{{ b.h1s }};line-height:1.06;letter-spacing:{{ b.h1ls }};text-transform:{{ b.h1tt }};margin:0 0 20px;">{{ b.h1Long }}</h1>
+              <p style="font-size:17.5px;line-height:1.6;color:var(--bim);margin:0 0 28px;max-width:600px;">{{ b.subLong }}</p>
+              <div style="display:flex;align-items:center;gap:18px;">
+                <div style="background:var(--bp);color:var(--bpi);font-weight:700;font-size:16px;padding:15px 30px;border-radius:var(--rp);">{{ b.ctaLong }}</div>
+                <div style="font-size:13.5px;color:var(--bim);">Free eligibility check · Licensed attorneys · Your state</div>
+              </div>
+            </div>
+            <div style="background:var(--bsa);padding:56px 40px;">
+              <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--bim);font-weight:600;margin-bottom:8px;">How it works</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;">
+                <sc-for list="{{ b.steps }}" as="s" hint-placeholder-count="3">
+                  <div style="background:var(--bsu);border:var(--bw) solid var(--bl);border-radius:var(--rlg);padding:22px;">
+                    <div style="font-family:var(--fu);font-weight:600;font-size:13px;color:var(--bp);margin-bottom:10px;letter-spacing:.08em;">STEP {{ s.n }}</div>
+                    <div style="font-weight:600;font-size:15.5px;line-height:1.4;">{{ s.t }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="background:var(--bsd);color:#FFFFFF;padding:52px 40px;display:flex;align-items:center;gap:28px;">
+              <div style="font-family:var(--fd);font-weight:{{ b.fdw }};font-size:27px;line-height:1.2;text-transform:{{ b.h1tt }};letter-spacing:{{ b.h1ls }};flex:1;">{{ b.eligH }}</div>
+              <div style="background:var(--bp);color:var(--bpi);font-weight:700;font-size:15px;padding:14px 28px;border-radius:var(--rp);flex:none;border:1px solid #FFFFFF2E;">{{ b.ctaLong }}</div>
+            </div>
+            <div style="padding:48px 40px;max-width:720px;">
+              <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--bim);font-weight:600;margin-bottom:6px;">Questions</div>
+              <sc-for list="{{ b.faq }}" as="f" hint-placeholder-count="2">
+                <div style="border-top:var(--bw) solid var(--bl);padding:16px 0;">
+                  <div style="font-weight:600;font-size:15.5px;margin-bottom:6px;">{{ f.q }}</div>
+                  <div style="font-size:14px;line-height:1.6;color:var(--bim);">{{ f.a }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="background:var(--bsd);padding:32px 40px;display:flex;align-items:center;gap:12px;">
+              <svg viewBox="0 0 40 40" width="26" height="26"><path d="{{ b.l1d }}" fill="{{ b.l1fD }}" stroke="{{ b.l1sD }}" stroke-width="{{ b.l1sw }}" stroke-linecap="round" stroke-linejoin="round"></path><path d="{{ b.l2d }}" fill="{{ b.l2fD }}"></path></svg>
+              <span style="font-family:var(--fd);font-weight:{{ b.fdw }};font-size:14px;letter-spacing:{{ b.wmLs }};text-transform:{{ b.wmTt }};color:#FFFFFFE0;">{{ b.wordmark }}</span>
+              <span style="margin-left:auto;font-size:12px;color:#FFFFFF80;">© 2026 {{ b.name }}. A free matching service. Not a law firm.</span>
+            </div>
+          </div>
+
+          <div style="width:420px;flex:none;background:var(--bsd);font-family:var(--fb);border:1px solid #CFCEC8;border-radius:8px;overflow:hidden;box-shadow:0 2px 10px #00000012;">
+            <div style="padding:26px 26px 0;display:flex;align-items:center;gap:10px;">
+              <svg viewBox="0 0 40 40" width="28" height="28"><path d="{{ b.l1d }}" fill="{{ b.l1fD }}" stroke="{{ b.l1sD }}" stroke-width="{{ b.l1sw }}" stroke-linecap="round" stroke-linejoin="round"></path><path d="{{ b.l2d }}" fill="{{ b.l2fD }}"></path></svg>
+              <span style="font-family:var(--fd);font-weight:{{ b.fdw }};font-size:15px;letter-spacing:{{ b.wmLs }};text-transform:{{ b.wmTt }};color:#FFFFFFE6;">{{ b.wordmark }}</span>
+            </div>
+            <div style="padding:30px 26px 8px;">
+              <h1 style="font-family:var(--fd);font-weight:{{ b.fdw }};font-size:{{ b.h1sShort }};line-height:1.08;letter-spacing:{{ b.h1ls }};text-transform:{{ b.h1tt }};color:#FFFFFF;margin:0 0 12px;">{{ b.h1Short }}</h1>
+              <p style="font-size:15px;line-height:1.55;color:#FFFFFFAB;margin:0 0 22px;">{{ b.subShort }}</p>
+            </div>
+            <div style="margin:0 22px 22px;background:var(--bsu);border-radius:var(--rlg);padding:22px;color:var(--bi);">
+              <div style="font-weight:700;font-size:15px;margin-bottom:14px;">Free eligibility check</div>
+              <div style="display:flex;flex-direction:column;gap:12px;">
+                <div>
+                  <div style="font-size:12px;font-weight:600;color:var(--bim);margin-bottom:5px;">Your state</div>
+                  <input style="width:100%;box-sizing:border-box;border:var(--bw) solid var(--bl);border-radius:var(--rmd);padding:12px 14px;font-family:var(--fb);font-size:14.5px;color:var(--bi);background:var(--bsu);" placeholder="Select state">
+                </div>
+                <div>
+                  <div style="font-size:12px;font-weight:600;color:var(--bim);margin-bottom:5px;">When the accident happened</div>
+                  <input style="width:100%;box-sizing:border-box;border:var(--bw) solid var(--bl);border-radius:var(--rmd);padding:12px 14px;font-family:var(--fb);font-size:14.5px;color:var(--bi);background:var(--bsu);" placeholder="Month and year">
+                </div>
+                <div>
+                  <div style="font-size:12px;font-weight:600;color:var(--bim);margin-bottom:5px;">Best phone number</div>
+                  <input style="width:100%;box-sizing:border-box;border:var(--bw) solid var(--bl);border-radius:var(--rmd);padding:12px 14px;font-family:var(--fb);font-size:14.5px;color:var(--bi);background:var(--bsu);" placeholder="(555) 555-0100">
+                </div>
+                <div style="background:var(--bp);color:var(--bpi);font-weight:700;font-size:16px;text-align:center;padding:15px;border-radius:var(--rp);margin-top:4px;">{{ b.ctaShort }}</div>
+                <div style="font-size:11.5px;line-height:1.5;color:var(--bim);text-align:center;">A free matching service. Not a law firm.</div>
+              </div>
+            </div>
+            <div style="padding:0 26px 26px;font-size:11.5px;color:#FFFFFF73;text-align:center;">© 2026 {{ b.name }} · Privacy · Terms</div>
+          </div>
+
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;proofBrand&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;all&quot;,&quot;options&quot;:[&quot;all&quot;,&quot;a&quot;,&quot;b&quot;,&quot;c&quot;,&quot;d&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Proofs&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const brands = [
+      {
+        id: 'a', label: 'Brand A', position: 'adversary', name: 'Counterweight', wordmark: 'Counterweight',
+        tagline: 'The other side has lawyers.',
+        axisPalette: 'Hot: vermilion on warm gray, charcoal dark, gunmetal accent',
+        axisType: 'Compressed poster caps (Anton) with Barlow body',
+        axisShape: 'Square: 0 to 4px radii, 2px rules, even the pill is sharp',
+        axisMark: 'A counterweight: beam, fulcrum, two unequal blocks',
+        primary: '#BF2E1A', primaryInk: '#FFFFFF', secondary: '#26292E', accent: '#7E8C99',
+        surface: '#F4F2EE', surfaceAlt: '#E9E5DD', surfaceDark: '#17191D',
+        ink: '#17191D', inkMuted: '#5B5E64', line: '#D9D4CB', primaryDark: '#BF2E1A',
+        fontDisplay: "'Anton', 'Arial Narrow', sans-serif", fontBody: "'Barlow', sans-serif", fontUtility: "'Barlow Semi Condensed', sans-serif",
+        fontDisplayCss: "'Anton', 'Arial Narrow', sans-serif  (400, caps only)",
+        fontBodyCss: "'Barlow', sans-serif  (400 to 700)",
+        fontUtilityCss: "'Barlow Semi Condensed', sans-serif  (500, 600, labels and step numbers)",
+        fontDisplayName: 'Anton', fontBodyName: 'Barlow',
+        fdw: 400, h1tt: 'uppercase', h1ls: '0.015em', h1s: '54px', h1sShort: '38px',
+        wmTt: 'uppercase', wmLs: '0.05em', wmSize: '19px', wmSizeLg: '24px',
+        rSm: '0px', rMd: '2px', rLg: '4px', rPill: '4px', bw: '2px',
+        shapeChipNote: 'md 2px · pill 4px · rules 2px',
+        typeSample: 'Their side started day one',
+        bodySample: 'Barlow carries the body: plain, sturdy, slightly narrow. It reads like a case file, not a brochure.',
+        typeSpecNote: 'Anton, caps, +0.05em tracking in the wordmark. Never set Anton in lowercase.',
+        l1d: 'M4 23 L36 15 L36 12 L4 20 Z M20 27 L27 36 L13 36 Z', l1f: '#17191D', l1s: 'none', l1sw: 0,
+        l2d: 'M4 10 h11 v11 H4 Z M29 7 h7 v7 h-7 Z', l2f: '#BF2E1A',
+        l1fD: '#F4F2EE', l1sD: 'none', l2fD: '#BF2E1A',
+        markSpec: 'A tilted beam on a fulcrum with two unequal blocks: the weight is not even, which is the whole argument. Charcoal beam, vermilion blocks. On dark, the beam flips to off-white.',
+        wmSpec: 'Anton 400, all caps, +0.05em letterspacing. Mark sits left of the wordmark at cap height, gap of half the cap height. Never stack.',
+        voice: [
+          'Short declaratives, weighted and even. No exclamation points.',
+          'Names the insurance company as the concrete counterparty in nearly every frame.',
+          "Says 'their side' and 'your side'. Never completes the money thought.",
+          'The tension lives in facts and timing, not in adjectives.',
+          "Comfortable stating what it is: a free matching service, not a law firm."
+        ],
+        darkNote: 'Surfaces drop to #101215 and #17191D, ink flips to #F4F2EE. Vermilion #BF2E1A holds on near-black for buttons and large type; body-size emphasis uses the off-white ink instead.',
+        h1Long: 'The insurance company put a team on it the day it happened.',
+        subLong: 'Counterweight is a free matching service. Answer a few questions and we connect you with a licensed attorney in your state.',
+        ctaLong: 'Get matched',
+        steps: [
+          { n: '1', t: 'Answer a short set of questions' },
+          { n: '2', t: 'We run a free eligibility check for your state' },
+          { n: '3', t: 'Talk to a licensed attorney in your state' }
+        ],
+        eligH: 'Their side started early. Yours can start today.',
+        faq: [
+          { q: 'Is Counterweight a law firm?', a: 'No. Counterweight is a free matching service. If you qualify, we connect you with a licensed attorney in your state.' },
+          { q: 'What does the eligibility check involve?', a: 'A short set of questions about the accident, your state, and timing. It is free, and there is no obligation to proceed.' }
+        ],
+        h1Short: 'Their side has lawyers.',
+        subShort: 'A free eligibility check. About two minutes.',
+        ctaShort: 'Start the check'
+      },
+      {
+        id: 'b', label: 'Brand B', position: 'clarity', name: 'Plainpath', wordmark: 'plainpath',
+        tagline: 'Attorney matching in plain steps.',
+        axisPalette: 'Cool: cornflower blue on paper white, green endpoint accent',
+        axisType: 'Legibility-first geometric (Lexend) with Public Sans body',
+        axisShape: 'Soft: 8 to 22px radii, hairlines, true pills',
+        axisMark: 'A stepped path with an endpoint dot',
+        primary: '#38669E', primaryInk: '#FFFFFF', secondary: '#E2EAF3', accent: '#47946A',
+        surface: '#FBFBF9', surfaceAlt: '#EFF3F6', surfaceDark: '#1C2B3A',
+        ink: '#232F3B', inkMuted: '#57646F', line: '#DCE2E8', primaryDark: '#5D87BB',
+        fontDisplay: "'Lexend', sans-serif", fontBody: "'Public Sans', sans-serif", fontUtility: "'Public Sans', sans-serif",
+        fontDisplayCss: "'Lexend', sans-serif  (500 to 700)",
+        fontBodyCss: "'Public Sans', sans-serif  (400 to 600)",
+        fontUtilityCss: "'Public Sans', sans-serif  (600, small caps labels)",
+        fontDisplayName: 'Lexend', fontBodyName: 'Public Sans',
+        fdw: 600, h1tt: 'none', h1ls: '-0.01em', h1s: '46px', h1sShort: '32px',
+        wmTt: 'lowercase', wmLs: '0em', wmSize: '20px', wmSizeLg: '26px',
+        rSm: '8px', rMd: '14px', rLg: '22px', rPill: '999px', bw: '1px',
+        shapeChipNote: 'md 14px · pill 999px · 1px hairlines',
+        typeSample: 'One step at a time, in order',
+        bodySample: 'Public Sans does the explaining: open counters, even color, nothing showy. Sentences stay short and complete.',
+        typeSpecNote: 'Lexend 600 for headings, sentence case, never all caps above 12px.',
+        l1d: 'M7 32 H16 V22 H25 V12 H31', l1f: 'none', l1s: '#38669E', l1sw: 4.5,
+        l2d: 'M33 12 m-3.6 0 a3.6 3.6 0 1 0 7.2 0 a3.6 3.6 0 1 0 -7.2 0', l2f: '#47946A',
+        l1fD: 'none', l1sD: '#A9C4E4', l2fD: '#6FBF93',
+        markSpec: 'A stepped path rising left to right, rounded joins, ending in a green dot: the process, then the match. Two colors, no fill. On dark the path lightens to a pale blue.',
+        wmSpec: 'Lexend 600, all lowercase, default tracking. Mark leads at the same optical height as the x-height. Lockup may sit on one line only.',
+        voice: [
+          'Calm and procedural. Numbered where possible, explained before it asks.',
+          'Every form field earns one sentence of context.',
+          'No urgency, no countdowns, no alarm.',
+          "Plain words over legal words: 'the process', not 'litigation'.",
+          'States plainly and early that it is a free matching service, not a law firm.'
+        ],
+        darkNote: 'Surfaces drop to #141D27 and #1C2B3A. Primary lifts to #5D87BB so buttons and links keep contrast; the green endpoint dot lifts to #6FBF93.',
+        h1Long: 'The claims process, laid out in plain order.',
+        subLong: 'Plainpath explains each step, then matches you with a licensed attorney in your state. No jargon, no pressure.',
+        ctaLong: 'Start the eligibility check',
+        steps: [
+          { n: '1', t: 'Read how the process works, in order' },
+          { n: '2', t: 'Answer a few plain questions' },
+          { n: '3', t: 'Get matched with a licensed attorney' }
+        ],
+        eligH: 'When you are ready, the check takes a few minutes.',
+        faq: [
+          { q: 'Is Plainpath a law firm?', a: 'No. Plainpath is a free matching service. We explain the process and, if you qualify, connect you with a licensed attorney in your state.' },
+          { q: 'What happens after I answer the questions?', a: 'We check eligibility for your state. If there is a match, an attorney contacts you. If not, we tell you that plainly too.' }
+        ],
+        h1Short: 'One clear path through the process.',
+        subShort: 'A free eligibility check, explained as you go.',
+        ctaShort: 'Begin step one'
+      },
+      {
+        id: 'c', label: 'Brand C', position: 'authority', name: 'Meridian Legal Network', wordmark: 'Meridian',
+        tagline: 'A vetted attorney network.',
+        axisPalette: 'Aged: oxblood on cream, dark viridian rules',
+        axisType: 'Old-style serif (Libre Caslon) with Source Sans 3 body',
+        axisShape: 'Near-square: 2 to 6px, engraved hairline and double-rule motif',
+        axisMark: 'A fluted column',
+        primary: '#6E293A', primaryInk: '#F7EFE5', secondary: '#EDE5D4', accent: '#2F5D50',
+        surface: '#F8F4EB', surfaceAlt: '#F0E9DB', surfaceDark: '#211318',
+        ink: '#271F1A', inkMuted: '#5F564A', line: '#DBD1BE', primaryDark: '#9A4B60',
+        fontDisplay: "'Libre Caslon Text', Georgia, serif", fontBody: "'Source Sans 3', sans-serif", fontUtility: "'Source Sans 3', sans-serif",
+        fontDisplayCss: "'Libre Caslon Text', Georgia, serif  (400, 700, italic for emphasis)",
+        fontBodyCss: "'Source Sans 3', sans-serif  (400 to 600)",
+        fontUtilityCss: "'Source Sans 3', sans-serif  (600, letterspaced caps for credentials)",
+        fontDisplayName: 'Libre Caslon Text', fontBodyName: 'Source Sans 3',
+        fdw: 700, h1tt: 'none', h1ls: '0em', h1s: '42px', h1sShort: '30px',
+        wmTt: 'uppercase', wmLs: '0.14em', wmSize: '16px', wmSizeLg: '21px',
+        rSm: '2px', rMd: '3px', rLg: '6px', rPill: '6px', bw: '1px',
+        shapeChipNote: 'md 3px · pill 6px · engraved rules',
+        typeSample: 'Verification before introduction',
+        bodySample: 'Source Sans 3 handles the record: credentials, coverage, and process, stated without ornament or superlatives.',
+        typeSpecNote: 'Libre Caslon 700 for headings. Wordmark in caps at +0.14em; body never letterspaced.',
+        l1d: 'M8 8 h24 v3.5 H8 Z M8 32 h24 v4 H8 Z M12 14.5 h4 v14.5 h-4 Z M18 14.5 h4 v14.5 h-4 Z M24 14.5 h4 v14.5 h-4 Z', l1f: '#6E293A', l1s: 'none', l1sw: 0,
+        l2d: 'M6 3.5 h28 v2 H6 Z', l2f: '#2F5D50',
+        l1fD: '#F7EFE5', l1sD: 'none', l2fD: '#7FA391',
+        markSpec: 'A fluted column: capital, three flutes, base, with a single viridian abacus line above. Oxblood on cream; cream on dark. No enclosure, no shield, no seal.',
+        wmSpec: "Libre Caslon 700 caps, +0.14em. 'MERIDIAN' leads; 'LEGAL NETWORK' sits beneath in Source Sans 600 caps at 60 percent size. Column mark sits left, full lockup height.",
+        voice: [
+          'Reserved and institutional. Third person when a claim is made about the network.',
+          'Leads with licensure, vetting, and state coverage, never with emotion.',
+          'No slang. No contractions in headlines, sparing contractions in body.',
+          'Never flatters the reader and never dramatizes the accident.',
+          'Speaks in credentials that can be verified, not in superlatives.'
+        ],
+        darkNote: 'Surfaces drop to #181014 and #211318, ink flips to cream #F7EFE5. Oxblood lifts to #9A4B60 for buttons on dark; the viridian rule lifts to #7FA391.',
+        h1Long: 'A vetted network of state-licensed attorneys.',
+        subLong: 'Every attorney in the Meridian network is verified for active licensure and standing in their state before any match is made.',
+        ctaLong: 'Request a match',
+        steps: [
+          { n: '1', t: 'Licensure verified in your state' },
+          { n: '2', t: 'Standing and discipline history reviewed' },
+          { n: '3', t: 'A considered match, not a referral list' }
+        ],
+        eligH: 'Verification first. Matching second.',
+        faq: [
+          { q: 'Is Meridian a law firm?', a: 'No. Meridian Legal Network is a free matching service. It verifies licensure and standing, then introduces you to a licensed attorney in your state.' },
+          { q: 'How are attorneys admitted to the network?', a: 'By verification of active state licensure and a review of standing. Attorneys who do not meet the standard are not admitted.' }
+        ],
+        h1Short: 'Counsel, properly vetted.',
+        subShort: 'A free matching service built on state licensure.',
+        ctaShort: 'Request a match'
+      },
+      {
+        id: 'd', label: 'Brand D', position: 'direct', name: 'Matchline', wordmark: 'matchline',
+        tagline: 'Answer three questions. Get matched.',
+        axisPalette: 'Charged: volt on black and white, magenta spark',
+        axisType: 'Tight geometric bold (Sora) with Manrope body',
+        axisShape: 'Pill CTAs, 6 to 16px elsewhere, 1.5px lines',
+        axisMark: 'Two forward chevrons',
+        primary: '#C8F03C', primaryInk: '#0C1005', secondary: '#16161A', accent: '#E23F97',
+        surface: '#FFFFFF', surfaceAlt: '#F3F3F1', surfaceDark: '#0B0B0D',
+        ink: '#111114', inkMuted: '#5C5C61', line: '#E5E5E7', primaryDark: '#C8F03C',
+        fontDisplay: "'Sora', sans-serif", fontBody: "'Manrope', sans-serif", fontUtility: "'JetBrains Mono', monospace",
+        fontDisplayCss: "'Sora', sans-serif  (700, 800)",
+        fontBodyCss: "'Manrope', sans-serif  (400 to 700)",
+        fontUtilityCss: "'JetBrains Mono', monospace  (500, 600, counters and timers)",
+        fontDisplayName: 'Sora', fontBodyName: 'Manrope',
+        fdw: 800, h1tt: 'none', h1ls: '-0.025em', h1s: '56px', h1sShort: '36px',
+        wmTt: 'lowercase', wmLs: '-0.02em', wmSize: '20px', wmSizeLg: '26px',
+        rSm: '6px', rMd: '10px', rLg: '16px', rPill: '999px', bw: '1.5px',
+        shapeChipNote: 'md 10px · pill 999px · 1.5px lines',
+        typeSample: 'Three questions. One match.',
+        bodySample: 'Manrope keeps body copy tight and fast. One idea per screen, never explained twice.',
+        typeSpecNote: 'Sora 800 for headings, tight tracking at -0.025em. Counters set in JetBrains Mono.',
+        l1d: 'M4 6 L9 6 L23 20 L9 34 L4 34 L18 20 Z', l1f: '#111114', l1s: 'none', l1sw: 0,
+        l2d: 'M16 6 L22 6 L36 20 L22 34 L16 34 L30 20 Z', l2f: '#C8F03C',
+        l1fD: '#FFFFFF', l1sD: 'none', l2fD: '#C8F03C',
+        markSpec: 'Two forward chevrons, ink then volt: momentum, nothing else. On dark the leading chevron flips to white. Magenta appears only in UI moments, never in the mark.',
+        wmSpec: 'Sora 800, all lowercase, -0.02em. Mark left of wordmark, tight 8px gap. At small sizes the volt chevron may stand alone.',
+        voice: [
+          'Shortest possible sentences. Often fragments.',
+          'Counts things: three questions, one match, about a minute.',
+          'Never explains twice. One idea per screen.',
+          "No adjectives it cannot prove. 'Fast' and 'free' only.",
+          'The disclaimer is part of the voice, said plainly and early.'
+        ],
+        darkNote: 'Built dark-first: volt on near-black is the native state and clears contrast at any size. In light remaps, volt buttons keep the near-black ink #0C1005.',
+        h1Long: 'Three questions. One match.',
+        subLong: 'Free. From your phone. A licensed attorney in your state.',
+        ctaLong: 'Start now',
+        steps: [
+          { n: '1', t: 'Tap start' },
+          { n: '2', t: 'Answer three questions' },
+          { n: '3', t: 'Get your match' }
+        ],
+        eligH: 'About a minute. Free.',
+        faq: [
+          { q: 'Is Matchline a law firm?', a: 'No. Matchline is a free matching service that connects you with a licensed attorney in your state.' },
+          { q: 'How long does it take?', a: 'About a minute. Three questions, then we check eligibility for your state.' }
+        ],
+        h1Short: 'Get matched in about a minute.',
+        subShort: 'Three questions. Free.',
+        ctaShort: 'Start now'
+      }
+    ];
+    const tokenRows = (b) => [
+      { n: '--brand-primary', v: b.primary, c: 'main action and emphasis' },
+      { n: '--brand-primary-ink', v: b.primaryInk, c: 'text on primary, clears 4.5:1' },
+      { n: '--brand-secondary', v: b.secondary, c: 'supporting surfaces' },
+      { n: '--brand-accent', v: b.accent, c: 'single accent, sparing' },
+      { n: '--brand-surface', v: b.surface, c: 'page background' },
+      { n: '--brand-surface-alt', v: b.surfaceAlt, c: 'alternating sections' },
+      { n: '--brand-surface-dark', v: b.surfaceDark, c: 'dark sections, top bar, footer' },
+      { n: '--brand-ink', v: b.ink, c: 'body text' },
+      { n: '--brand-ink-muted', v: b.inkMuted, c: 'secondary text' },
+      { n: '--brand-line', v: b.line, c: 'hairlines and borders' }
+    ];
+    const withTokens = brands.map(b => ({ ...b, tokens: tokenRows(b) }));
+    const filter = this.props.proofBrand ?? 'all';
+    const visibleBrands = filter === 'all' ? withTokens : withTokens.filter(b => b.id === filter);
+    return { brands: withTokens, visibleBrands };
+  }
+}
+</script>
+</body>
+</html>

@@ -5,6 +5,7 @@ import config from '@payload-config'
 import '../globals.css'
 import { resolveSiteByHost, isFallbackHost } from '@/lib/site-resolver'
 import { resolveBrandTokens } from '@/lib/brand/resolve-tokens'
+import { IDENTITY_FONTS_HREF } from '@/lib/lp-identities'
 
 export const dynamic = 'force-dynamic'
 
@@ -96,6 +97,13 @@ export default async function PublicLayout({ children }: { children: ReactNode }
   return (
     <html lang="en" className={site ? 'site-shell' : ''}>
       <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* The four landing-page identities are distinguished as much by their
+            faces as their palettes, so a missing face is a changed identity
+            rather than a cosmetic loss. Preconnected because this sits on the
+            critical path of a tenant page. */}
+        <link rel="stylesheet" href={IDENTITY_FONTS_HREF} />
         {site ? <style dangerouslySetInnerHTML={{ __html: siteStyleVars(site) }} /> : null}
         {site?.brand?.favicon_url ? <link rel="icon" href={site.brand.favicon_url} /> : null}
       </head>
