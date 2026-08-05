@@ -497,10 +497,27 @@ export const groupElements = (elements: LpElement[], columnsOverride?: number): 
     if (last && last.kind === 'flow' && last.type === el.type) last.elements.push(el)
     else out.push({ kind: 'flow', type: el.type, elements: [el] })
   }
-  // A run shorter than its default column count should fill the row it has,
-  // not leave a gap where the missing cards would be.
-  for (const g of out) if (g.kind === 'grid') g.columns = Math.min(g.columns, g.elements.length)
+  for (const g of out) if (g.kind === 'grid') g.columns = fitColumns(g.elements.length, g.columns)
   return out
+}
+
+/**
+ * Choose a column count that leaves no orphan on the last row.
+ *
+ * A run shorter than the default fills the row it has rather than leaving gaps
+ * where the missing cards would be. A run one past a multiple is the case worth
+ * handling: four result cards in a three-column grid draw as three and a
+ * stranded fourth, which reads as a mistake in the content rather than in the
+ * layout. Widening by one when it divides evenly fixes exactly that, and
+ * anything that still will not divide keeps the default instead of stretching
+ * to some arbitrary width.
+ */
+const fitColumns = (count: number, preferred: number): number => {
+  if (count <= 0) return 1
+  if (count <= preferred) return count
+  if (count % preferred === 0) return preferred
+  if (preferred < 4 && count % (preferred + 1) === 0) return preferred + 1
+  return preferred
 }
 
 // ---------------------------------------------------------------------------
