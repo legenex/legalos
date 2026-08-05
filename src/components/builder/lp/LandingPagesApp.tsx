@@ -19,13 +19,20 @@ import {
   PageHeader, EmptyState, TabBar, TopBar, brandShortName,
 } from '../ui'
 import {
-  TEMPLATES, ANGLES, SECTION_TYPES, SECTION_TYPE_META, SEED_SECTION_COPY, buildSeedSections,
-  LivePreview, PREVIEW_BRAND_DEFAULT,
+  TEMPLATES, ANGLES, LivePreview, PREVIEW_BRAND_DEFAULT,
+  templateFor, templatePreviewSurface, templateLook,
 } from './render'
 import { BrandQuickEdit } from '../brand/BrandQuickEdit'
-import { SECTION_TONES } from './render'
-import { contrastRatio } from '@/lib/builder/page-lint'
-import { createLP, saveLP, cloneLP, deleteLP, saveDeployment, deleteDeployment, generateLPCopy, aiRewriteSection } from '@/app/(app)/admin/(top)/landing-pages/actions'
+import { NodeTree } from './NodeTree'
+import { NodeInspector } from './NodeInspector'
+import { treeIcon } from './nodes/icons'
+import {
+  SECTION_SPECS, SECTION_TYPES as NODE_SECTION_TYPES, newNodeId, sectionSpec,
+} from '@/lib/lp-nodes/model'
+import { toNodeSections } from '@/lib/lp-nodes/from-legacy'
+import { instantiateSkeleton } from '@/lib/lp-skeletons'
+import { createLP, saveLP, cloneLP, deleteLP, saveDeployment, deleteDeployment, aiWriteSectionNodes } from '@/app/(app)/admin/(top)/landing-pages/actions'
+import { elementSpec } from '@/lib/lp-nodes/model'
 
 // ============================================================================
 // LANDING PAGE LIST VIEW
@@ -41,13 +48,14 @@ const LandingPagesListView = ({ landingPages, lpDeployments, onOpen, onClone, on
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {landingPages.map((lp) => {
-        const template = TEMPLATES.find((t) => t.id === lp.templateId)
+        const template = templateFor(lp.templateId)
+        const swatch = templatePreviewSurface(template)
         const angle = ANGLES.find((a) => a.id === lp.angle)
         const depCount = lpDeployments.filter((d) => d.landingPageId === lp.id).length
         return (
           <div key={lp.id} style={{ padding: 14, backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 10, display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{ width: 42, height: 42, borderRadius: 9, background: template?.tokens?.heroBg || T.bg, border: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Rocket size={16} color={T.primary} />
+            <div style={{ width: 42, height: 42, borderRadius: 9, backgroundColor: swatch.bg, border: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Rocket size={16} color={swatch.accent} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -59,7 +67,7 @@ const LandingPagesListView = ({ landingPages, lpDeployments, onOpen, onClone, on
                 <Pill color={lp.isPublished ? T.success : T.warning}>{lp.isPublished ? 'LIVE' : 'DRAFT'}</Pill>
                 <Pill color={T.purple}>{template?.name}</Pill>
                 <Pill color={T.info}>{angle?.label}</Pill>
-                <Pill color={T.textMute}>{lp.sections.length} sections</Pill>
+                <Pill color={T.textMute}>{(lp.sections || []).length} sections</Pill>
                 <Pill color={depCount > 0 ? T.success : T.textLow}>{depCount} deployments</Pill>
               </div>
               <div style={{ fontSize: 11, color: T.textLow, fontFamily: '"JetBrains Mono", monospace' }}>/{lp.slug}</div>
@@ -144,374 +152,31 @@ const LPDeploymentListView = ({ deployments, landingPages, brands, quizDeploymen
 }
 
 // ============================================================================
-// SECTION EDITOR MODAL
-// ============================================================================
-const SectionEditorModal = ({ open, section, brand, onClose, onSave, onDelete }) => {
-  const [draft, setDraft] = useState(section || null)
-  const [tab, setTab] = useState('manual')
-  const [aiInstruction, setAiInstruction] = useState('')
-  const [aiBusy, setAiBusy] = useState(false)
-  const [aiError, setAiError] = useState(null)
-  const [aiResult, setAiResult] = useState(null)
-
-  // Rendered inside the manual tab below. Kept here so the draft setter is in
-  // scope without threading it through another component.
-  //
-  // These are free colour fields, not a list of presets. The contrast figure
-  // beside them warns rather than blocks: the judgement is the operator's, and
-  // a tool that silently corrects a colour someone picked on purpose is worse
-  // than one that tells them plainly what they have done.
-  const secColors = draft?.colors || {}
-  const setColor = (k, v) => {
-    const next = { ...secColors }
-    if (v) next[k] = v
-    else delete next[k]
-    setDraft({ ...draft, colors: Object.keys(next).length ? next : undefined })
-  }
-
-  // What the section is ACTUALLY painted with right now, so an untouched field
-  // shows the brand colour it is inheriting instead of a black square. A black
-  // swatch on an unset field reads as "black is selected", which is the
-  // opposite of what it means.
-  const bc = brand?.colors || {}
-  const INHERITED = { bg: bc.background, text: bc.ink, surface: bc.cardBg, accent: bc.accent || bc.primary }
-  const effective = (k) => secColors[k] || INHERITED[k] || '#000000'
-
-  const ratio = contrastRatio(effective('text'), effective('bg'))
-  const ratioBad = ratio !== null && ratio < 4.5
-
-  const COLOR_FIELDS = [
-    { key: 'bg', label: 'Background' },
-    { key: 'text', label: 'Text' },
-    { key: 'surface', label: 'Cards' },
-    { key: 'accent', label: 'Accent' },
-  ]
-
-  const tonePicker = draft ? (
-    <div style={{ marginBottom: 16, padding: 12, backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: T.text }}>Section colours</span>
-        {Object.keys(secColors).length > 0 ? (
-          <button onClick={() => setDraft({ ...draft, colors: undefined, tone: 'default' })}
-            style={{ background: 'none', border: 'none', color: T.primary, fontSize: 11, cursor: 'pointer' }}>
-            Reset all to brand
-          </button>
-        ) : (
-          <span style={{ fontSize: 10.5, color: T.textLow }}>All inherited from the brand</span>
-        )}
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-        {COLOR_FIELDS.map((f) => {
-          const overridden = Boolean(secColors[f.key])
-          const val = effective(f.key)
-          return (
-            <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <label style={{ position: 'relative', width: 34, height: 34, borderRadius: 6, flexShrink: 0, cursor: 'pointer', backgroundColor: val, border: `1px solid ${overridden ? T.primary : T.border}`, boxShadow: overridden ? `0 0 0 2px ${T.primary}33` : 'none' }}>
-                <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(val) ? val : '#000000'}
-                  onChange={(e) => setColor(f.key, e.target.value)}
-                  style={{ opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
-              </label>
-              <div style={{ width: 78, flexShrink: 0, fontSize: 12, color: T.text }}>{f.label}</div>
-              <input
-                value={secColors[f.key] || ''}
-                onChange={(e) => setColor(f.key, e.target.value)}
-                placeholder={INHERITED[f.key] || 'inherited'}
-                style={{ flex: 1, minWidth: 0, padding: '6px 9px', backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 5, fontSize: 12, fontFamily: '"JetBrains Mono", monospace', color: overridden ? T.text : T.textLow }}
-              />
-              <button onClick={() => setColor(f.key, null)} disabled={!overridden} title="Back to the brand colour"
-                style={{ width: 62, flexShrink: 0, padding: '5px 0', backgroundColor: 'transparent', border: `1px solid ${overridden ? T.border : 'transparent'}`, borderRadius: 5, color: overridden ? T.textMute : T.textLow, fontSize: 10.5, cursor: overridden ? 'pointer' : 'default' }}>
-                {overridden ? 'Reset' : 'Brand'}
-              </button>
-            </div>
-          )
-        })}
-      </div>
-
-      {ratio !== null && (
-        <div style={{ marginTop: 10, padding: '7px 10px', borderRadius: 5, fontSize: 11, lineHeight: 1.45,
-          backgroundColor: ratioBad ? `${T.danger}18` : `${T.success}12`,
-          border: `1px solid ${ratioBad ? T.danger + '55' : T.success + '33'}`,
-          color: ratioBad ? T.danger : T.textMute }}>
-          Text on background is {ratio.toFixed(2)}:1{ratioBad ? '. Body copy needs 4.5:1, so some readers will struggle with this.' : ', which passes for body copy.'}
-        </div>
-      )}
-    </div>
-  ) : null
-
-  useEffect(() => {
-    if (section) {
-      setDraft(JSON.parse(JSON.stringify(section)))
-      setAiInstruction(''); setAiResult(null); setAiError(null); setTab('manual')
-    }
-  }, [section?.id])
-
-  if (!open || !section) return null
-
-  const workingDraft = draft || section
-  const c = (workingDraft && workingDraft.copy) || {}
-  const meta = SECTION_TYPE_META[section.type] || { name: section.type, icon: Layers, desc: '' }
-  const MetaIcon = meta.icon
-
-  const updateCopy = (patch) => setDraft((d) => ({ ...(d || section), copy: { ...((d || section).copy || {}), ...patch } }))
-  const updateArrayItem = (key, idx, patch) => {
-    const arr = [...(c[key] || [])]
-    arr[idx] = typeof arr[idx] === 'object' ? { ...arr[idx], ...patch } : patch
-    updateCopy({ [key]: arr })
-  }
-  const addArrayItem = (key, blank) => updateCopy({ [key]: [...(c[key] || []), blank] })
-  const removeArrayItem = (key, idx) => updateCopy({ [key]: (c[key] || []).filter((_, i) => i !== idx) })
-
-  const runAI = async () => {
-    if (!aiInstruction.trim()) return
-    setAiBusy(true); setAiError(null); setAiResult(null)
-    try {
-      const res = await aiRewriteSection({ sectionType: section.type, currentCopy: c, instruction: aiInstruction })
-      if (!res.ok) throw new Error(res.error)
-      setAiResult(res.copy)
-    } catch (err) {
-      setAiError(err.message || 'AI rewrite failed.')
-    } finally {
-      setAiBusy(false)
-    }
-  }
-
-  const acceptAI = () => { if (!aiResult) return; updateCopy(aiResult); setAiResult(null); setAiInstruction(''); setTab('manual') }
-
-  const renderManualEditor = () => {
-    const fields = []
-    const pushString = (key, label, multiline) =>
-      fields.push(
-        <div key={key}>
-          <Label>{label}</Label>
-          {multiline ? <Textarea rows={3} value={c[key] || ''} onChange={(e) => updateCopy({ [key]: e.target.value })} /> : <Input value={c[key] || ''} onChange={(e) => updateCopy({ [key]: e.target.value })} />}
-        </div>,
-      )
-    const renderStringList = (key, label) => (
-      <div key={key}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Label>{label} {'·'} {(c[key] || []).length}</Label>
-          <Btn variant="ghost" size="xs" icon={Plus} onClick={() => addArrayItem(key, '')}>Add</Btn>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {(c[key] || []).map((v, i) => (
-            <div key={i} style={{ display: 'flex', gap: 6 }}>
-              <Input value={v} onChange={(e) => updateArrayItem(key, i, e.target.value)} />
-              <IconBtn icon={X} onClick={() => removeArrayItem(key, i)} />
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-    const renderObjectList = (key, label, blank, itemRender) => (
-      <div key={key}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Label>{label} {'·'} {(c[key] || []).length}</Label>
-          <Btn variant="ghost" size="xs" icon={Plus} onClick={() => addArrayItem(key, blank)}>Add</Btn>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {(c[key] || []).map((it, i) => (
-            <div key={i} style={{ padding: 12, backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ fontSize: 11, color: T.textMute, fontFamily: '"JetBrains Mono", monospace' }}>#{i + 1}</div>
-                <IconBtn icon={Trash2} onClick={() => removeArrayItem(key, i)} style={{ color: T.danger }} />
-              </div>
-              {itemRender(it || {}, (patch) => updateArrayItem(key, i, patch))}
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-
-    switch (section.type) {
-      case 'header':
-        pushString('logoText', 'Logo text'); pushString('ctaLabel', 'Call button label'); break
-      case 'hero':
-        pushString('eyebrow', 'Eyebrow'); pushString('headline', 'Headline', true); pushString('accent_phrase', 'Accent phrase (must be inside headline)'); pushString('subheadline', 'Subheadline', true)
-        ;['1', '2', '3'].forEach((n) =>
-          fields.push(
-            <div key={`stat${n}`} style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 10 }}>
-              <div><Label>Stat {n} num</Label><Input value={c[`stat${n}_num`] || ''} onChange={(e) => updateCopy({ [`stat${n}_num`]: e.target.value })} /></div>
-              <div><Label>Stat {n} label</Label><Input value={c[`stat${n}_label`] || ''} onChange={(e) => updateCopy({ [`stat${n}_label`]: e.target.value })} /></div>
-            </div>,
-          ),
-        )
-        pushString('trust_line', 'Trust line'); break
-      case 'ticker':
-        pushString('eyebrow', 'Eyebrow')
-        fields.push(renderObjectList('items', 'Recovery items', { location: '', amount: '' }, (it, upd) => (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 8 }}>
-            <Input placeholder="Case type and state" value={it.location || ''} onChange={(e) => upd({ location: e.target.value })} />
-            <Input mono placeholder="$XXX,XXX" value={it.amount || ''} onChange={(e) => upd({ amount: e.target.value })} />
-          </div>
-        ))); break
-      case 'authority':
-        pushString('eyebrow', 'Eyebrow'); pushString('headline', 'Headline'); pushString('subhead', 'Subhead paragraph', true)
-        fields.push(renderStringList('badges', 'Trust badges')); break
-      case 'story':
-        pushString('eyebrow', 'Eyebrow'); pushString('headline', 'Headline', true)
-        fields.push(
-          <div key="paragraphs">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Label>Paragraphs {'·'} {(c.paragraphs || []).length}</Label>
-              <Btn variant="ghost" size="xs" icon={Plus} onClick={() => addArrayItem('paragraphs', '')}>Add</Btn>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {(c.paragraphs || []).map((p, i) => (
-                <div key={i} style={{ display: 'flex', gap: 6 }}>
-                  <Textarea rows={3} value={p} onChange={(e) => updateArrayItem('paragraphs', i, e.target.value)} />
-                  <IconBtn icon={X} onClick={() => removeArrayItem('paragraphs', i)} />
-                </div>
-              ))}
-            </div>
-          </div>,
-        ); break
-      case 'eligibility':
-        pushString('eyebrow', 'Eyebrow'); pushString('headline', 'Headline'); fields.push(renderStringList('criteria', 'Criteria')); break
-      case 'how_it_works':
-        pushString('eyebrow', 'Eyebrow'); pushString('headline', 'Headline')
-        fields.push(renderObjectList('steps', 'Steps', { title: '', desc: '' }, (it, upd) => (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <Input placeholder="Step title" value={it.title || ''} onChange={(e) => upd({ title: e.target.value })} />
-            <Textarea rows={2} placeholder="Step description" value={it.desc || ''} onChange={(e) => upd({ desc: e.target.value })} />
-          </div>
-        ))); break
-      case 'settlements':
-        pushString('eyebrow', 'Eyebrow'); pushString('headline', 'Headline')
-        fields.push(renderObjectList('items', 'Settlement items', { case_type: '', amount: '', location: '' }, (it, upd) => (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <Input placeholder="Case type" value={it.case_type || ''} onChange={(e) => upd({ case_type: e.target.value })} />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-              <Input mono placeholder="$XXX,XXX" value={it.amount || ''} onChange={(e) => upd({ amount: e.target.value })} />
-              <Input placeholder="City, ST" value={it.location || ''} onChange={(e) => upd({ location: e.target.value })} />
-            </div>
-          </div>
-        ))); break
-      case 'testimonials':
-        pushString('eyebrow', 'Eyebrow'); pushString('headline', 'Headline')
-        fields.push(renderObjectList('items', 'Testimonials', { quote: '', author: '', location: '' }, (it, upd) => (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <Textarea rows={3} placeholder="Quote" value={it.quote || ''} onChange={(e) => upd({ quote: e.target.value })} />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-              <Input placeholder="Author" value={it.author || ''} onChange={(e) => upd({ author: e.target.value })} />
-              <Input placeholder="Location" value={it.location || ''} onChange={(e) => upd({ location: e.target.value })} />
-            </div>
-          </div>
-        ))); break
-      case 'guarantee':
-        pushString('headline', 'Headline'); pushString('subhead', 'Subhead', true); fields.push(renderStringList('lines', 'Lines')); break
-      case 'faq':
-        pushString('eyebrow', 'Eyebrow'); pushString('headline', 'Headline')
-        fields.push(renderObjectList('items', 'FAQ items', { q: '', a: '' }, (it, upd) => (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <Input placeholder="Question" value={it.q || ''} onChange={(e) => upd({ q: e.target.value })} />
-            <Textarea rows={3} placeholder="Answer" value={it.a || ''} onChange={(e) => upd({ a: e.target.value })} />
-          </div>
-        ))); break
-      case 'final_cta':
-        pushString('headline', 'Headline', true); pushString('cta_label', 'CTA button label'); pushString('secondary_line', 'Secondary line'); break
-      case 'footer':
-        pushString('tagline', 'Tagline'); fields.push(renderStringList('links', 'Links')); pushString('tcpa_text', 'TCPA / legal text', true); break
-      default:
-        fields.push(<div key="unknown" style={{ color: T.textMute, fontSize: 12 }}>No editor for this section type yet.</div>)
-    }
-    return fields
-  }
-
-  return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 120, backgroundColor: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 720, maxHeight: '88vh', display: 'flex', flexDirection: 'column', backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden' }}>
-        <div style={{ padding: 22, borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-          {MetaIcon && <MetaIcon size={18} color={T.primary} />}
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: T.text, letterSpacing: '-0.01em' }}>{meta.name}</div>
-            <div style={{ fontSize: 11.5, color: T.textMute, marginTop: 2 }}>{meta.desc}</div>
-          </div>
-          <IconBtn icon={X} onClick={onClose} />
-        </div>
-
-        <div style={{ display: 'flex', gap: 4, padding: '12px 22px 0', borderBottom: `1px solid ${T.border}` }}>
-          {[{ id: 'manual', label: 'Manual edit', icon: Edit3 }, { id: 'ai', label: 'Edit with Claude', icon: Sparkles }].map((t) => {
-            const TabIcon = t.icon
-            return (
-              <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: '8px 14px', backgroundColor: 'transparent', border: 'none', borderBottom: tab === t.id ? `2px solid ${T.primary}` : '2px solid transparent', color: tab === t.id ? T.text : T.textMute, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, marginBottom: -1, fontFamily: '"Inter", system-ui, sans-serif' }}>
-                <TabIcon size={12} /> {t.label}
-              </button>
-            )
-          })}
-        </div>
-
-        <div style={{ padding: 22, overflowY: 'auto', flex: 1 }}>
-          {tab === 'manual' && <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>{tonePicker}{renderManualEditor()}</div>}
-          {tab === 'ai' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <Label>Tell Claude what to change</Label>
-                <Textarea rows={4} value={aiInstruction} onChange={(e) => setAiInstruction(e.target.value)} placeholder="eg Make the headline more urgent and lean into truck accidents specifically. Keep stats the same." />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Btn variant="primary" size="md" icon={aiBusy ? Loader2 : Sparkles} onClick={runAI} disabled={aiBusy || !aiInstruction.trim()}>{aiBusy ? 'Rewriting...' : 'Rewrite with Claude'}</Btn>
-              </div>
-              {aiError && <div style={{ padding: 10, backgroundColor: `${T.danger}11`, border: `1px solid ${T.danger}66`, borderRadius: 6, fontSize: 12, color: T.danger }}>{aiError}</div>}
-              {aiResult && (
-                <div style={{ padding: 14, backgroundColor: T.bgElev, border: `1px solid ${T.purple}`, borderRadius: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-                    <Sparkles size={13} color={T.purple} />
-                    <span style={{ fontSize: 12, color: T.purple, fontWeight: 600 }}>Proposed copy</span>
-                  </div>
-                  <pre style={{ fontSize: 11, color: T.textDim, backgroundColor: T.bg, padding: 10, borderRadius: 6, maxHeight: 260, overflowY: 'auto', fontFamily: '"JetBrains Mono", monospace', margin: 0 }}>{JSON.stringify(aiResult, null, 2)}</pre>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
-                    <Btn variant="ghost" size="sm" onClick={() => setAiResult(null)}>Discard</Btn>
-                    <Btn variant="success" size="sm" icon={Check} onClick={acceptAI}>Accept changes</Btn>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div style={{ padding: 16, borderTop: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between' }}>
-          <Btn variant="danger" size="md" icon={Trash2} onClick={() => { onDelete?.(section.id); onClose() }}>Delete Section</Btn>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Btn variant="ghost" size="md" onClick={onClose}>Cancel</Btn>
-            <Btn variant="primary" size="md" icon={Save} onClick={() => { onSave(workingDraft); onClose() }}>Save</Btn>
-          </div>
-        </div>
-        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-      </div>
-    </div>
-  )
-}
-
-// ============================================================================
 // ADD SECTION MODAL
 // ============================================================================
-const AddSectionModal = ({ open, onClose, onAdd, existingTypes }) => {
+const AddSectionModal = ({ open, onClose, onAdd }) => {
   if (!open) return null
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 110, backgroundColor: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 640, maxHeight: '88vh', backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 620, maxHeight: '88vh', backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: 22, borderBottom: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 700, color: T.text, letterSpacing: '-0.01em' }}>Add a section</div>
-            <div style={{ fontSize: 11.5, color: T.textMute, marginTop: 2 }}>Pick a section type to insert into the page.</div>
+            <div style={{ fontSize: 11.5, color: T.textMute, marginTop: 2 }}>A section is a shape, not a subject. What it looks like follows what you put in it.</div>
           </div>
           <IconBtn icon={X} onClick={onClose} />
         </div>
         <div style={{ padding: 20, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
-          {SECTION_TYPES.map((s) => {
-            const Icon = s.icon || Layers
-            const used = existingTypes.includes(s.id)
+          {NODE_SECTION_TYPES.map((id) => {
+            const s = SECTION_SPECS[id]
+            const Icon = treeIcon(s.icon)
             return (
-              <button key={s.id} onClick={() => { onAdd(s.id); onClose() }} style={{ textAlign: 'left', padding: 14, backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 10, cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <button key={id} onClick={() => { onAdd(id); onClose() }} style={{ textAlign: 'left', padding: 14, backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 10, cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                 <div style={{ width: 32, height: 32, borderRadius: 7, backgroundColor: T.primarySoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <Icon size={15} color={T.primary} />
                 </div>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{s.name}</span>
-                    {used && <Pill color={T.warning}>USED</Pill>}
-                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{s.name}</div>
                   <div style={{ fontSize: 11, color: T.textMute, marginTop: 3, lineHeight: 1.4 }}>{s.desc}</div>
                 </div>
               </button>
@@ -526,35 +191,77 @@ const AddSectionModal = ({ open, onClose, onAdd, existingTypes }) => {
 // ============================================================================
 // TEMPLATE GALLERY MODAL
 // ============================================================================
-const TemplateGalleryModal = ({ open, onClose, onPick, currentTemplateId }) => {
+/**
+ * Pick a template, and separately decide whether to take its structure.
+ *
+ * These are two different acts and the gallery says so. Choosing a template
+ * always applies its LOOK - palette, faces, radii, mark - which is safe: it
+ * repaints the page you have. Taking its STRUCTURE replaces the sections, which
+ * throws away the copy, so it is a second button behind a confirmation rather
+ * than a side effect of clicking a card.
+ *
+ * A template whose skeleton has not been built yet says so plainly instead of
+ * offering a button that would hand out another template's shape.
+ */
+const TemplateGalleryModal = ({ open, onClose, onPickLook, onPickStructure, currentTemplateId }) => {
+  const [confirming, setConfirming] = useState(null)
+  useEffect(() => { if (open) setConfirming(null) }, [open])
   if (!open) return null
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 110, backgroundColor: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 920, maxHeight: '88vh', backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 960, maxHeight: '88vh', backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: 22, borderBottom: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>Pick a template</div>
-            <div style={{ fontSize: 11.5, color: T.textMute, marginTop: 2 }}>Templates control layout, typography, and canvas. Brand colors fill in via deployments.</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>Templates</div>
+            <div style={{ fontSize: 11.5, color: T.textMute, marginTop: 2 }}>A template is a look and a structure. Taking the look repaints this page. Taking the structure replaces its sections.</div>
           </div>
           <IconBtn icon={X} onClick={onClose} />
         </div>
         <div style={{ padding: 22, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
           {TEMPLATES.map((t) => {
+            const s = templatePreviewSurface(t)
+            const look = templateLook(t)
             const isCurrent = t.id === currentTemplateId
+            const mark = t.identity.mark
             return (
-              <button key={t.id} onClick={() => { onPick(t.id); onClose() }} style={{ textAlign: 'left', padding: 0, backgroundColor: T.bgElev, border: `2px solid ${isCurrent ? T.primary : T.border}`, borderRadius: 10, cursor: 'pointer', overflow: 'hidden' }}>
-                <div style={{ height: 120, background: t.tokens.heroBg, padding: 18, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: 10, color: t.tokens.textMute, fontFamily: t.tokens.bodyFont, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Free case review</div>
-                  <div style={{ fontFamily: t.tokens.headlineFont, fontWeight: t.tokens.headlineWeight, fontSize: 18, color: t.tokens.text, lineHeight: 1.15 }}>{t.hookExample}</div>
+              <div key={t.id} style={{ backgroundColor: T.bgElev, border: `2px solid ${isCurrent ? T.primary : T.border}`, borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ height: 128, backgroundColor: s.bg, padding: 18, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                    <svg viewBox="0 0 40 40" width={24} height={24} aria-hidden="true">
+                      <path d={mark.d} fill={s.isDark ? mark.fillDark : mark.fill} stroke={s.isDark ? mark.strokeDark : mark.stroke} strokeWidth={mark.strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+                      <path d={mark.d2} fill={s.isDark ? mark.fill2Dark : mark.fill2} />
+                    </svg>
+                    <span style={{ fontFamily: look.display, fontWeight: look.displayWeight, fontSize: 18, color: s.text, textTransform: look.wordmarkTransform, letterSpacing: look.wordmarkTracking }}>{t.identity.wordmark}</span>
+                  </div>
+                  <div style={{ fontFamily: look.body, fontSize: 12.5, color: s.muted, lineHeight: 1.45 }}>{t.identity.tagline}</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {[s.accentFill, s.card, s.text].map((c, i) => (
+                      <span key={i} style={{ width: 16, height: 16, borderRadius: look.radiusPill === '999px' ? 8 : 3, backgroundColor: c, border: `1px solid ${s.line}` }} />
+                    ))}
+                  </div>
                 </div>
-                <div style={{ padding: 14 }}>
+                <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{t.name}</span>
                     {isCurrent && <Pill color={T.primary}>CURRENT</Pill>}
                   </div>
-                  <div style={{ fontSize: 11, color: T.textMute, marginTop: 6, lineHeight: 1.5 }}>{t.blurb}</div>
+                  <div style={{ fontSize: 11, color: T.textMute, lineHeight: 1.5, flex: 1 }}>
+                    {t.structure || 'Structure not built yet. The look applies; the shape stays as this page already has it.'}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <Btn variant="secondary" size="sm" onClick={() => onPickLook(t.id)}>Use this look</Btn>
+                    {t.skeleton ? (
+                      confirming === t.id ? (
+                        <Btn variant="danger" size="sm" icon={Check} onClick={() => { onPickStructure(t.id); onClose() }}>Replace, losing copy</Btn>
+                      ) : (
+                        <Btn variant="ghost" size="sm" icon={Layers} onClick={() => setConfirming(t.id)}>Use this structure</Btn>
+                      )
+                    ) : (
+                      <Pill color={T.warning}>NO STRUCTURE YET</Pill>
+                    )}
+                  </div>
                 </div>
-              </button>
+              </div>
             )
           })}
         </div>
@@ -566,33 +273,77 @@ const TemplateGalleryModal = ({ open, onClose, onPick, currentTemplateId }) => {
 // ============================================================================
 // AI NEW LP WIZARD
 // ============================================================================
+/**
+ * A new page: the template's skeleton, filled section by section.
+ *
+ * The structure comes from the skeleton and the model only writes into it, one
+ * call per section, ids as the contract. It cannot add a section, remove one or
+ * reorder anything, which is what keeps "generated with Claude" and "built from
+ * template B" the same page rather than two.
+ *
+ * Only templates with a skeleton can be chosen here, because there is nothing
+ * to fill in otherwise. Offering the others and quietly substituting another
+ * template's shape is the failure this whole change is about.
+ */
 const AINewLPWizard = ({ open, onClose, onCreate }) => {
+  const withStructure = TEMPLATES.filter((t) => t.skeleton)
   const [step, setStep] = useState(1)
   const [name, setName] = useState('')
-  const [templateId, setTemplateId] = useState('bold_modern')
+  const [templateId, setTemplateId] = useState(withStructure[0]?.id || TEMPLATES[0].id)
   const [angle, setAngle] = useState('pain')
   const [notes, setNotes] = useState('')
   const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState(0)
   const [error, setError] = useState(null)
 
-  useEffect(() => { if (open) { setStep(1); setName(''); setTemplateId('bold_modern'); setAngle('pain'); setNotes(''); setBusy(false); setError(null) } }, [open])
+  useEffect(() => {
+    if (!open) return
+    setStep(1); setName(''); setTemplateId(withStructure[0]?.id || TEMPLATES[0].id)
+    setAngle('pain'); setNotes(''); setBusy(false); setProgress(0); setError(null)
+  }, [open])
   if (!open) return null
 
+  const template = templateFor(templateId)
+
   const generate = async () => {
-    setBusy(true); setError(null)
+    if (!template.skeleton) { setError('That template has no structure yet.'); return }
+    setBusy(true); setError(null); setProgress(0)
     try {
-      const res = await generateLPCopy({ angle, templateId, notes })
-      if (!res.ok) throw new Error(res.error)
-      const parsed = res.copy || {}
-      const sections = buildSeedSections().map((s) => (parsed[s.type] ? { ...s, copy: { ...s.copy, ...parsed[s.type] } } : s))
-      const newLP = {
-        id: genId('lp'),
-        name: name || `${ANGLES.find((a) => a.id === angle)?.label} LP`,
+      const sections = instantiateSkeleton(template.skeleton)
+      const angleLabel = ANGLES.find((a) => a.id === angle)?.label || angle
+      const brief = [
+        `Page angle: ${angleLabel}. ${ANGLES.find((a) => a.id === angle)?.desc || ''}`,
+        `Brand voice: ${template.identity.voice.join(' ')}`,
+        notes ? `Operator notes: ${notes}` : '',
+        'This is one section of a longer page, so do not restate the whole offer in it.',
+      ].filter(Boolean).join('\n')
+
+      let done = 0
+      const written = await Promise.all(
+        sections.map(async (section) => {
+          const elements = section.elements
+            .map((el) => {
+              const spec = elementSpec(el.type)
+              if (!spec) return null
+              const writable = spec.fields.filter((f) => f.kind === 'text' || f.kind === 'textarea')
+              return writable.length ? { id: el.id, type: el.type, fields: writable.map((f) => f.key), current: {} } : null
+            })
+            .filter(Boolean)
+          if (elements.length === 0) { done += 1; setProgress(done); return section }
+          const res = await aiWriteSectionNodes({ sectionType: section.type, instruction: brief, elements })
+          done += 1; setProgress(done)
+          if (!res.ok) return section
+          const patch = new Map(res.elements.map((e) => [e.id, e.fields]))
+          return { ...section, elements: section.elements.map((el) => (patch.has(el.id) ? { ...el, ...patch.get(el.id) } : el)) }
+        }),
+      )
+
+      onCreate({
+        name: name || `${angleLabel} LP`,
         slug: (name || 'new-lp').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-        templateId, angle, sections,
-        isPublished: false, createdAt: Date.now(), updatedAt: Date.now(),
-      }
-      onCreate(newLP)
+        templateId, angle, sections: written,
+        isPublished: false,
+      })
       onClose()
     } catch (err) {
       setError(err.message || 'Generation failed.')
@@ -603,7 +354,7 @@ const AINewLPWizard = ({ open, onClose, onCreate }) => {
 
   const stepCount = 4
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 110, backgroundColor: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+    <div onClick={busy ? undefined : onClose} style={{ position: 'fixed', inset: 0, zIndex: 110, backgroundColor: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 640, backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden' }}>
         <div style={{ padding: 22, borderBottom: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -640,33 +391,53 @@ const AINewLPWizard = ({ open, onClose, onCreate }) => {
             <div>
               <Label>Template</Label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-                {TEMPLATES.map((t) => (
-                  <button key={t.id} onClick={() => setTemplateId(t.id)} style={{ textAlign: 'left', padding: 0, backgroundColor: T.bgElev, border: `2px solid ${templateId === t.id ? T.primary : T.border}`, borderRadius: 10, cursor: 'pointer', overflow: 'hidden' }}>
-                    <div style={{ height: 50, background: t.tokens.heroBg }} />
-                    <div style={{ padding: 10 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{t.name}</div>
-                      <div style={{ fontSize: 10, color: T.textMute, marginTop: 3, lineHeight: 1.4 }}>{t.blurb.slice(0, 60)}</div>
-                    </div>
-                  </button>
-                ))}
+                {TEMPLATES.map((t) => {
+                  const s = templatePreviewSurface(t)
+                  const usable = Boolean(t.skeleton)
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => usable && setTemplateId(t.id)}
+                      disabled={!usable}
+                      style={{ textAlign: 'left', padding: 0, backgroundColor: T.bgElev, border: `2px solid ${templateId === t.id ? T.primary : T.border}`, borderRadius: 10, cursor: usable ? 'pointer' : 'not-allowed', overflow: 'hidden', opacity: usable ? 1 : 0.5 }}
+                    >
+                      <div style={{ height: 46, backgroundColor: s.bg, display: 'flex', alignItems: 'center', paddingLeft: 12, gap: 6 }}>
+                        {[s.accentFill, s.card, s.text].map((c, i) => <span key={i} style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: c, border: `1px solid ${s.line}` }} />)}
+                      </div>
+                      <div style={{ padding: 10 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{t.name}</div>
+                        <div style={{ fontSize: 10, color: usable ? T.textMute : T.warning, marginTop: 3, lineHeight: 1.4 }}>
+                          {usable ? t.structure : 'No structure built yet'}
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
           {step === 4 && (
             <div>
               <Label>Operator notes (optional)</Label>
-              <Textarea rows={5} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="eg Focus on truck accidents specifically. Mention statute of limitations. Lead with $2M+ truck case settlement." />
-              <div style={{ fontSize: 11, color: T.textMute, marginTop: 10 }}>Claude will generate hero, story, eligibility, how-it-works, guarantee, FAQ, and final CTA copy from your notes. The rest seeds with defaults.</div>
+              <Textarea rows={5} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="eg Focus on truck accidents specifically. Mention statute of limitations." />
+              <div style={{ fontSize: 11, color: T.textMute, marginTop: 10, lineHeight: 1.55 }}>
+                Claude fills the {template.skeleton?.sections.length || 0} sections of {template.name}, one call each, writing only into the elements that are there. It cannot change the structure.
+              </div>
+              {busy && (
+                <div style={{ marginTop: 12, fontSize: 11.5, color: T.textMute }}>
+                  Writing section {Math.min(progress + 1, template.skeleton?.sections.length || 1)} of {template.skeleton?.sections.length || 0}...
+                </div>
+              )}
               {error && <div style={{ marginTop: 12, padding: 10, backgroundColor: `${T.danger}11`, border: `1px solid ${T.danger}66`, borderRadius: 6, fontSize: 12, color: T.danger }}>{error}</div>}
             </div>
           )}
         </div>
         <div style={{ padding: 16, borderTop: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between' }}>
-          <Btn variant="ghost" size="md" onClick={() => (step > 1 ? setStep(step - 1) : onClose())}>{step > 1 ? 'Back' : 'Cancel'}</Btn>
+          <Btn variant="ghost" size="md" onClick={() => (step > 1 ? setStep(step - 1) : onClose())} disabled={busy}>{step > 1 ? 'Back' : 'Cancel'}</Btn>
           {step < stepCount ? (
             <Btn variant="primary" size="md" onClick={() => setStep(step + 1)} disabled={step === 1 && !name.trim()}>Next {'→'}</Btn>
           ) : (
-            <Btn variant="primary" size="md" icon={busy ? Loader2 : Sparkles} onClick={generate} disabled={busy}>{busy ? 'Generating...' : 'Generate with Claude'}</Btn>
+            <Btn variant="primary" size="md" icon={busy ? Loader2 : Sparkles} onClick={generate} disabled={busy}>{busy ? 'Writing...' : 'Generate with Claude'}</Btn>
           )}
         </div>
       </div>
@@ -677,14 +448,12 @@ const AINewLPWizard = ({ open, onClose, onCreate }) => {
 // ============================================================================
 // LANDING PAGE BUILDER (3-pane)
 // ============================================================================
-export const LandingPageBuilder = ({ landingPage, brands, onBrandSaved, quizDeployments, quizzes, onBack, onUpdate, onTogglePublish, onSetTemplate, onPreview }) => {
-  const [editingSectionId, setEditingSectionId] = useState(null)
+export const LandingPageBuilder = ({ landingPage, brands, onBrandSaved, quizDeployments, quizzes, onBack, onUpdate, onTogglePublish, onSetTemplate, onSetStructure, onPreview }) => {
+  const [selectedId, setSelectedId] = useState(null)
   const [addOpen, setAddOpen] = useState(false)
   const [galleryOpen, setGalleryOpen] = useState(false)
   const [previewBrandId, setPreviewBrandId] = useState(brands[0]?.id || null)
   const previewBrand = brands.find((b) => b.id === previewBrandId) || PREVIEW_BRAND_DEFAULT
-  // Sits with the preview-brand selector, which is where someone looking at a
-  // wrong colour is already standing.
   const brandEditor = <BrandQuickEdit brand={brands.find((b) => b.id === previewBrandId)} onSaved={onBrandSaved} />
   const matchingQuizDeps = quizDeployments.filter((qd) => qd.brandId === previewBrandId)
   const [previewQuizDepId, setPreviewQuizDepId] = useState(matchingQuizDeps[0]?.id || null)
@@ -696,29 +465,58 @@ export const LandingPageBuilder = ({ landingPage, brands, onBrandSaved, quizDepl
     }
   }, [previewBrandId, quizDeployments, previewQuizDepId])
 
-  const editingSection = landingPage.sections.find((s) => s.id === editingSectionId)
   const previewQuizDep = quizDeployments.find((q) => q.id === previewQuizDepId)
   const previewQuiz = quizzes.find((q) => q.id === previewQuizDep?.quizId)
-  const quizDepLabel = previewQuiz?.name
+  const template = templateFor(landingPage.templateId)
 
-  const setSections = (newSecs) => onUpdate({ ...landingPage, sections: newSecs, updatedAt: Date.now() })
+  // Whatever the page is stored as comes through as nodes, so the builder only
+  // ever works in one vocabulary. A page written before the node model is
+  // converted here and saved back as nodes the first time anything is changed.
+  const sections = toNodeSections(landingPage.sections)
+  const setSections = (next) => onUpdate({ ...landingPage, sections: next, updatedAt: Date.now() })
 
-  const moveSection = (id, dir) => {
-    const idx = landingPage.sections.findIndex((s) => s.id === id)
-    if (idx === -1) return
-    const swap = dir === 'up' ? idx - 1 : idx + 1
-    if (swap < 0 || swap >= landingPage.sections.length) return
-    const arr = [...landingPage.sections]
-    ;[arr[idx], arr[swap]] = [arr[swap], arr[idx]]
-    setSections(arr)
+  const selectedSection = sections.find((s) => s.id === selectedId) || sections.find((s) => s.elements.some((e) => e.id === selectedId)) || null
+  const selectedElement = selectedSection ? selectedSection.elements.find((e) => e.id === selectedId) || null : null
+
+  const patchSection = (id, fn) => setSections(sections.map((s) => (s.id === id ? fn(s) : s)))
+  const move = (arr, index, dir) => {
+    const to = index + dir
+    if (index < 0 || to < 0 || to >= arr.length) return arr
+    const out = [...arr]
+    ;[out[index], out[to]] = [out[to], out[index]]
+    return out
   }
 
-  const toggleVisible = (id) => setSections(landingPage.sections.map((s) => (s.id === id ? { ...s, isVisible: !(s.isVisible !== false) } : s)))
-  const deleteSection = (id) => setSections(landingPage.sections.filter((s) => s.id !== id))
-  const updateSection = (newSec) => setSections(landingPage.sections.map((s) => (s.id === newSec.id ? newSec : s)))
+  const moveSection = (id, dir) => setSections(move(sections, sections.findIndex((s) => s.id === id), dir))
+  const toggleSection = (id) => patchSection(id, (s) => ({ ...s, isVisible: s.isVisible === false ? undefined : false }))
+  const deleteSection = (id) => { setSections(sections.filter((s) => s.id !== id)); if (selectedId === id) setSelectedId(null) }
   const addSection = (type) => {
-    const newSec = { id: genId('sec'), type, isVisible: true, copy: JSON.parse(JSON.stringify(SEED_SECTION_COPY[type] || {})) }
-    setSections([...landingPage.sections, newSec])
+    // Seeded with one empty heading so the new section is visible and clickable
+    // straight away. An entirely empty section draws nothing, which reads as the
+    // button having failed.
+    const section = { id: newNodeId('sec'), type, tone: 'default', props: {}, elements: [{ id: newNodeId('el'), type: 'heading', level: '2' }] }
+    setSections([...sections, section])
+    setSelectedId(section.id)
+  }
+
+  const moveElement = (sectionId, elId, dir) =>
+    patchSection(sectionId, (s) => ({ ...s, elements: move(s.elements, s.elements.findIndex((e) => e.id === elId), dir) }))
+  const toggleElement = (sectionId, elId) =>
+    patchSection(sectionId, (s) => ({ ...s, elements: s.elements.map((e) => (e.id === elId ? { ...e, isVisible: e.isVisible === false ? undefined : false } : e)) }))
+  const deleteElement = (sectionId, elId) => {
+    patchSection(sectionId, (s) => ({ ...s, elements: s.elements.filter((e) => e.id !== elId) }))
+    if (selectedId === elId) setSelectedId(sectionId)
+  }
+  const addElement = (sectionId, type) => {
+    const el = { id: newNodeId('el'), type }
+    patchSection(sectionId, (s) => ({ ...s, elements: [...s.elements, el] }))
+    setSelectedId(el.id)
+  }
+  const updateElement = (next) => patchSection(selectedSection.id, (s) => ({ ...s, elements: s.elements.map((e) => (e.id === next.id ? next : e)) }))
+  const updateSection = (next) => patchSection(next.id, () => next)
+  const applyWrite = (written) => {
+    const patch = new Map(written.map((e) => [e.id, e.fields]))
+    patchSection(selectedSection.id, (s) => ({ ...s, elements: s.elements.map((e) => (patch.has(e.id) ? { ...e, ...patch.get(e.id) } : e)) }))
   }
 
   return (
@@ -730,98 +528,124 @@ export const LandingPageBuilder = ({ landingPage, brands, onBrandSaved, quizDepl
         onBack={onBack}
         onPreview={onPreview}
         onPublish={() => onTogglePublish(landingPage.id)}
-        actions={<Btn variant="ghost" size="sm" icon={Palette} onClick={() => setGalleryOpen(true)}>Template: {TEMPLATES.find((t) => t.id === landingPage.templateId)?.name}</Btn>}
+        actions={<Btn variant="ghost" size="sm" icon={Palette} onClick={() => setGalleryOpen(true)}>Template: {template.name}</Btn>}
       />
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '280px 1fr 320px', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '288px 1fr 340px', overflow: 'hidden' }}>
         <div style={{ borderRight: `1px solid ${T.border}`, overflowY: 'auto', backgroundColor: T.bg, padding: 14 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <Label>Sections {'·'} {landingPage.sections.length}</Label>
-            <Btn variant="primary" size="xs" icon={Plus} onClick={() => setAddOpen(true)}>Add</Btn>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {landingPage.sections.map((s) => {
-              const meta = SECTION_TYPE_META[s.type] || { name: s.type, icon: Layers }
-              const SecIcon = meta.icon
-              const hidden = s.isVisible === false
-              return (
-                <div key={s.id} style={{ padding: '8px 10px', backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 7, opacity: hidden ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <SecIcon size={13} color={T.textMute} />
-                  <button onClick={() => setEditingSectionId(s.id)} style={{ flex: 1, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 12.5, fontWeight: 500, color: T.text, fontFamily: '"Inter", system-ui, sans-serif', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meta.name}</button>
-                  <IconBtn icon={MoveUp} onClick={() => moveSection(s.id, 'up')} style={{ padding: 3 }} />
-                  <IconBtn icon={MoveDown} onClick={() => moveSection(s.id, 'down')} style={{ padding: 3 }} />
-                  <IconBtn icon={hidden ? EyeOff : Eye} onClick={() => toggleVisible(s.id)} style={{ padding: 3 }} />
-                </div>
-              )
-            })}
-          </div>
+          <NodeTree
+            sections={sections}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onMoveSection={moveSection}
+            onToggleSection={toggleSection}
+            onDeleteSection={deleteSection}
+            onMoveElement={moveElement}
+            onToggleElement={toggleElement}
+            onDeleteElement={deleteElement}
+            onAddElement={addElement}
+            onAddSection={() => setAddOpen(true)}
+          />
         </div>
 
-        <div style={{ overflowY: 'auto', backgroundColor: '#0c1118', padding: 24 }}>
-          <div style={{ maxWidth: 1180, margin: '0 auto' }}>
-            <LivePreview landingPage={landingPage} brand={previewBrand} quizDepLabel={quizDepLabel} quiz={previewQuiz} onEditSection={setEditingSectionId} />
+        <div style={{ overflowY: 'auto', backgroundColor: '#0c1118', padding: 24 }} onClick={() => setSelectedId(null)}>
+          <div style={{ maxWidth: 1180, margin: '0 auto' }} onClick={(e) => e.stopPropagation()}>
+            <LivePreview
+              landingPage={{ ...landingPage, sections }}
+              brand={previewBrand}
+              quizDepLabel={previewQuiz?.name}
+              quiz={previewQuiz}
+              selectedId={selectedId}
+              onSelectNode={setSelectedId}
+            />
           </div>
         </div>
 
         <div style={{ borderLeft: `1px solid ${T.border}`, overflowY: 'auto', backgroundColor: T.bg, padding: 18 }}>
-          <Label>Page settings</Label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 22 }}>
-            <div><Label>Name</Label><Input value={landingPage.name} onChange={(e) => onUpdate({ ...landingPage, name: e.target.value })} /></div>
-            <div><Label>Slug</Label><Input mono value={landingPage.slug} onChange={(e) => onUpdate({ ...landingPage, slug: e.target.value })} /></div>
-            <div>
-              <Label>Angle</Label>
-              <Select value={landingPage.angle} onChange={(e) => onUpdate({ ...landingPage, angle: e.target.value })}>
-                {ANGLES.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
-              </Select>
-            </div>
-            <div>
-              <Label>Template</Label>
-              <Btn variant="secondary" size="sm" icon={Palette} onClick={() => setGalleryOpen(true)} style={{ width: '100%', justifyContent: 'space-between' }}>
-                {TEMPLATES.find((t) => t.id === landingPage.templateId)?.name || 'Pick'}
-                <ChevronRight size={12} />
-              </Btn>
-            </div>
-          </div>
-
-          <div style={{ padding: 12, backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 8, marginBottom: 18 }}>
-            <Label style={{ marginBottom: 8 }}>Preview as</Label>
-            <Select value={previewBrandId || ''} onChange={(e) => setPreviewBrandId(e.target.value || null)}>
-              <option value="">No brand (placeholders)</option>
-              {selectableOptions({
-                records: brands,
-                selectedId: previewBrandId,
-                toRecord: (b) => ({ id: b.id, label: b.displayName, status: b.status === 'archived' ? 'archived' : 'published' }),
-              }).map((o) => <option key={o.id} value={o.id} disabled={o.disabled}>{o.label}{o.archived ? ' - ARCHIVED' : ''}</option>)}
-            </Select>
-            {brandEditor}
-            <div style={{ fontSize: 10.5, color: T.textMute, marginTop: 6, lineHeight: 1.5 }}>The page is brandless. Pick a brand here just to see how it will render. Brand and domain attach at deploy time.</div>
-            {previewBrandId && (
-              <div style={{ marginTop: 10 }}>
-                <Label style={{ marginBottom: 6 }}>Quiz deployment (preview)</Label>
-                <Select value={previewQuizDepId || ''} onChange={(e) => setPreviewQuizDepId(e.target.value || null)}>
-                  <option value="">None</option>
-                  {matchingQuizDeps.map((q) => {
-                    const qz = quizzes.find((z) => z.id === q.quizId)
-                    return <option key={q.id} value={q.id}>{qz?.name || q.id}</option>
-                  })}
-                </Select>
-                {matchingQuizDeps.length === 0 && <div style={{ fontSize: 10.5, color: T.warning, marginTop: 6 }}>This brand has no quiz deployments yet. Create one in Funnels {'›'} Quizzes.</div>}
+          {selectedSection ? (
+            <NodeInspector
+              section={selectedSection}
+              element={selectedElement}
+              identity={template.identity}
+              splits={Boolean(sectionSpec(selectedSection.type)?.splits)}
+              onChangeSection={updateSection}
+              onChangeElement={updateElement}
+              onApplyWrite={applyWrite}
+              onDelete={(id) => (selectedElement ? deleteElement(selectedSection.id, id) : deleteSection(id))}
+              onClose={() => setSelectedId(null)}
+            />
+          ) : (
+            <>
+              <Label>Page settings</Label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 22 }}>
+                <div><Label>Name</Label><Input value={landingPage.name} onChange={(e) => onUpdate({ ...landingPage, name: e.target.value })} /></div>
+                <div><Label>Slug</Label><Input mono value={landingPage.slug} onChange={(e) => onUpdate({ ...landingPage, slug: e.target.value })} /></div>
+                <div>
+                  <Label>Angle</Label>
+                  <Select value={landingPage.angle} onChange={(e) => onUpdate({ ...landingPage, angle: e.target.value })}>
+                    {ANGLES.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+                  </Select>
+                </div>
+                <div>
+                  <Label>Template</Label>
+                  <Btn variant="secondary" size="sm" icon={Palette} onClick={() => setGalleryOpen(true)} style={{ width: '100%', justifyContent: 'space-between' }}>
+                    {template.name}
+                    <ChevronRight size={12} />
+                  </Btn>
+                  <div style={{ fontSize: 10, color: T.textLow, marginTop: 6, lineHeight: 1.5 }}>
+                    {template.structure || 'This template has a look but no structure yet.'}
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
 
-          <div style={{ paddingTop: 14, borderTop: `1px solid ${T.border}`, fontSize: 11, color: T.textMute }}>
-            <div style={{ marginBottom: 6, fontFamily: '"JetBrains Mono", monospace', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.textLow }}>Placeholders</div>
-            <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 10, lineHeight: 1.7, color: T.textDim }}>
-              {`{{brand.logoText}}`}<br />{`{{brand.logoMark}}`}<br />{`{{brand.logoUrl}}`}<br />{`{{brand.faviconUrl}}`}<br />{`{{brand.displayName}}`}<br />{`{{brand.callNumber}}`}<br />{`{{brand.primary}}`}<br />{`{{brand.copyright}}`}<br />{`{{brand.disclaimer}}`}
-            </div>
-            <div style={{ marginTop: 8, lineHeight: 1.55 }}>Use these in section copy. They get substituted at preview and deploy time.</div>
-          </div>
+              <div style={{ padding: 12, backgroundColor: T.bgElev, border: `1px solid ${T.border}`, borderRadius: 8, marginBottom: 18 }}>
+                <Label style={{ marginBottom: 8 }}>Preview as</Label>
+                <Select value={previewBrandId || ''} onChange={(e) => setPreviewBrandId(e.target.value || null)}>
+                  <option value="">No brand (placeholders)</option>
+                  {selectableOptions({
+                    records: brands,
+                    selectedId: previewBrandId,
+                    toRecord: (b) => ({ id: b.id, label: b.displayName, status: b.status === 'archived' ? 'archived' : 'published' }),
+                  }).map((o) => <option key={o.id} value={o.id} disabled={o.disabled}>{o.label}{o.archived ? ' - ARCHIVED' : ''}</option>)}
+                </Select>
+                {brandEditor}
+                <div style={{ fontSize: 10.5, color: T.textMute, marginTop: 6, lineHeight: 1.5 }}>
+                  The template owns the colours and the faces. A brand supplies the name, the number and the legal text, so pick one here to see what a visitor gets.
+                </div>
+                {previewBrandId && (
+                  <div style={{ marginTop: 10 }}>
+                    <Label style={{ marginBottom: 6 }}>Quiz deployment (preview)</Label>
+                    <Select value={previewQuizDepId || ''} onChange={(e) => setPreviewQuizDepId(e.target.value || null)}>
+                      <option value="">None</option>
+                      {matchingQuizDeps.map((q) => {
+                        const qz = quizzes.find((z) => z.id === q.quizId)
+                        return <option key={q.id} value={q.id}>{qz?.name || q.id}</option>
+                      })}
+                    </Select>
+                    {matchingQuizDeps.length === 0 && <div style={{ fontSize: 10.5, color: T.warning, marginTop: 6 }}>This brand has no quiz deployments yet. Create one in Funnels {'›'} Quizzes.</div>}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ paddingTop: 14, borderTop: `1px solid ${T.border}`, fontSize: 11, color: T.textMute }}>
+                <div style={{ marginBottom: 6, fontFamily: '"JetBrains Mono", monospace', fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.textLow }}>Placeholders</div>
+                <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 10, lineHeight: 1.7, color: T.textDim }}>
+                  {`{{brand.displayName}}`}<br />{`{{brand.callNumber}}`}<br />{`{{brand.copyright}}`}<br />{`{{brand.disclaimer}}`}<br />{`{{brand.privacyUrl}}`}<br />{`{{brand.termsUrl}}`}<br />{`{{site.year}}`}
+                </div>
+                <div style={{ marginTop: 8, lineHeight: 1.55 }}>Type these into any field. They resolve per brand at preview and at deploy.</div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
-      <SectionEditorModal open={!!editingSection} section={editingSection} brand={previewBrand} onClose={() => setEditingSectionId(null)} onSave={updateSection} onDelete={deleteSection} />
-      <AddSectionModal open={addOpen} existingTypes={landingPage.sections.map((s) => s.type)} onClose={() => setAddOpen(false)} onAdd={addSection} />
-      <TemplateGalleryModal open={galleryOpen} currentTemplateId={landingPage.templateId} onClose={() => setGalleryOpen(false)} onPick={(tplId) => onSetTemplate(landingPage.id, tplId)} />
+      <AddSectionModal open={addOpen} onClose={() => setAddOpen(false)} onAdd={addSection} />
+      <TemplateGalleryModal
+        open={galleryOpen}
+        currentTemplateId={landingPage.templateId}
+        onClose={() => setGalleryOpen(false)}
+        onPickLook={(tplId) => onSetTemplate(landingPage.id, tplId)}
+        onPickStructure={(tplId) => { onSetStructure(landingPage.id, tplId); setSelectedId(null) }}
+      />
     </div>
   )
 }
@@ -848,7 +672,7 @@ const LPDeploymentEditor = ({ deployment, landingPages, brands, domains, quizDep
   }
 
   const lp = landingPages.find((p) => p.id === draft.landingPageId)
-  const tplName = TEMPLATES.find((t) => t.id === lp?.templateId)?.name
+  const tplName = lp ? templateFor(lp.templateId).name : null
   const angleName = ANGLES.find((a) => a.id === lp?.angle)?.label
 
   return (
@@ -998,7 +822,7 @@ const LPPreviewModal = ({ previewState, landingPages, brands, lpDeployments, qui
       </div>
       <div style={{ flex: 1, overflowY: 'auto', backgroundColor: '#0c1118', padding: 24 }}>
         <div style={{ maxWidth: 1180, margin: '0 auto' }}>
-          <LivePreview landingPage={lp} brand={brand} quiz={quiz} quizDepLabel={quiz?.name} onEditSection={() => {}} />
+          <LivePreview landingPage={lp} brand={brand} quiz={quiz} quizDepLabel={quiz?.name} editable={false} />
         </div>
       </div>
     </div>
@@ -1053,9 +877,22 @@ export function LandingPagesApp({ initialLandingPages, initialDeployments, brand
     if (lp) saveLP({ id, patch: { is_published: !lp.isPublished } }).then(() => router.refresh())
   }
 
+  // Two separate acts, kept separate. Changing the template repaints the page
+  // in that identity and touches nothing else. Taking its structure replaces
+  // the sections outright, which loses the copy, so it is its own verb behind
+  // its own confirmation rather than a consequence of picking a colour scheme.
   const setTemplate = (lpId, tplId) => {
     setLandingPages((arr) => arr.map((p) => (p.id === lpId ? { ...p, templateId: tplId } : p)))
     saveLP({ id: lpId, patch: { template_id: tplId } })
+  }
+
+  const setStructure = (lpId, tplId) => {
+    const tpl = templateFor(tplId)
+    if (!tpl.skeleton) { setToast({ message: `${tpl.name} has no structure built yet.`, type: 'error' }); return }
+    const sections = instantiateSkeleton(tpl.skeleton)
+    setLandingPages((arr) => arr.map((p) => (p.id === lpId ? { ...p, templateId: tplId, sections } : p)))
+    saveLP({ id: lpId, patch: { template_id: tplId, sections } })
+    setToast({ message: `Rebuilt from ${tpl.name}. Nothing is written yet.`, type: 'success' })
   }
 
   const cloneLPHandler = (lp) => {
@@ -1079,12 +916,15 @@ export function LandingPagesApp({ initialLandingPages, initialDeployments, brand
   }
 
   const createBlankLP = () => {
-    const tpl = TEMPLATES[0]
+    // A blank page still gets a SHAPE, from the first template that has one.
+    // Starting from nothing means starting from a screen with no way in, and
+    // the skeleton carries no copy, so nothing has to be deleted before writing.
+    const tpl = TEMPLATES.find((t) => t.skeleton) || TEMPLATES[0]
     const lp = {
       name: 'Untitled LP',
       slug: `untitled-${Date.now().toString(36).slice(-4)}`,
       templateId: tpl.id, angle: tpl.angleDefault,
-      sections: buildSeedSections(), isPublished: false,
+      sections: tpl.skeleton ? instantiateSkeleton(tpl.skeleton) : [], isPublished: false,
     }
     createLP({ lp }).then((res) => {
       if (!res.ok) { setToast({ message: res.error, type: 'error' }); return }
@@ -1159,6 +999,7 @@ export function LandingPagesApp({ initialLandingPages, initialDeployments, brand
         onUpdate={updateLP}
         onTogglePublish={togglePublishLP}
         onSetTemplate={setTemplate}
+        onSetStructure={setStructure}
         onPreview={() => setPreviewState({ kind: 'lp', lpId: editingLP.id })}
       />
     )

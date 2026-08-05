@@ -805,11 +805,10 @@ function RenderLpDeployment({
         brand={resolved.brand}
         quiz={resolved.quiz?.quiz ?? null}
         quizDepLabel={resolved.quiz?.deployment?.name ?? undefined}
+        // The single difference between this and the builder. With it false no
+        // click handler is attached, no hover affordance is drawn, and unfilled
+        // nodes are dropped rather than shown as placeholders.
         editable={false}
-        // Required by the inferred signature because the builder always passes
-        // it. Never called here: `editable={false}` is what removes the
-        // click-to-edit handlers from the public render.
-        onEditSection={undefined}
         // The landing-page renderer is a ported artifact carrying @ts-nocheck, so
         // its prop types are inferred from default values rather than declared:
         // `quizCtx = null` infers as `null`. The cast documents that the shape is

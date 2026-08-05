@@ -202,6 +202,78 @@ export async function generateLPCopy(args: { angle: string; templateId: string; 
   }
 }
 
+/**
+ * Write or rewrite one section, element by element.
+ *
+ * The older `aiRewriteSection` below returns a bag of named copy keys, which
+ * only made sense while a section WAS a bag of named copy keys. A section is
+ * now a list of nodes, so the model is given the nodes - their ids, their types
+ * and the exact fields each type accepts - and must answer with the same ids.
+ *
+ * Ids are the contract. Anything the model invents is dropped by the caller
+ * rather than merged, so a hallucinated element cannot appear on a page, and a
+ * field name outside the element's spec cannot be written into it. That keeps a
+ * generated section structurally identical to the one the operator laid out:
+ * the model fills the skeleton, it does not get to change it.
+ */
+const NodeCopySchema = z.object({
+  elements: z.array(
+    z.object({
+      id: z.string(),
+      fields: z.record(z.string()),
+    }),
+  ),
+})
+
+export async function aiWriteSectionNodes(args: {
+  sectionType: string
+  instruction: string
+  elements: Array<{ id: string; type: string; fields: string[]; current: Record<string, string> }>
+}): Promise<{ ok: true; elements: Array<{ id: string; fields: Record<string, string> }> } | { ok: false; error: string }> {
+  const user = await getCurrentUser()
+  if (!user) return { ok: false, error: 'unauthenticated' }
+  if (!Array.isArray(args.elements) || args.elements.length === 0) {
+    return { ok: false, error: 'This section has no elements to write into.' }
+  }
+  try {
+    const result = await invokeLLM({
+      system:
+        'You are an expert direct-response copywriter for Motor Vehicle Accident legal lead-gen landing pages in the United States. Write attorney-advertising-compliant copy with no guaranteed-result claims and no implication that you are a law firm. Never use em dashes. Use the {{brand.callNumber}} placeholder wherever a phone number belongs, and {{brand.displayName}} for the brand name, because the page is written once and deployed under several brands. US English.',
+      user: [
+        `Section layout: ${args.sectionType}`,
+        `Operator instruction: ${args.instruction || 'Write this section.'}`,
+        '',
+        'Write copy for each element below. Return every id exactly as given. Do not invent elements, do not drop elements, and only use the field names listed for each one. Keep each field to the length its role implies: a heading is one line, a paragraph is one or two sentences, a card body is short.',
+        '',
+        JSON.stringify(args.elements, null, 2),
+      ].join('\n'),
+      schema: NodeCopySchema,
+      schemaName: 'section_nodes',
+      model: 'claude-sonnet-4-6',
+      maxTokens: 3000,
+      enforceNoBannedVocab: true,
+    })
+
+    // Only ids the caller asked about survive, and within them only fields the
+    // element's spec declares. The model does not get to widen the shape.
+    const allowed = new Map(args.elements.map((e) => [e.id, new Set(e.fields)]))
+    const elements = (result.elements || [])
+      .filter((e) => allowed.has(e.id))
+      .map((e) => {
+        const keys = allowed.get(e.id)!
+        const fields: Record<string, string> = {}
+        for (const [k, v] of Object.entries(e.fields || {})) if (keys.has(k) && typeof v === 'string') fields[k] = v
+        return { id: e.id, fields }
+      })
+      .filter((e) => Object.keys(e.fields).length > 0)
+
+    if (elements.length === 0) return { ok: false, error: 'Claude returned nothing that matched this section.' }
+    return { ok: true, elements }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'write failed' }
+  }
+}
+
 export async function aiRewriteSection(args: { sectionType: string; currentCopy: Record<string, unknown>; instruction: string }): Promise<
   { ok: true; copy: Record<string, unknown> } | { ok: false; error: string }
 > {

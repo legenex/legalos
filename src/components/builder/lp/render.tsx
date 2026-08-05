@@ -1,238 +1,87 @@
-// @ts-nocheck
-/* eslint-disable */
+// @ts-nocheck -- the seam between the ported builder (untyped props) and the
+// typed node renderers under nodes/. Everything it delegates to is checked.
 'use client'
 
-// Ported verbatim from the artifact: landing-page templates, section types +
-// default copy, the {{token}} resolver, all 13 section renderers, and LivePreview.
-
-import { useState, useEffect } from 'react'
-import {
-  Flame, Phone, ChevronRight, ShieldCheck, Scale, Check, Trophy, Star, ChevronUp,
-  ChevronDown, ArrowRight, Pencil, Layers, Rocket, ListOrdered, Award, Quote,
-  CheckCircle2, ListChecks, HelpCircle, Megaphone, FileText,
-} from 'lucide-react'
-import { T, genId, brandShortName } from '../ui'
-import { relativeLuminance, contrastRatio } from '@/lib/builder/page-lint'
-import { onPrimaryText, getSafeTextColor, getSafeMutedColor, rgbToHsl, hslToHex, parseHex } from '@/lib/builder/color-system'
-import { QuizRuntime } from '@/components/public/quiz/QuizRuntime'
-import { LP_IDENTITIES } from '@/lib/lp-identities'
-
-// A template's canvas is "dark" when its luminance is below the midpoint.
-// Replaces the brittle canvas === '#0f172a' string-equality that only
-// recognised one specific hex and broke for any brand-driven canvas.
-// A template declares whether it grounds on dark or light. It used to be
-// inferred from the canvas hex, which only worked while templates carried
-// hexes - and carrying them is exactly what made every brand render in slate.
-const tokensAreDark = (tokens) => (tokens?.mood ? tokens.mood === 'dark' : (relativeLuminance(tokens?.canvas) ?? 1) < 0.5)
-
 /**
- * Build a template's palette FROM THE BRAND, keeping only its character.
+ * The landing-page renderer.
  *
- * The templates used to carry fixed hex values, so a landing page rendered in
- * slate and indigo whatever brand it was deployed under. A navy-and-gold brand
- * came out purple, which is the opposite of what deploying one page across many
- * brands is for: the template is meant to decide the SHAPE, and the brand the
- * COLOUR.
+ * One component serves the builder and the public page, which is deliberate: a
+ * separate public renderer is how a page ends up looking one way to the person
+ * designing it and another way to a visitor. `editable` is the only difference.
+ * When it is false no click handler is attached, no hover affordance is drawn,
+ * and unfilled nodes are dropped rather than shown as placeholders.
  *
- * What survives from the template is its mood - whether the hero sits on a dark
- * ground or a light one, whether it carries a gradient, and its typography. The
- * colours themselves are the brand's, and every text colour is derived against
- * the surface it will actually sit on rather than assumed, so a light brand in
- * a dark template cannot produce white on white.
+ * Everything about HOW a page draws now lives in `nodes/`. This file is the
+ * seam: it resolves the template, normalises whatever shape the sections are
+ * stored in, substitutes brand tokens, and hands each section to the node
+ * renderer. It carries no section renderers of its own any more - there were
+ * thirteen, one per subject, and they were the reason four templates could
+ * differ only in colour.
  */
-/**
- * Re-light a brand colour to a TARGET lightness, keeping its hue.
- *
- * Shifting by a fixed delta was wrong: a brand whose primary is already dark,
- * like a #0F1E3D navy, clamps straight to pure black and the brand disappears
- * into a colour it never chose. Setting the lightness instead means a navy
- * brand gets a deep navy ground and a burgundy brand a deep burgundy, which is
- * what makes the dark template still read as that brand rather than as the
- * absence of one.
- *
- * A brand with no saturation stays grey, and that is honest: it has not chosen
- * a hue, so inventing one would be the bug.
- */
-/**
- * Resolve a section's chosen TONE into real colours.
- *
- * Sections can be recoloured, but the choice is a role rather than a hex. Give
- * someone a colour picker per section and a landing page becomes eight
- * unrelated colours, half of them unreadable; give them "page", "card",
- * "brand" or "inverted" and every choice still comes out of the brand and
- * every text colour is derived against the ground it lands on. The operator
- * gets the control they asked for and cannot produce white on white with it.
- */
-export const SECTION_TONES = [
-  { id: 'default', label: 'Page', desc: 'The page ground' },
-  { id: 'surface', label: 'Card', desc: 'One step off the page' },
-  { id: 'brand', label: 'Brand', desc: 'Filled with the brand colour' },
-  { id: 'inverse', label: 'Inverted', desc: 'Flipped light or dark' },
-]
 
-/**
- * Apply a section's own colours over the brand-derived ones.
- *
- * Any of these may be set, and anything left unset stays derived from the
- * brand, so a section that only overrides its background still gets brand
- * typography and brand-correct everything else. Overriding is per property
- * rather than all-or-nothing.
- *
- * These are FREE values, chosen deliberately: the builder shows a live contrast
- * reading next to them and warns, rather than refusing. The judgement is the
- * operator's to make, and a tool that silently corrects a colour someone picked
- * on purpose is worse than one that tells them what they have done.
- */
-const applySectionColors = (tk, colors) => {
-  if (!colors) return tk
-  const out = { ...tk }
-  if (colors.bg) {
-    out.canvas = colors.bg
-    out.heroBg = colors.bg
-    // The card still has to sit ON the chosen background, so it is re-derived
-    // rather than carried over from a ground that no longer exists.
-    out.surface = colors.surface || atLightness(colors.bg, (relativeLuminance(colors.bg) ?? 1) < 0.5 ? 0.17 : 0.97)
-  }
-  if (colors.surface) out.surface = colors.surface
-  if (colors.text) {
-    out.text = colors.text
-    out.textMute = getSafeMutedColor(colors.text, out.canvas).hex
-  } else if (colors.bg) {
-    // Background changed but text did not: derive it, or the previous text
-    // colour survives onto a ground it was never checked against.
-    out.text = getSafeTextColor(out.canvas).hex
-    out.textMute = getSafeMutedColor(out.text, out.canvas).hex
-  }
-  if (colors.accent) out.accentOn = colors.accent
-  return out
-}
+import { fillAll as fillAllTokens, resolveTokens } from './tokens'
+import { LP_IDENTITIES, IDENTITY_FONTS_HREF, getLpIdentity } from '@/lib/lp-identities'
+import { toNodeSections } from '@/lib/lp-nodes/from-legacy'
+import { isVisible, TONES } from '@/lib/lp-nodes/model'
+import { deriveSurface, groundFor, lookOf } from '@/lib/lp-nodes/surface'
+import { skeletonFor } from '@/lib/lp-skeletons'
+import { SectionNode } from './nodes/SectionNode'
+import { T } from '../ui'
 
-const toneFor = (tone, tk, brand) => {
-  const primary = brand?.colors?.primary || tk.canvas
-  if (tone === 'brand') {
-    const bg = primary
-    return { bg, text: getSafeTextColor(bg).hex, muted: getSafeMutedColor(getSafeTextColor(bg).hex, bg).hex }
-  }
-  if (tone === 'inverse') {
-    const dark = (relativeLuminance(tk.canvas) ?? 1) < 0.5
-    const bg = atLightness(primary, dark ? 0.95 : 0.1)
-    return { bg, text: getSafeTextColor(bg).hex, muted: getSafeMutedColor(getSafeTextColor(bg).hex, bg).hex }
-  }
-  if (tone === 'surface') {
-    return { bg: tk.surface, text: getSafeTextColor(tk.surface).hex, muted: getSafeMutedColor(getSafeTextColor(tk.surface).hex, tk.surface).hex }
-  }
-  return { bg: tk.canvas, text: tk.text, muted: tk.textMute }
-}
+export { resolveTokens }
+export const fillPlaceholders = (str, brand) => resolveTokens(str, { brand })
+export const fillAll = fillAllTokens
 
-const atLightness = (hex, target) => {
-  const rgb = parseHex(hex)
-  if (!rgb) return hex
-  const [h, sat] = rgbToHsl(rgb)
-  return hslToHex(h, sat, Math.max(0, Math.min(1, target)))
-}
+// Section default copy + helpers live in a server-safe module so the seed
+// script can share them. They now describe LEGACY sections, which the converter
+// in lp-nodes/from-legacy turns into nodes on read.
+export { SEED_SECTION_COPY, DEFAULT_SECTION_ORDER, buildSeedSections } from './section-copy'
 
-const deriveTemplateTokens = (tpl, brand) => {
-  const base = tpl.tokens
-  const c = brand?.colors || {}
-
-  // The identity owns the palette. This is the reversal the owner asked for:
-  // a template is the look, so Counterweight stays vermilion on warm grey
-  // under any brand. The brand is consulted only where the identity is silent,
-  // which is how a template without one still renders.
-  const canvas = base.canvas || c.background || '#ffffff'
-  const surface = base.surfaceAlt || c.cardBg || canvas
-
-  // Text stays DERIVED and verified, which is the one rule that survives the
-  // change of ownership. An identity states its ink, and that ink is kept when
-  // it can be read on its own ground and replaced when it cannot, so no
-  // combination of identity and override can produce unreadable copy.
-  const statedInk = base.text || c.ink
-  const text = statedInk && (contrastRatio(statedInk, canvas) ?? 0) >= 4.5 ? statedInk : getSafeTextColor(canvas).hex
-  const textMute = base.textMute && (contrastRatio(base.textMute, canvas) ?? 0) >= 3
-    ? base.textMute
-    : getSafeMutedColor(text, canvas).hex
-
-  // The accent as TEXT, lifted until it reads. An identity's accent is chosen
-  // against its own surface, but a section can be re-toned under it.
-  const statedAccent = base.primary || c.primary || text
-  let accentOn = statedAccent
-  if ((contrastRatio(accentOn, canvas) ?? 0) < 4.5) {
-    const lighter = (relativeLuminance(canvas) ?? 0) < 0.5
-    for (let step = 1; step <= 18; step += 1) {
-      accentOn = atLightness(statedAccent, lighter ? 0.5 + step * 0.025 : 0.5 - step * 0.025)
-      if ((contrastRatio(accentOn, canvas) ?? 0) >= 4.5) break
-    }
-  }
-
-  return {
-    ...base,
-    canvas,
-    surface,
-    text,
-    textMute,
-    accentOn,
-    heroBg: base.hero === 'gradient'
-      ? `linear-gradient(135deg, ${canvas} 0%, ${atLightness(base.primary || canvas, 0.92)} 60%, ${canvas} 100%)`
-      : canvas,
-    headlineFont: base.headlineFont,
-    bodyFont: base.bodyFont,
-  }
-}
+/** Kept under its old name because the section editor still imports it. */
+export const SECTION_TONES = TONES
 
 // ============================================================================
-// LANDING PAGE TEMPLATES
+// TEMPLATES
 // ============================================================================
+
 /**
- * The four landing-page templates, each one a complete identity.
+ * A template is an identity plus a structure.
  *
- * These replace the previous four, which declared only a mood and took every
- * colour from the brand. The owner chose the opposite model for these: a
- * template IS the look, palette and faces included, so a page deployed under
- * Counterweight is vermilion on warm grey whatever the Site's own tokens say.
+ * The identity half was settled earlier: the template owns the palette, the
+ * faces, the radii and the mark, so a page deployed under any brand renders in
+ * the template's own colours. The structure half is the new part, and it is
+ * what makes the four actually different rather than four tints of one layout.
  *
- * Built from LP_IDENTITIES rather than restated here, so the design handoff
- * stays the single source and a corrected hex cannot be right in one file and
- * stale in the other.
+ * A template whose skeleton has not been built yet still works. It keeps its
+ * identity, so an existing page assigned to it renders in its colours and
+ * typography; what it cannot yet do is seed a new page with a shape. The
+ * gallery says so rather than quietly handing out a copy of another template's
+ * structure.
  */
 const ANGLE_FOR_POSITION = { adversary: 'pain', clarity: 'community', authority: 'authority', direct: 'urgency' }
-const EYEBROW_FOR_POSITION = { adversary: 'flame_tag', clarity: 'rule_line', authority: 'uppercase_caps', direct: 'pill_dot' }
 
-export const TEMPLATES = LP_IDENTITIES.map((i) => ({
-  id: i.id,
-  name: i.name,
-  identity: i,
-  angleDefault: ANGLE_FOR_POSITION[i.position] || 'pain',
-  blurb: `${i.position} - ${i.tagline}`,
-  hookExample: i.tagline,
-  tokens: {
-    // The identity's own values, not a mood the brand then fills in.
-    canvas: i.surface,
-    surfaceAlt: i.surfaceAlt,
-    surface: i.surface,
-    surfaceDark: i.surfaceDark,
-    text: i.ink,
-    textMute: i.inkMuted,
-    line: i.line,
-    primary: i.primary,
-    primaryInk: i.primaryInk,
-    accent: i.accent,
-    headlineFont: i.fontDisplay,
-    bodyFont: i.fontBody,
-    utilityFont: i.fontUtility,
-    headlineWeight: i.fdw,
-    h1tt: i.h1tt,
-    h1ls: i.h1ls,
-    wmTt: i.wmTt,
-    wmLs: i.wmLs,
-    eyebrowStyle: EYEBROW_FOR_POSITION[i.position] || 'pill_dot',
-    radius: parseInt(i.rMd, 10) || 8,
-    radiusPill: i.rPill,
-    radiusLg: i.rLg,
-    borderWeight: i.bw,
-    mood: 'light',
-    hero: 'flat',
-  },
-}))
+export const TEMPLATES = LP_IDENTITIES.map((identity) => {
+  const skeleton = skeletonFor(identity.id)
+  return {
+    id: identity.id,
+    name: identity.name,
+    identity,
+    skeleton,
+    structure: skeleton ? skeleton.summary : null,
+    angleDefault: ANGLE_FOR_POSITION[identity.position] || 'pain',
+    blurb: `${identity.position} - ${identity.tagline}`,
+    hookExample: identity.tagline,
+  }
+})
+
+export const templateFor = (templateId) =>
+  TEMPLATES.find((t) => t.id === templateId) || TEMPLATES[0]
+
+/** The colours a template's own ground produces, for gallery swatches. */
+export const templatePreviewSurface = (template) =>
+  deriveSurface(groundFor('default', template.identity), template.identity)
+
+export const templateLook = (template) => lookOf(template.identity)
 
 export const ANGLES = [
   { id: 'pain', label: 'Pain First', desc: 'Acknowledge what happened. Lean into emotion and consequences.' },
@@ -240,543 +89,6 @@ export const ANGLES = [
   { id: 'urgency', label: 'Urgency', desc: 'Statute of limitations. Time is running out. Act now.' },
   { id: 'community', label: 'Community', desc: 'You are not alone. Many people in your situation got help.' },
 ]
-
-// ============================================================================
-// SECTION TYPES + DEFAULT COPY
-// ============================================================================
-export const SECTION_TYPES = [
-  { id: 'header', name: 'Header', icon: Layers, desc: 'Logo and call button bar' },
-  { id: 'hero', name: 'Hero + Quiz', icon: Rocket, desc: 'Headline, subheadline, stats, embedded quiz' },
-  { id: 'ticker', name: 'Recovery Ticker', icon: ListOrdered, desc: 'Rolling list of recent recoveries' },
-  { id: 'authority', name: 'Authority Bar', icon: Award, desc: 'Trust logos, accreditations, network size' },
-  { id: 'story', name: 'Story Section', icon: Quote, desc: 'Narrative about who you help' },
-  { id: 'eligibility', name: 'Eligibility Checklist', icon: CheckCircle2, desc: 'Bulleted list of who qualifies' },
-  { id: 'how_it_works', name: 'How It Works', icon: ListChecks, desc: '3 to 4 step process explainer' },
-  { id: 'settlements', name: 'Settlement Wins', icon: Trophy, desc: 'Past payouts with case type and amount' },
-  { id: 'testimonials', name: 'Testimonials', icon: Star, desc: 'Star-rated client quotes' },
-  { id: 'guarantee', name: 'No Win No Fee', icon: ShieldCheck, desc: 'Risk reversal' },
-  { id: 'faq', name: 'FAQ', icon: HelpCircle, desc: 'Common questions with collapsible answers' },
-  { id: 'final_cta', name: 'Final CTA', icon: Megaphone, desc: 'Closing call to action' },
-  { id: 'footer', name: 'Footer', icon: FileText, desc: 'Legal links, copyright, TCPA' },
-]
-export const SECTION_TYPE_META = Object.fromEntries(SECTION_TYPES.map((s) => [s.id, s]))
-
-// Section default copy + helpers live in a server-safe module so the seed
-// script can share them (single source of truth).
-export { SEED_SECTION_COPY, DEFAULT_SECTION_ORDER, buildSeedSections } from './section-copy'
-
-// ============================================================================
-// TOKEN SUBSTITUTION
-// ============================================================================
-export const resolveTokens = (str, ctx = {}) => {
-  if (typeof str !== 'string') return str
-  const { brand, quiz, site } = ctx
-  const year = new Date().getFullYear()
-  const lookup = {
-    'brand.displayName': brand?.displayName || (brand ? brand.name : 'Your Brand'),
-    'brand.name': brand?.name || 'Your Brand',
-    'brand.shortName': brand ? brandShortName(brand) : 'YB',
-    'brand.tagline': brand?.tagline || '',
-    'brand.primaryDomain': brand?.primaryDomain || '',
-    'brand.callNumber': brand?.contact?.callNumber || '',
-    'brand.callNumberRaw': (brand?.contact?.callNumber || '').replace(/[^\d+]/g, ''),
-    'brand.copyright': brand?.legal?.copyright || `(c) ${year} ${brand?.displayName || 'Your Brand'}`,
-    'brand.disclaimer': brand?.legal?.defaultDisclaimer || '',
-    'brand.tcpaText': brand?.legal?.tcpaText || '',
-    'brand.privacyUrl': brand?.legal?.privacyUrl || '',
-    'brand.termsUrl': brand?.legal?.termsUrl || '',
-    'brand.logoUrl': brand?.logoUrl || '',
-    'brand.logoUrlDark': brand?.logoUrlDark || '',
-    'brand.faviconUrl': brand?.faviconUrl || '',
-    'brand.primary': brand?.colors?.primary || '',
-    'brand.accent': brand?.colors?.accent || '',
-    'brand.logoText': brand?.displayName || (brand ? brand.name : 'Your Brand'),
-    'brand.logoMark': brand ? brandShortName(brand) : 'YB',
-    'quiz.fullUrl': quiz?.fullUrl || (quiz?.domain ? `https://${quiz.domain}${quiz.path || ''}` : ''),
-    'quiz.path': quiz?.path || '',
-    'quiz.name': quiz?.name || '',
-    'site.currentYear': String(year),
-    'site.year': String(year),
-  }
-  return str.replace(/\{\{([\w.]+)\}\}/g, (m, key) => {
-    if (key in lookup) {
-      const v = lookup[key]
-      return v === undefined || v === null ? '' : String(v)
-    }
-    return m
-  })
-}
-
-export const fillPlaceholders = (str, brand) => resolveTokens(str, { brand })
-
-export const fillAll = (obj, brand) => {
-  if (typeof obj === 'string') return fillPlaceholders(obj, brand)
-  if (Array.isArray(obj)) return obj.map((v) => fillAll(v, brand))
-  if (obj && typeof obj === 'object') {
-    const out = {}
-    for (const k of Object.keys(obj)) out[k] = fillAll(obj[k], brand)
-    return out
-  }
-  return obj
-}
-
-// ============================================================================
-// QUIZ EMBED HELPERS (subset; the Quiz builder ships the full set in Phase 7)
-// ============================================================================
-const VISIBLE_BY_DEFAULT = {
-  question: true, form: true, transition: true, endpoint: true, custom: true,
-  webhook: false, decision: false, verification: false,
-}
-const tierIsShared = (n) => !n.tiers || n.tiers.length === 0
-const nodesForStep = (q, k) => q.nodes.filter((n) => n.stepKey === k)
-const sharedNodeForStep = (q, k) => nodesForStep(q, k).find((v) => tierIsShared(v))
-const isNodeVisible = (n) => (n.isVisible !== false && VISIBLE_BY_DEFAULT[n.type] !== false) || n.isVisible === true
-
-const visibleStepsOf = (quiz) => {
-  if (!quiz?.steps) return []
-  return quiz.steps.filter((s) => {
-    const shared = sharedNodeForStep(quiz, s.key)
-    const anyNode = nodesForStep(quiz, s.key)[0]
-    const n = shared || anyNode
-    return n && isNodeVisible(n)
-  })
-}
-
-// ============================================================================
-// RENDER HELPERS
-// ============================================================================
-const renderAccent = (headline, accent, color) => {
-  if (!headline) return ''
-  if (!accent || !headline.includes(accent)) return headline
-  const parts = headline.split(accent)
-  return (
-    <>
-      {parts[0]}
-      <span style={{ color }}>{accent}</span>
-      {parts.slice(1).join(accent)}
-    </>
-  )
-}
-
-const Eyebrow = ({ text, tokens, brandColor }) => {
-  if (!text) return null
-  const style = tokens.eyebrowStyle
-  if (style === 'pill_dot')
-    return (
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 12px', borderRadius: 999, backgroundColor: `${brandColor}22`, color: brandColor, fontSize: 11, fontWeight: 600, letterSpacing: '0.04em' }}>
-        <span style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: brandColor }} />
-        {text.toUpperCase()}
-      </div>
-    )
-  if (style === 'uppercase_caps') return <div style={{ fontSize: 11, fontWeight: 700, color: brandColor, letterSpacing: '0.18em', textTransform: 'uppercase' }}>{text}</div>
-  if (style === 'rule_line')
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ width: 32, height: 1, backgroundColor: brandColor }} />
-        <span style={{ fontSize: 10, color: brandColor, letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 600 }}>{text}</span>
-        <div style={{ width: 32, height: 1, backgroundColor: brandColor }} />
-      </div>
-    )
-  if (style === 'flame_tag')
-    return (
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', backgroundColor: brandColor, color: onPrimaryText(brandColor), fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', borderRadius: 4 }}>
-        <Flame size={11} /> {text}
-      </div>
-    )
-  return <div style={{ fontSize: 11, color: brandColor, textTransform: 'uppercase' }}>{text}</div>
-}
-
-const SectionEditOverlay = ({ onEdit, dark }) => (
-  <div className="lp-section-overlay" style={{ position: 'absolute', top: 8, right: 8, zIndex: 10, opacity: 0, transition: 'opacity 0.15s', pointerEvents: 'none' }}>
-    <button
-      onClick={(e) => { e.stopPropagation(); onEdit?.() }}
-      style={{ pointerEvents: 'auto', padding: '6px 10px', borderRadius: 6, backgroundColor: dark ? 'rgba(255,255,255,0.96)' : 'rgba(15,23,42,0.92)', color: dark ? '#0f172a' : '#fff', border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: '"Inter", system-ui, sans-serif' }}
-    >
-      <Pencil size={11} /> Edit section
-    </button>
-  </div>
-)
-
-const TemplateHeader = ({ section, tokens, brand, onEditSection }) => {
-  const c = section.copy || {}
-  const isDark = tokensAreDark(tokens)
-  return (
-    <header onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '14px 32px', borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`, backgroundColor: tokens.canvas, color: tokens.text, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-      <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 32, height: 32, borderRadius: 7, background: `linear-gradient(135deg, ${brand.colors.primary}, ${brand.colors.background})`, color: onPrimaryText(brand.colors.primary), display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12 }}>{brandShortName(brand)}</div>
-        <div style={{ fontWeight: 700, fontSize: 16, color: tokens.text }}>{c.logoText}</div>
-      </div>
-      <button style={{ backgroundColor: brand.colors.primary, color: onPrimaryText(brand.colors.primary), border: 'none', padding: '8px 16px', borderRadius: tokens.radius, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        <Phone size={13} /> {c.ctaLabel}
-      </button>
-    </header>
-  )
-}
-
-/**
- * The quiz inside a landing page.
- *
- * This used to be a hand-drawn imitation of a quiz - a fake first question and
- * a dead Continue button - which meant the landing page you designed and the
- * quiz you built were two different things that only looked alike. It now runs
- * the REAL quiz runtime in inline mode: the same flow, the same routing, the
- * same lead delivery as the standalone deployment.
- *
- * The quiz adopts the LANDING PAGE's look rather than its own. `surfaceColor`
- * is the card colour it will sit on, so every text colour is derived against
- * the real backdrop, and inline mode drops the quiz's own card so there is no
- * box inside a box. That is what "one flow, any brand style" means in practice:
- * the flow is the quiz's, the appearance is the host's.
- *
- * The placeholder below is kept for the genuine empty case - no quiz attached
- * yet - so the hero still composes while someone is designing it.
- */
-// `preview` defaults to TRUE on purpose. This component is reached from the
-// builder's LivePreview today and could be reached from a public renderer
-// later; a caller that forgets to declare itself live gets the safe behaviour
-// (no lead written, no redirect followed) rather than the dangerous one.
-const LPQuizEmbed = ({ quiz, brand, tokens, isDark, radius, deployment = null, site = null, preview = true }) => {
-  const visibleSteps = visibleStepsOf(quiz)
-
-  if (quiz && visibleSteps.length > 0) {
-    return (
-      <QuizRuntime
-        quiz={quiz}
-        brand={brand}
-        deployment={deployment}
-        site={site}
-        inline
-        surfaceColor={tokens.surface}
-        previewMode={preview}
-      />
-    )
-  }
-
-  // No quiz attached yet: show the shape of one so the hero still composes
-  // while it is being designed. Deliberately static and clearly inert.
-  return (
-    <>
-      <div style={{ fontSize: 18, fontWeight: 700, color: tokens.text, marginBottom: 16, fontFamily: tokens.headlineFont }}>Start your case review</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-        <div style={{ padding: 11, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderRadius: 6, fontSize: 13, color: tokens.text }}>Attach a quiz to this landing page to run it here.</div>
-      </div>
-      <button style={{ width: '100%', padding: 12, backgroundColor: brand.colors.primary, color: onPrimaryText(brand.colors.primary), border: 'none', borderRadius: radius, fontWeight: 700, fontSize: 14, cursor: 'not-allowed', opacity: 0.6 }} disabled>Continue {'\u2192'}</button>
-      <div style={{ textAlign: 'center', fontSize: 11, color: tokens.textMute, marginTop: 10 }}>No quiz selected</div>
-    </>
-  )
-}
-
-const TemplateHero = ({ section, tokens, brand, quizDepLabel, quiz, onEditSection, quizCtx = null }) => {
-  const c = section.copy || {}
-  const isDark = tokensAreDark(tokens)
-  return (
-    <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '48px 32px 56px', background: tokens.heroBg, color: tokens.text, cursor: 'pointer', fontFamily: tokens.bodyFont }}>
-      <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
-      <div style={{ maxWidth: 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 40, alignItems: 'center' }}>
-        <div>
-          <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={tokens.accentOn || brand.colors.primary} />
-          <h1 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 44, lineHeight: 1.1, color: tokens.text, letterSpacing: '-0.02em', margin: '14px 0 16px' }}>{renderAccent(c.headline, c.accent_phrase, tokens.accentOn || brand.colors.primary)}</h1>
-          <p style={{ fontSize: 16, color: tokens.textMute, lineHeight: 1.5, marginBottom: 24, maxWidth: 540 }}>{c.subheadline}</p>
-          <div style={{ display: 'flex', gap: 24, marginBottom: 22, flexWrap: 'wrap' }}>
-            {['1', '2', '3'].map((n) => c[`stat${n}_num`] && (
-              <div key={n}>
-                <div style={{ fontSize: 24, fontWeight: 800, color: tokens.accentOn || brand.colors.primary, fontFamily: tokens.headlineFont }}>{c[`stat${n}_num`]}</div>
-                <div style={{ fontSize: 11, color: tokens.textMute, marginTop: 2, fontWeight: 500 }}>{c[`stat${n}_label`]}</div>
-              </div>
-            ))}
-          </div>
-          {c.trust_line && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: tokens.textMute }}>
-              <ShieldCheck size={14} color={tokens.accentOn || brand.colors.primary} /> {c.trust_line}
-            </div>
-          )}
-        </div>
-        <div onClick={(e) => e.stopPropagation()} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#ffffff', border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`, borderRadius: tokens.radius + 4, padding: 24, boxShadow: isDark ? '0 24px 64px -16px rgba(0,0,0,0.5)' : '0 12px 32px -8px rgba(0,0,0,0.12)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-            <div style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: T.success }} />
-            <div style={{ fontSize: 11, fontWeight: 700, color: tokens.text, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{quizDepLabel || 'Free Case Check'}</div>
-          </div>
-          <LPQuizEmbed
-            quiz={quiz}
-            brand={quizCtx?.brand || brand}
-            tokens={tokens}
-            isDark={isDark}
-            radius={tokens.radius}
-            deployment={quizCtx?.deployment || null}
-            site={quizCtx?.site || null}
-            preview={quizCtx ? quizCtx.preview !== false : true}
-          />
-        </div>
-      </div>
-    </section>
-  )
-}
-
-const TemplateTicker = ({ section, tokens, brand, onEditSection }) => {
-  const c = section.copy || {}
-  const isDark = tokensAreDark(tokens)
-  return (
-    <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '20px 32px', backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)', borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`, cursor: 'pointer', overflow: 'hidden' }}>
-      <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
-      <div style={{ display: 'flex', gap: 28, alignItems: 'center', maxWidth: 1180, margin: '0 auto', flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: tokens.accentOn || brand.colors.primary, letterSpacing: '0.12em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{c.eyebrow}</div>
-        {(c.items || []).map((it, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: tokens.textMute, whiteSpace: 'nowrap' }}>
-            <span>{it.location}</span>
-            <span style={{ color: tokens.accentOn || brand.colors.primary, fontWeight: 700, fontFamily: '"JetBrains Mono", monospace' }}>{it.amount}</span>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-const TemplateAuthority = ({ section, tokens, brand, onEditSection }) => {
-  const c = section.copy || {}
-  const isDark = tokensAreDark(tokens)
-  return (
-    <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '48px 32px', backgroundColor: tokens.surface, color: tokens.text, cursor: 'pointer' }}>
-      <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
-      <div style={{ maxWidth: 980, margin: '0 auto', textAlign: 'center' }}>
-        <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={tokens.accentOn || brand.colors.primary} />
-        <h2 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 28, color: tokens.text, margin: '14px 0 12px', letterSpacing: '-0.01em' }}>{c.headline}</h2>
-        <p style={{ fontSize: 14, color: tokens.textMute, lineHeight: 1.6, maxWidth: 680, margin: '0 auto 24px' }}>{c.subhead}</p>
-        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {(c.badges || []).map((b, i) => (
-            <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', border: `1px solid ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'}`, borderRadius: 999, fontSize: 12, fontWeight: 600, color: tokens.text }}>
-              <Scale size={13} color={tokens.accentOn || brand.colors.primary} /> {b}
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-const TemplateStory = ({ section, tokens, brand, onEditSection }) => {
-  const c = section.copy || {}
-  const isDark = tokensAreDark(tokens)
-  return (
-    <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '56px 32px', backgroundColor: tokens.canvas, color: tokens.text, cursor: 'pointer' }}>
-      <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
-      <div style={{ maxWidth: 780, margin: '0 auto' }}>
-        <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={tokens.accentOn || brand.colors.primary} />
-        <h2 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 32, color: tokens.text, margin: '14px 0 22px', letterSpacing: '-0.01em' }}>{c.headline}</h2>
-        {(c.paragraphs || []).map((p, i) => (
-          <p key={i} style={{ fontSize: 15, color: tokens.textMute, lineHeight: 1.65, marginBottom: 14 }}>{p}</p>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-const TemplateEligibility = ({ section, tokens, brand, onEditSection }) => {
-  const c = section.copy || {}
-  const isDark = tokensAreDark(tokens)
-  return (
-    <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '56px 32px', backgroundColor: tokens.surface, color: tokens.text, cursor: 'pointer' }}>
-      <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
-      <div style={{ maxWidth: 760, margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={tokens.accentOn || brand.colors.primary} />
-          <h2 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 28, color: tokens.text, margin: '14px 0 0', letterSpacing: '-0.01em' }}>{c.headline}</h2>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {(c.criteria || []).map((cr, i) => (
-            <div key={i} style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, backgroundColor: tokens.canvas, border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`, borderRadius: tokens.radius }}>
-              <div style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: `${brand.colors.primary}26`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Check size={13} color={tokens.accentOn || brand.colors.primary} strokeWidth={3} />
-              </div>
-              <span style={{ fontSize: 14, color: tokens.text }}>{cr}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-const TemplateHowItWorks = ({ section, tokens, brand, onEditSection }) => {
-  const c = section.copy || {}
-  const isDark = tokensAreDark(tokens)
-  return (
-    <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '56px 32px', backgroundColor: tokens.canvas, color: tokens.text, cursor: 'pointer' }}>
-      <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
-      <div style={{ maxWidth: 1080, margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: 36 }}>
-          <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={tokens.accentOn || brand.colors.primary} />
-          <h2 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 30, color: tokens.text, margin: '14px 0 0', letterSpacing: '-0.01em' }}>{c.headline}</h2>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(3, (c.steps || []).length || 1)}, 1fr)`, gap: 18 }}>
-          {(c.steps || []).map((st, i) => (
-            <div key={i} style={{ padding: 22, backgroundColor: tokens.surface, border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`, borderRadius: tokens.radius }}>
-              <div style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: brand.colors.primary, color: onPrimaryText(brand.colors.primary), display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, marginBottom: 12, fontSize: 14 }}>{i + 1}</div>
-              <div style={{ fontWeight: 700, color: tokens.text, marginBottom: 6, fontSize: 15 }}>{st.title}</div>
-              <div style={{ fontSize: 13, color: tokens.textMute, lineHeight: 1.55 }}>{st.desc}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-const TemplateSettlements = ({ section, tokens, brand, onEditSection }) => {
-  const c = section.copy || {}
-  const isDark = tokensAreDark(tokens)
-  return (
-    <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '56px 32px', backgroundColor: tokens.surface, color: tokens.text, cursor: 'pointer' }}>
-      <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
-      <div style={{ maxWidth: 1080, margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={tokens.accentOn || brand.colors.primary} />
-          <h2 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 28, color: tokens.text, margin: '14px 0 0', letterSpacing: '-0.01em' }}>{c.headline}</h2>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
-          {(c.items || []).map((it, i) => (
-            <div key={i} style={{ padding: 20, backgroundColor: tokens.canvas, border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`, borderRadius: tokens.radius }}>
-              <Trophy size={20} color={brand.colors.accent} />
-              <div style={{ fontSize: 28, fontWeight: 800, color: tokens.accentOn || brand.colors.primary, marginTop: 12, fontFamily: tokens.headlineFont }}>{it.amount}</div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: tokens.text, marginTop: 6 }}>{it.case_type}</div>
-              <div style={{ fontSize: 11, color: tokens.textMute, marginTop: 4 }}>{it.location}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-const TemplateTestimonials = ({ section, tokens, brand, onEditSection }) => {
-  const c = section.copy || {}
-  const isDark = tokensAreDark(tokens)
-  return (
-    <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '56px 32px', backgroundColor: tokens.canvas, color: tokens.text, cursor: 'pointer' }}>
-      <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
-      <div style={{ maxWidth: 1080, margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={tokens.accentOn || brand.colors.primary} />
-          <h2 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 28, color: tokens.text, margin: '14px 0 0', letterSpacing: '-0.01em' }}>{c.headline}</h2>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
-          {(c.items || []).map((it, i) => (
-            <div key={i} style={{ padding: 22, backgroundColor: tokens.surface, border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`, borderRadius: tokens.radius }}>
-              <div style={{ display: 'flex', gap: 2, marginBottom: 10 }}>
-                {[0, 1, 2, 3, 4].map((s) => <Star key={s} size={13} fill={brand.colors.accent} color={brand.colors.accent} />)}
-              </div>
-              <p style={{ fontSize: 14, color: tokens.text, lineHeight: 1.6, margin: '0 0 14px' }}>{'“'}{it.quote}{'”'}</p>
-              <div style={{ fontSize: 12, fontWeight: 700, color: tokens.text }}>{it.author}</div>
-              <div style={{ fontSize: 11, color: tokens.textMute, marginTop: 2 }}>{it.location}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-const TemplateGuarantee = ({ section, tokens, brand, onEditSection }) => {
-  const c = section.copy || {}
-  // The whole section sits on brand.colors.primary, so all text/icons must use
-  // the verified on-primary color (white breaks for a light/yellow primary).
-  const onPrimary = onPrimaryText(brand.colors.primary)
-  return (
-    <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '56px 32px', backgroundColor: brand.colors.primary, color: onPrimary, cursor: 'pointer' }}>
-      <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={false} />
-      <div style={{ maxWidth: 780, margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40, alignItems: 'center' }}>
-        <div>
-          <ShieldCheck size={36} color={onPrimary} style={{ marginBottom: 14 }} />
-          <h2 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 32, color: onPrimary, margin: '0 0 10px', letterSpacing: '-0.01em' }}>{c.headline}</h2>
-          <p style={{ fontSize: 14, color: onPrimary, opacity: 0.85, lineHeight: 1.5, margin: 0 }}>{c.subhead}</p>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {(c.lines || []).map((line, i) => (
-            <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 13, color: onPrimary }}>
-              <div style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: `${onPrimary}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Check size={13} strokeWidth={3} />
-              </div>
-              {line}
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-const TemplateFaq = ({ section, tokens, brand, onEditSection }) => {
-  const c = section.copy || {}
-  const isDark = tokensAreDark(tokens)
-  const [openIdx, setOpenIdx] = useState(0)
-  return (
-    <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '56px 32px', backgroundColor: tokens.surface, color: tokens.text, cursor: 'pointer' }}>
-      <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
-      <div style={{ maxWidth: 760, margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <Eyebrow text={c.eyebrow} tokens={tokens} brandColor={tokens.accentOn || brand.colors.primary} />
-          <h2 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 28, color: tokens.text, margin: '14px 0 0', letterSpacing: '-0.01em' }}>{c.headline}</h2>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {(c.items || []).map((it, i) => (
-            <div key={i} style={{ backgroundColor: tokens.canvas, border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`, borderRadius: tokens.radius, overflow: 'hidden' }}>
-              <button onClick={(e) => { e.stopPropagation(); setOpenIdx(openIdx === i ? -1 : i) }} style={{ width: '100%', padding: '14px 18px', backgroundColor: 'transparent', border: 'none', color: tokens.text, fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', textAlign: 'left' }}>
-                {it.q}
-                {openIdx === i ? <ChevronUp size={15} color={tokens.textMute} /> : <ChevronDown size={15} color={tokens.textMute} />}
-              </button>
-              {openIdx === i && <div style={{ padding: '0 18px 16px', fontSize: 13, color: tokens.textMute, lineHeight: 1.55 }}>{it.a}</div>}
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-const TemplateFinalCta = ({ section, tokens, brand, onEditSection }) => {
-  const c = section.copy || {}
-  const isDark = tokensAreDark(tokens)
-  return (
-    <section onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '64px 32px', backgroundColor: tokens.canvas, color: tokens.text, cursor: 'pointer', textAlign: 'center' }}>
-      <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
-      <div style={{ maxWidth: 680, margin: '0 auto' }}>
-        <h2 style={{ fontFamily: tokens.headlineFont, fontWeight: tokens.headlineWeight, fontSize: 36, color: tokens.text, margin: '0 0 22px', letterSpacing: '-0.01em' }}>{c.headline}</h2>
-        <button style={{ padding: '14px 32px', backgroundColor: brand.colors.primary, color: onPrimaryText(brand.colors.primary), border: 'none', borderRadius: tokens.radius, fontSize: 15, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          {c.cta_label} <ArrowRight size={15} />
-        </button>
-        {c.secondary_line && <div style={{ fontSize: 13, color: tokens.textMute, marginTop: 16 }}>{c.secondary_line}</div>}
-      </div>
-    </section>
-  )
-}
-
-const TemplateFooter = ({ section, tokens, brand, onEditSection }) => {
-  const c = section.copy || {}
-  const isDark = tokensAreDark(tokens)
-  return (
-    <footer onClick={() => onEditSection?.(section.id)} style={{ position: 'relative', padding: '32px 32px 24px', backgroundColor: tokens.surface, color: tokens.textMute, cursor: 'pointer', borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}` }}>
-      <SectionEditOverlay onEdit={() => onEditSection?.(section.id)} dark={isDark} />
-      <div style={{ maxWidth: 1080, margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, marginBottom: 18 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: tokens.text }}>{c.tagline}</div>
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            {(c.links || []).map((l, i) => <span key={i} style={{ fontSize: 12, color: tokens.textMute }}>{l}</span>)}
-          </div>
-        </div>
-        <div style={{ fontSize: 10, color: tokens.textMute, lineHeight: 1.6, marginTop: 14, paddingTop: 14, borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}>{c.tcpa_text}</div>
-        <div style={{ fontSize: 10, color: tokens.textMute, marginTop: 10 }}>{brand.legal.copyright}</div>
-      </div>
-    </footer>
-  )
-}
-
-export const SECTION_RENDERERS = {
-  header: TemplateHeader, hero: TemplateHero, ticker: TemplateTicker,
-  authority: TemplateAuthority, story: TemplateStory, eligibility: TemplateEligibility,
-  how_it_works: TemplateHowItWorks, settlements: TemplateSettlements,
-  testimonials: TemplateTestimonials, guarantee: TemplateGuarantee,
-  faq: TemplateFaq, final_cta: TemplateFinalCta, footer: TemplateFooter,
-}
 
 export const PREVIEW_BRAND_DEFAULT = {
   id: 'preview',
@@ -794,81 +106,85 @@ export const PREVIEW_BRAND_DEFAULT = {
   legal: { copyright: '(c) 2026 Your Brand', tcpaText: '', privacyUrl: '', termsUrl: '', defaultDisclaimer: 'Brand disclaimer goes here.' },
 }
 
-/**
- * Renders a landing page's sections.
- *
- * The same component serves the builder and the public page. `editable`
- * (default true, because the builder is the long-standing caller) is what
- * separates them: when false the click-to-edit handlers are never wired, the
- * hover overlays are suppressed, and the framing that makes it read as a
- * preview - rounded corners, drop shadow, border - is dropped so the page fills
- * the viewport like a real page.
- *
- * One renderer rather than two is the point. A separate public renderer is how
- * a landing page ends up looking one way in the builder and another way to a
- * visitor.
- */
-export const LivePreview = ({ landingPage, brand, quizDepLabel, quiz, onEditSection, editable = true, quizCtx = null }) => {
-  const tpl = TEMPLATES.find((t) => t.id === landingPage.templateId) || TEMPLATES[0]
+// ============================================================================
+// LIVE PREVIEW
+// ============================================================================
+
+export const LivePreview = ({
+  landingPage,
+  brand,
+  quizDepLabel,
+  quiz,
+  editable = true,
+  quizCtx = null,
+  selectedId = null,
+  onSelectNode,
+}) => {
+  const template = templateFor(landingPage.templateId)
+  const identity = template.identity || getLpIdentity(landingPage.templateId)
   const previewBrand = brand || PREVIEW_BRAND_DEFAULT
-  // Derived per render rather than read off the template, so the page wears the
-  // brand it is deployed under instead of the palette it was authored in.
-  const tk = deriveTemplateTokens(tpl, previewBrand)
-  const rootClass = editable ? 'lp-preview-root' : 'lp-preview-root lp-public-root'
+
+  // Whatever shape the page is stored in comes out as nodes. Pages written
+  // before the node model exist in the database and are converted on every
+  // read rather than rewritten, so one that nobody opens keeps working.
+  const sections = toNodeSections(landingPage.sections).filter(isVisible)
+
+  const pageSurface = deriveSurface(groundFor('default', identity), identity)
+  const look = lookOf(identity)
+
   const frame = editable
     ? { borderRadius: 10, overflow: 'hidden', boxShadow: '0 8px 32px -12px rgba(0,0,0,0.4)', border: `1px solid ${T.border}` }
     : { minHeight: '100vh' }
+
   return (
-    <div className={rootClass} style={{ backgroundColor: tk.canvas, color: tk.text, fontFamily: tk.bodyFont, ...frame }}>
-      {(landingPage.sections || []).filter((s) => s.isVisible !== false).map((section) => {
-        const Renderer = SECTION_RENDERERS[section.type]
-        if (!Renderer) return null
-        const filled = { ...section, copy: fillAll(section.copy, previewBrand) }
-        // A section's tone overrides only the ground and the text derived from
-        // it. Everything else still comes from the brand, so a recoloured
-        // section is a variation on the brand rather than an exception to it.
-        const tone = toneFor(section.tone || 'default', tk, previewBrand)
-        const toned = section.tone && section.tone !== 'default'
-          ? { ...tk, canvas: tone.bg, surface: tone.bg === tk.surface ? tk.canvas : tk.surface, text: tone.text, textMute: tone.muted, heroBg: tone.bg }
-          : tk
-        // Explicit colours win over a tone, and both win over the brand.
-        const sectionTokens = applySectionColors(toned, section.colors)
-        return <Renderer key={section.id} section={filled} tokens={sectionTokens} brand={previewBrand} quizDepLabel={quizDepLabel} quiz={quiz} onEditSection={editable ? onEditSection : undefined} quizCtx={quizCtx} />
-      })}
+    <div
+      className={editable ? 'lp-preview-root' : 'lp-preview-root lp-public-root'}
+      style={{ backgroundColor: pageSurface.bg, color: pageSurface.text, fontFamily: look.body, ...frame }}
+    >
+      {/* The identities specify their own faces, and substituting a fallback
+          would change what separates them. React hoists this into the head. */}
+      <link rel="stylesheet" href={IDENTITY_FONTS_HREF} />
+
+      {sections.map((section) => (
+        <SectionNode
+          key={section.id}
+          section={
+            // Brand tokens are substituted here rather than inside the node
+            // renderers, so `{{brand.callNumber}}` resolves wherever it was
+            // typed without every leaf having to remember to resolve it.
+            fillAllTokens(section, previewBrand)
+          }
+          identity={identity}
+          brand={previewBrand}
+          editable={editable}
+          selectedId={selectedId}
+          onSelect={editable ? onSelectNode : undefined}
+          quiz={quiz}
+          quizCtx={quizCtx}
+          quizDepLabel={quizDepLabel}
+        />
+      ))}
+
       <style>{`
-        .lp-preview-root section:hover .lp-section-overlay,
-        .lp-preview-root header:hover .lp-section-overlay,
-        .lp-preview-root footer:hover .lp-section-overlay { opacity: 1 !important; }
-        /* Public render: the section renderers carry an inline click-to-edit
-           cursor, so suppressing the affordance needs !important to beat it. */
+        .lp-preview-root section:hover > .lp-section-overlay { opacity: 1 !important; }
+        .lp-preview-root .lp-node:hover { outline-color: ${pageSurface.line} !important; }
+        /* The public render must not offer an affordance the visitor cannot use. */
         .lp-public-root .lp-section-overlay { display: none !important; }
-        .lp-public-root section, .lp-public-root header, .lp-public-root footer { cursor: default !important; }
-        @import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&display=swap');
+        .lp-public-root section { cursor: default !important; }
         @media (max-width: 900px) {
-          .lp-preview-root [style*="grid-template-columns: 1.2fr 1fr"],
-          .lp-preview-root [style*="gridTemplateColumns: 1.2fr 1fr"],
-          .lp-preview-root [style*="grid-template-columns: 1fr 1fr"],
-          .lp-preview-root [style*="gridTemplateColumns: 1fr 1fr"] {
-            grid-template-columns: 1fr !important;
-            gap: 28px !important;
-          }
-          .lp-preview-root section, .lp-preview-root header, .lp-preview-root footer {
-            padding-left: 24px !important; padding-right: 24px !important;
-          }
+          .lp-preview-root .lp-split { grid-template-columns: 1fr !important; gap: 32px !important; }
+          .lp-preview-root section { padding-left: 24px !important; padding-right: 24px !important; }
         }
         @media (max-width: 640px) {
-          .lp-preview-root h1 { font-size: clamp(28px, 8vw, 36px) !important; line-height: 1.15 !important; }
-          .lp-preview-root h2 { font-size: clamp(22px, 6.5vw, 28px) !important; line-height: 1.2 !important; }
-          .lp-preview-root h3 { font-size: clamp(18px, 5vw, 22px) !important; }
-          .lp-preview-root section, .lp-preview-root header, .lp-preview-root footer {
-            padding-top: 36px !important; padding-bottom: 36px !important;
+          .lp-preview-root h1 { font-size: clamp(28px, 8vw, 38px) !important; line-height: 1.14 !important; }
+          .lp-preview-root h2 { font-size: clamp(22px, 6.5vw, 28px) !important; line-height: 1.22 !important; }
+          .lp-preview-root h3 { font-size: clamp(17px, 5vw, 20px) !important; }
+          .lp-preview-root section {
+            padding-top: 44px !important; padding-bottom: 44px !important;
             padding-left: 18px !important; padding-right: 18px !important;
           }
-          .lp-preview-root [style*="grid-template-columns"], .lp-preview-root [style*="gridTemplateColumns"] {
-            grid-template-columns: 1fr !important; gap: 16px !important;
-          }
-          .lp-preview-root a[href^="tel:"], .lp-preview-root button, .lp-preview-root .lp-cta { min-height: 48px; }
-          .lp-preview-root [style*="display: flex"][style*="gap"] { flex-wrap: wrap; }
+          .lp-preview-root [style*="grid-template-columns"] { grid-template-columns: 1fr !important; gap: 16px !important; }
+          .lp-preview-root a[href^="tel:"], .lp-preview-root button, .lp-preview-root a[href="#lp-form"] { min-height: 48px; }
         }
       `}</style>
     </div>
