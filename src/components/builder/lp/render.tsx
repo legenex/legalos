@@ -52,11 +52,10 @@ export const SECTION_TONES = TONES
  * the template's own colours. The structure half is the new part, and it is
  * what makes the four actually different rather than four tints of one layout.
  *
- * A template whose skeleton has not been built yet still works. It keeps its
- * identity, so an existing page assigned to it renders in its colours and
- * typography; what it cannot yet do is seed a new page with a shape. The
- * gallery says so rather than quietly handing out a copy of another template's
- * structure.
+ * All four now carry both halves. The gallery still distinguishes them, because
+ * taking a look and taking a structure are different acts: the first repaints
+ * the page in front of you, the second replaces its sections and loses the copy
+ * that was in them.
  */
 const ANGLE_FOR_POSITION = { adversary: 'pain', clarity: 'community', authority: 'authority', direct: 'urgency' }
 

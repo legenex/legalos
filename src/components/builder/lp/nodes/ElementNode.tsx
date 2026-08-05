@@ -21,6 +21,7 @@ import { QuizRuntime } from '@/components/public/quiz/QuizRuntime'
 import type { LpIdentity } from '@/lib/lp-identities'
 import { elementSpec, isEmptyElement, type LpElement } from '@/lib/lp-nodes/model'
 import { deriveSurface, type Look, type Surface } from '@/lib/lp-nodes/surface'
+import { quizBrandForIdentity } from '@/lib/lp-nodes/quiz-brand'
 import { iconFor } from './icons'
 
 export type NodeCtx = {
@@ -596,9 +597,22 @@ const FormNode = ({ el, ctx }: { el: LpElement; ctx: NodeCtx }) => {
   // an inverted colour picked by hand. Both sides therefore read, and the quiz
   // is handed the opaque colour it will actually sit on so its own text is
   // derived against the card rather than against the section behind it.
-  const card = str(el.ground) === 'contrast'
+  const contrasted = str(el.ground) === 'contrast'
+  const card = contrasted
     ? deriveSurface(s.isDark ? ctx.identity.surface : ctx.identity.surfaceDark, ctx.identity)
-    : { bg: s.card, text: s.cardText, muted: s.cardMuted, line: s.line }
+    : { bg: s.card, text: s.cardText, muted: s.cardMuted, line: s.line, isDark: s.isDark }
+
+  // The form draws in the TEMPLATE's colours like everything else on the page.
+  // It kept the brand's until now, which is right for a quiz on its own URL and
+  // wrong inside a host that has already chosen a palette: a blue page with a
+  // red form in the middle of it. The brand it belongs to is unchanged, so the
+  // number it shows and the place the lead goes are still the brand's.
+  const quizBrand = quizBrandForIdentity(
+    (ctx.quizCtx?.brand ?? ctx.brand) as Record<string, unknown>,
+    ctx.identity,
+    card.bg,
+    Boolean(card.isDark),
+  )
 
   return (
     <Shell el={el} ctx={ctx}>
@@ -614,7 +628,7 @@ const FormNode = ({ el, ctx }: { el: LpElement; ctx: NodeCtx }) => {
           {hasQuiz ? (
             <QuizRuntime
               quiz={quiz as never}
-              brand={(ctx.quizCtx?.brand ?? ctx.brand) as never}
+              brand={quizBrand as never}
               deployment={(ctx.quizCtx?.deployment ?? null) as never}
               site={(ctx.quizCtx?.site ?? null) as never}
               inline

@@ -110,7 +110,7 @@ const Stack = ({ groups, ctx, gap = 22, connector }: { groups: RenderGroup[]; ct
  * a click target and a hover affordance for editing the section itself.
  */
 const Frame = ({
-  section, surface, editable, selected, onSelect, padding, children,
+  section, surface, editable, selected, onSelect, padding, width, children,
 }: {
   section: LpSection
   surface: Surface
@@ -118,6 +118,8 @@ const Frame = ({
   selected: boolean
   onSelect?: (id: string) => void
   padding: string
+  /** A band can run narrow, which is what centres a form on an open ground. */
+  width?: number
   children: ReactNode
 }) => {
   const style: CSSProperties = {
@@ -142,7 +144,7 @@ const Frame = ({
           </button>
         </div>
       ) : null}
-      <div style={{ maxWidth: CONTAINER, margin: '0 auto' }}>{children}</div>
+      <div style={{ maxWidth: width ?? CONTAINER, margin: '0 auto' }}>{children}</div>
     </section>
   )
 }
@@ -249,9 +251,12 @@ const BandLayout = ({ section, ctx }: { section: LpSection; ctx: NodeCtx }) => {
 /** A thin full-width bar: pills, a trust row, a ticker, a phone band. */
 const StripLayout = ({ section, ctx }: { section: LpSection; ctx: NodeCtx }) => {
   const els = slotElements(section, 'lead', ctx.editable).concat(slotElements(section, 'aside', ctx.editable))
+  // Deliberately not grouped. A run of ticks is a one-column grid everywhere
+  // else on the page, which is right in a band and wrong in a bar: a trust
+  // strip is four short claims across, not four stacked lines.
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 18, justifyContent: ctx.align === 'center' ? 'center' : 'flex-start' }}>
-      {groupElements(els).map((g, i) => <Group key={i} group={g} ctx={ctx} />)}
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 22, justifyContent: ctx.align === 'center' ? 'center' : 'flex-start' }}>
+      {els.map((el, i) => <ElementNode key={el.id} el={el} ctx={ctx} index={i} />)}
     </div>
   )
 }
@@ -353,6 +358,7 @@ export const SectionNode = ({
       selected={selectedId === section.id}
       onSelect={onSelect}
       padding={PADDING[section.type] || PADDING.band}
+      width={str(section.props?.width) === 'narrow' ? 760 : undefined}
     >
       {empty ? (
         <div style={{ padding: '18px 20px', border: `1px dashed ${surface.muted}`, borderRadius: look.radius, color: surface.muted, fontFamily: look.utility, fontSize: 12.5, textAlign: 'center' }}>
