@@ -239,6 +239,20 @@ export const ENTRIES: BuildLogEntry[] = [
         files: ['src/components/builder/lp/render.tsx'],
       },
       {
+        title: 'A brand-new page previewed as a stack of bare coloured bands',
+        status: 'shipped',
+        detail:
+          'Reported by the owner from a screen I had not looked at. A section decided whether it was empty by counting its VISIBLE elements, while its layouts decided what to draw by counting its DRAWABLE ones. A skeleton is full of elements that are visible and unwritten, so every section kept its frame, dropped all of its children, and a fresh page previewed as seven stacked stripes of colour with nothing in them. Both now ask one predicate, so the two cannot answer differently again. The cause of missing it is worth stating: I photographed the builder, where nothing is dropped, and the public render of a page that already had copy. An unwritten skeleton down the non-editable path is precisely where those two rules meet, and it is the one combination I never opened. A preview of an unwritten page now shows what a visitor would actually get, which is the header, the form and the footer, and nothing else.',
+        files: ['src/components/builder/lp/nodes/SectionNode.tsx', 'src/lib/lp-nodes/model.ts'],
+        evidence: [
+          {
+            label: 'Previewing a page before anything is written',
+            path: '/admin/landing-pages',
+            steps: ['Blank LP', 'Preview'],
+          },
+        ],
+      },
+      {
         title: 'The builder was loading quiz names and nothing else',
         status: 'shipped',
         detail:
@@ -259,10 +273,16 @@ export const ENTRIES: BuildLogEntry[] = [
           'Playwright against os.legenex.com as the capture account: the converted page opens with 13 sections and 74 elements in the tree, clicking the headline in the preview selects it and opens its fields, the template gallery draws all four identity marks, and Blank LP produces skeleton B with 9 sections and 62 empty elements. Three bugs were found this way and fixed, none of which a typecheck could have seen.',
       },
       {
-        label: 'Public render',
+        label: 'Public render, page with copy',
         state: 'verified',
         detail:
-          'https://getwhatyoureowed.co/c/don-t-settle returns 200 and renders the converted page end to end with the real quiz in the hero, no placeholders, no console errors from the page itself.',
+          'https://getwhatyoureowed.co/c/don-t-settle returns 200 with 13 sections, the real quiz in the hero, no placeholders and no console errors from the page itself.',
+      },
+      {
+        label: 'Public render, page without copy',
+        state: 'verified',
+        detail:
+          'Verified only after the owner found it broken. A fresh skeleton previewed as seven empty coloured bands because I checked the builder and a written page but never the crossing of the two. It now renders three sections - header, form, footer - which is what a visitor gets from a page nobody has written yet. Counted in the DOM rather than eyeballed.',
       },
       {
         label: 'Skeletons A, C and D',
@@ -278,6 +298,7 @@ export const ENTRIES: BuildLogEntry[] = [
     ],
     openIssues: [
       'Skeletons A, C and D are not built. Their templates apply a look only.',
+      'Preview shows a visitor\'s view, so an unwritten page looks nearly blank there while the builder shows the whole skeleton. That is correct rather than a bug, but there is no way to preview the shape itself.',
       'Reordering is one step at a time with arrows. There is no drag, and no way to move an element from one section to another.',
       'The funnel_* tables still have no committed migration (F001). Nothing here changes that: sections are a json column that already existed.',
     ],
