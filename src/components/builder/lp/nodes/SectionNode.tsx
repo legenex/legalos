@@ -23,9 +23,8 @@ import { Pencil } from 'lucide-react'
 import type { LpIdentity } from '@/lib/lp-identities'
 import {
   groupElements,
-  isEmptyElement,
-  isVisible,
   sectionSpec,
+  willDraw,
   type LpElement,
   type LpSection,
   type RenderGroup,
@@ -61,12 +60,7 @@ export type SectionNodeProps = {
  * needs to see the shape they are filling, and a visitor must never meet it.
  */
 const slotElements = (section: LpSection, slot: 'lead' | 'aside', editable: boolean): LpElement[] =>
-  section.elements.filter((el) => {
-    if (!isVisible(el)) return false
-    const inSlot = (el.slot === 'aside' ? 'aside' : 'lead') === slot
-    if (!inSlot) return false
-    return editable || !isEmptyElement(el)
-  })
+  section.elements.filter((el) => (el.slot === 'aside' ? 'aside' : 'lead') === slot && willDraw(el, editable))
 
 /** Render one grouped run: a stacked block, a column grid, or a wrapping row. */
 const Group = ({ group, ctx, connector }: { group: RenderGroup; ctx: NodeCtx; connector?: boolean }) => {
@@ -332,10 +326,13 @@ export const SectionNode = ({
     quizDepLabel,
   }
 
-  // A section with nothing in it draws nothing, which in the builder reads as
-  // the section having failed to appear rather than as an empty one. It still
-  // draws nothing on a public page, where an empty band is simply not content.
-  const empty = section.elements.filter(isVisible).length === 0
+  // Asked with the SAME predicate the layouts use to pick what goes in a
+  // column, so the two cannot disagree about what "empty" means. They did: this
+  // counted visible elements, the layouts counted drawable ones, and a skeleton
+  // is full of elements that are visible and unwritten. A visitor got a stack of
+  // bare coloured bands; in the builder it reads as the section having failed
+  // to appear rather than as an empty one waiting to be filled.
+  const empty = section.elements.every((el) => !willDraw(el, editable))
   if (empty && !editable) return null
 
   let body: ReactNode = null

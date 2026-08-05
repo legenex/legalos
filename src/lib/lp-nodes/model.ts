@@ -550,6 +550,24 @@ export const isEmptyElement = (el: LpElement): boolean => {
   })
 }
 
+/**
+ * Whether an element will put anything on the screen.
+ *
+ * The single predicate for "does this draw", used by the section layouts to
+ * pick what goes in a column AND by the section itself to decide whether it is
+ * worth drawing at all. It exists as one function because those two asked the
+ * question separately once and disagreed: the layouts dropped every unwritten
+ * node, the section only checked that its elements were VISIBLE, and a skeleton
+ * has elements that are visible and unwritten. So a brand-new page rendered as
+ * seven bands of bare colour with nothing inside them.
+ *
+ * Empty is the normal state of a skeleton rather than a fault, which is why the
+ * answer depends on who is asking. An operator has to see and click the shape
+ * they are filling; a visitor must never meet it.
+ */
+export const willDraw = (el: LpElement, editable: boolean): boolean =>
+  isVisible(el) && (editable || !isEmptyElement(el))
+
 /** The label a node shows in the builder tree. */
 export const elementLabel = (el: LpElement): string => {
   const spec = elementSpec(el.type)
