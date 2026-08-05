@@ -24,6 +24,7 @@ import { LP_IDENTITIES, IDENTITY_FONTS_HREF, getLpIdentity } from '@/lib/lp-iden
 import { toNodeSections } from '@/lib/lp-nodes/from-legacy'
 import { isVisible, TONES } from '@/lib/lp-nodes/model'
 import { deriveSurface, groundFor, lookOf } from '@/lib/lp-nodes/surface'
+import { resolveLpPalette } from '@/lib/lp-nodes/palette'
 import { skeletonFor } from '@/lib/lp-skeletons'
 import { SectionNode } from './nodes/SectionNode'
 import { T } from '../ui'
@@ -45,17 +46,17 @@ export const SECTION_TONES = TONES
 // ============================================================================
 
 /**
- * A template is an identity plus a structure.
+ * A template is a look and a structure. The brand is the colour.
  *
- * The identity half was settled earlier: the template owns the palette, the
- * faces, the radii and the mark, so a page deployed under any brand renders in
- * the template's own colours. The structure half is the new part, and it is
- * what makes the four actually different rather than four tints of one layout.
+ * The look is the faces, the display weight and tracking, the radii, the border
+ * weight, the eyebrow treatment and the geometry of the mark. The structure is
+ * which sections exist, what is in them and which of them are dark. Neither is
+ * a hue: a page deployed under a teal-and-gold brand renders teal and gold in
+ * whichever of the four shapes it was built in.
  *
- * All four now carry both halves. The gallery still distinguishes them, because
- * taking a look and taking a structure are different acts: the first repaints
- * the page in front of you, the second replaces its sections and loses the copy
- * that was in them.
+ * The identity's own palette is the fallback, which is what a brandless preview
+ * and the gallery fall back to, and what stops a brand that has only set a
+ * primary from rendering as grey.
  */
 const ANGLE_FOR_POSITION = { adversary: 'pain', clarity: 'community', authority: 'authority', direct: 'urgency' }
 
@@ -76,9 +77,21 @@ export const TEMPLATES = LP_IDENTITIES.map((identity) => {
 export const templateFor = (templateId) =>
   TEMPLATES.find((t) => t.id === templateId) || TEMPLATES[0]
 
-/** The colours a template's own ground produces, for gallery swatches. */
-export const templatePreviewSurface = (template) =>
-  deriveSurface(groundFor('default', template.identity), template.identity)
+/**
+ * The colours a template produces UNDER A GIVEN BRAND, for gallery swatches.
+ *
+ * The brand is a parameter rather than an omission. A gallery that showed each
+ * template in its own palette would be advertising a colour the page will not
+ * render in, which is the same lie as a preview that does not match the page.
+ * What distinguishes the four on screen is their type, their shapes and their
+ * structure, and that is the honest answer.
+ */
+export const templatePreviewSurface = (template, brand) => {
+  const palette = resolveLpPalette(template.identity, brand)
+  return deriveSurface(groundFor('default', palette), palette)
+}
+
+export const templatePalette = (template, brand) => resolveLpPalette(template.identity, brand)
 
 export const templateLook = (template) => lookOf(template.identity)
 
@@ -99,7 +112,10 @@ export const PREVIEW_BRAND_DEFAULT = {
   logoUrl: '',
   logoUrlDark: '',
   faviconUrl: '',
-  colors: { primary: '#475569', accent: '#64748b', background: '#334155', cardBg: '#1e293b', textOnDark: '#ffffff' },
+  // Deliberately colourless. "No brand" means the template identity shows
+  // through; inventing a slate palette here would make the brandless preview
+  // the one place in the product that renders in a colour nobody chose.
+  colors: {},
   typography: { headlineFont: 'Inter', bodyFont: 'Inter', baseSize: 'md' },
   contact: { callNumber: '', callCtaText: 'CLICK HERE TO CALL', callCtaStyle: 'pill' },
   legal: { copyright: '(c) 2026 Your Brand', tcpaText: '', privacyUrl: '', termsUrl: '', defaultDisclaimer: 'Brand disclaimer goes here.' },
@@ -138,7 +154,10 @@ export const LivePreview = ({
   // read rather than rewritten, so one that nobody opens keeps working.
   const sections = toNodeSections(landingPage.sections).filter(isVisible)
 
-  const pageSurface = deriveSurface(groundFor('default', identity), identity)
+  // Colour from the brand, shape from the template. Resolved once per render so
+  // every section derives against the same set rather than each working it out.
+  const palette = resolveLpPalette(identity, previewBrand)
+  const pageSurface = deriveSurface(groundFor('default', palette), palette)
   const look = lookOf(identity)
 
   const frame = editable
@@ -172,6 +191,7 @@ export const LivePreview = ({
             // typed without every leaf having to remember to resolve it.
             fillAllTokens(section, previewBrand)
           }
+          palette={palette}
           identity={identity}
           brand={previewBrand}
           editable={editable}

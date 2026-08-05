@@ -9,32 +9,22 @@
  * against the CARD, not the page behind it, because those are two different
  * grounds and only one of them is what the words land on.
  *
- * The identity owns the palette - that is settled - so a template renders in
- * its own colours whatever brand it is deployed under. What the brand still
- * owns is everything that is not colour: the phone number, the legal text, the
- * name. Nothing here reads a brand colour except as a last resort for a
- * template with no identity attached.
+ * The colours themselves arrive as a `Palette`, which is resolved from the
+ * BRAND with the template identity as a fallback. Nothing in this file chooses
+ * a hue; it decides which ground a tone lands on and then works out what can be
+ * read on it. That separation is why the same code serves a brand with a full
+ * palette, a brand with only a primary, and no brand at all.
+ *
+ * What a template identity still supplies here is `lookOf`: the faces, the
+ * weight, the tracking, the radii, the border weight and the eyebrow treatment.
+ * Shape, not colour.
  */
 
 import { contrastRatio, relativeLuminance } from '@/lib/builder/page-lint'
-import {
-  getSafeMutedColor,
-  getSafeTextColor,
-  hslToHex,
-  onPrimaryText,
-  parseHex,
-  rgbToHsl,
-} from '@/lib/builder/color-system'
+import { getSafeMutedColor, getSafeTextColor, onPrimaryText } from '@/lib/builder/color-system'
 import type { LpIdentity } from '@/lib/lp-identities'
 import type { LpSection, ToneId } from './model'
-
-/** Re-light a colour to a target lightness, keeping its hue and saturation. */
-export const atLightness = (hex: string, target: number): string => {
-  const rgb = parseHex(hex)
-  if (!rgb) return hex
-  const [h, s] = rgbToHsl(rgb)
-  return hslToHex(h, s, Math.max(0, Math.min(1, target)))
-}
+import { atLightness, type Palette } from './palette'
 
 const lum = (hex: string): number => relativeLuminance(hex) ?? 1
 const ratio = (a: string, b: string): number => contrastRatio(a, b) ?? 0
@@ -112,47 +102,47 @@ export const lookOf = (identity: LpIdentity): Look => ({
 /**
  * The opaque ground a tone resolves to.
  *
- * Each of these is a colour the identity already chose, so re-toning a section
- * moves it between grounds the design intended rather than inventing one. The
- * two exceptions derive: `brand` fills with the primary, and `inverse` flips to
- * the opposite end of the identity's own range.
+ * Each is a colour the brand already chose, or one derived from the brand's own
+ * hue where it did not choose one, so re-toning a section moves it between that
+ * brand's grounds rather than inventing a colour. `brand` fills with the
+ * primary; `inverse` flips to the opposite end of the range.
  */
-export const groundFor = (tone: ToneId | undefined, identity: LpIdentity): string => {
+export const groundFor = (tone: ToneId | undefined, palette: Palette): string => {
   switch (tone) {
     case 'surface':
-      return identity.surfaceAlt
+      return palette.surfaceAlt
     case 'dark':
-      return identity.surfaceDark
+      return palette.surfaceDark
     case 'brand':
-      return identity.primary
+      return palette.primary
     case 'inverse':
-      return lum(identity.surface) < 0.5 ? identity.surfaceAlt : identity.surfaceDark
+      return lum(palette.surface) < 0.5 ? palette.surfaceAlt : palette.surfaceDark
     default:
-      return identity.surface
+      return palette.surface
   }
 }
 
 /**
  * Build the full colour set for a ground.
  *
- * An identity states its ink, its muted ink and its rules, and those are used
- * when they can be read on the ground in question and replaced when they
- * cannot. That is the whole safety property: an identity can be re-toned onto
- * any of its own grounds, or given a background someone picked by hand, and
- * still cannot produce copy that fails to read.
+ * The palette states an ink, a muted ink and a rule, and each is used when it
+ * can be read on the ground in question and replaced when it cannot. That is
+ * the whole safety property, and it earns its keep on real data: one of our
+ * brands states a near-white ink and a near-white page, which would be an
+ * invisible page if the stated value were trusted.
  */
-export const deriveSurface = (bg: string, identity: LpIdentity): Surface => {
+export const deriveSurface = (bg: string, palette: Palette): Surface => {
   const isDark = lum(bg) < 0.5
 
-  const statedInk = isDark ? identity.surface : identity.ink
+  const statedInk = isDark ? palette.surface : palette.ink
   const text = ratio(statedInk, bg) >= 4.5 ? statedInk : getSafeTextColor(bg).hex
 
-  const statedMuted = identity.inkMuted
+  const statedMuted = palette.inkMuted
   const muted = !isDark && ratio(statedMuted, bg) >= 4.5 ? statedMuted : getSafeMutedColor(text, bg).hex
 
   // On a dark ground the design's own remap applies: several identities lift
   // their primary specifically so buttons and links keep contrast there.
-  const accentFill = isDark ? identity.primaryDark || identity.primary : identity.primary
+  const accentFill = isDark ? palette.primaryDark || palette.primary : palette.primary
 
   // The same colour used as TEXT has to clear 4.5:1, which a saturated brand
   // colour usually does not on its own surface. Lifting it toward or away from
@@ -174,11 +164,11 @@ export const deriveSurface = (bg: string, identity: LpIdentity): Surface => {
     ? atLightness(bg, Math.min(0.26, bgL + 0.07) || 0.14)
     : atLightness(bg, bgL > 0.9 ? 0.965 : Math.min(0.985, bgL + 0.06))
 
-  const cardStatedInk = lum(card) < 0.5 ? identity.surface : identity.ink
+  const cardStatedInk = lum(card) < 0.5 ? palette.surface : palette.ink
   const cardText = ratio(cardStatedInk, card) >= 4.5 ? cardStatedInk : getSafeTextColor(card).hex
   const cardMuted = getSafeMutedColor(cardText, card).hex
 
-  const onIdentityInk = identity.primaryInk
+  const onIdentityInk = palette.primaryInk
   const onAccentFill = ratio(onIdentityInk, accentFill) >= 4.5 ? onIdentityInk : onPrimaryText(accentFill)
 
   return {
@@ -191,7 +181,10 @@ export const deriveSurface = (bg: string, identity: LpIdentity): Surface => {
     card,
     cardText,
     cardMuted,
-    line: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.10)',
+    // The brand's own rule colour when it states one that can be seen on this
+    // ground, and a neutral veil when it does not. A hairline that vanishes is
+    // the same bug as text that vanishes, one degree quieter.
+    line: ratio(palette.line, bg) >= 1.25 ? palette.line : isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.10)',
     isDark,
   }
 }
@@ -209,11 +202,11 @@ export const deriveSurface = (bg: string, identity: LpIdentity): Surface => {
  */
 export const applySectionColors = (
   surface: Surface,
-  identity: LpIdentity,
+  palette: Palette,
   colors: LpSection['colors'],
 ): Surface => {
   if (!colors || Object.keys(colors).length === 0) return surface
-  let out = colors.bg ? deriveSurface(colors.bg, identity) : { ...surface }
+  let out = colors.bg ? deriveSurface(colors.bg, palette) : { ...surface }
   if (colors.surface) {
     out = { ...out, card: colors.surface }
     out.cardText = getSafeTextColor(out.card).hex
@@ -239,6 +232,6 @@ export const applySectionColors = (
   return out
 }
 
-/** The finished surface for one section: identity, then tone, then overrides. */
-export const surfaceForSection = (section: LpSection, identity: LpIdentity): Surface =>
-  applySectionColors(deriveSurface(groundFor(section.tone, identity), identity), identity, section.colors)
+/** The finished surface for one section: palette, then tone, then overrides. */
+export const surfaceForSection = (section: LpSection, palette: Palette): Surface =>
+  applySectionColors(deriveSurface(groundFor(section.tone, palette), palette), palette, section.colors)

@@ -20,7 +20,7 @@ import {
 } from '../ui'
 import {
   TEMPLATES, ANGLES, LivePreview, PREVIEW_BRAND_DEFAULT,
-  templateFor, templatePreviewSurface, templateLook,
+  templateFor, templatePreviewSurface, templateLook, templatePalette,
 } from './render'
 import { BrandQuickEdit } from '../brand/BrandQuickEdit'
 import { NodeTree } from './NodeTree'
@@ -49,7 +49,7 @@ const LandingPagesListView = ({ landingPages, lpDeployments, onOpen, onClone, on
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {landingPages.map((lp) => {
         const template = templateFor(lp.templateId)
-        const swatch = templatePreviewSurface(template)
+        const swatch = templatePreviewSurface(template, null)
         const angle = ANGLES.find((a) => a.id === lp.angle)
         const depCount = lpDeployments.filter((d) => d.landingPageId === lp.id).length
         return (
@@ -203,7 +203,7 @@ const AddSectionModal = ({ open, onClose, onAdd }) => {
  * A template whose skeleton has not been built yet says so plainly instead of
  * offering a button that would hand out another template's shape.
  */
-const TemplateGalleryModal = ({ open, onClose, onPickLook, onPickStructure, currentTemplateId }) => {
+const TemplateGalleryModal = ({ open, onClose, onPickLook, onPickStructure, currentTemplateId, brand }) => {
   const [confirming, setConfirming] = useState(null)
   useEffect(() => { if (open) setConfirming(null) }, [open])
   if (!open) return null
@@ -213,13 +213,13 @@ const TemplateGalleryModal = ({ open, onClose, onPickLook, onPickStructure, curr
         <div style={{ padding: 22, borderBottom: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>Templates</div>
-            <div style={{ fontSize: 11.5, color: T.textMute, marginTop: 2 }}>A template is a look and a structure. Taking the look repaints this page. Taking the structure replaces its sections.</div>
+            <div style={{ fontSize: 11.5, color: T.textMute, marginTop: 2 }}>A template is a look and a structure. The colours are the brand&apos;s, so these are drawn in the brand you are previewing as. Taking the look repaints this page; taking the structure replaces its sections.</div>
           </div>
           <IconBtn icon={X} onClick={onClose} />
         </div>
         <div style={{ padding: 22, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
           {TEMPLATES.map((t) => {
-            const s = templatePreviewSurface(t)
+            const s = templatePreviewSurface(t, brand)
             const look = templateLook(t)
             const isCurrent = t.id === currentTemplateId
             const mark = t.identity.mark
@@ -394,7 +394,7 @@ const AINewLPWizard = ({ open, onClose, onCreate }) => {
               <Label>Template</Label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
                 {TEMPLATES.map((t) => {
-                  const s = templatePreviewSurface(t)
+                  const s = templatePreviewSurface(t, null)
                   const usable = Boolean(t.skeleton)
                   return (
                     <button
@@ -567,7 +567,7 @@ export const LandingPageBuilder = ({ landingPage, brands, onBrandSaved, quizDepl
             <NodeInspector
               section={selectedSection}
               element={selectedElement}
-              identity={template.identity}
+              palette={templatePalette(template, previewBrand)}
               splits={Boolean(sectionSpec(selectedSection.type)?.splits)}
               onChangeSection={updateSection}
               onChangeElement={updateElement}
@@ -611,7 +611,7 @@ export const LandingPageBuilder = ({ landingPage, brands, onBrandSaved, quizDepl
                 </Select>
                 {brandEditor}
                 <div style={{ fontSize: 10.5, color: T.textMute, marginTop: 6, lineHeight: 1.5 }}>
-                  The template owns the colours and the faces. A brand supplies the name, the number and the legal text, so pick one here to see what a visitor gets.
+                  The brand owns the colours. The template owns the shape, the faces and the structure, so the same page under two brands is the same layout in two palettes. Pick one here to see what a visitor gets.
                 </div>
                 {previewBrandId && (
                   <div style={{ marginTop: 10 }}>
@@ -645,6 +645,7 @@ export const LandingPageBuilder = ({ landingPage, brands, onBrandSaved, quizDepl
         open={galleryOpen}
         currentTemplateId={landingPage.templateId}
         onClose={() => setGalleryOpen(false)}
+        brand={previewBrand}
         onPickLook={(tplId) => onSetTemplate(landingPage.id, tplId)}
         onPickStructure={(tplId) => { onSetStructure(landingPage.id, tplId); setSelectedId(null) }}
       />

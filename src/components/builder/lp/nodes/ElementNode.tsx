@@ -21,12 +21,16 @@ import { QuizRuntime } from '@/components/public/quiz/QuizRuntime'
 import type { LpIdentity } from '@/lib/lp-identities'
 import { elementSpec, isEmptyElement, type LpElement } from '@/lib/lp-nodes/model'
 import { deriveSurface, type Look, type Surface } from '@/lib/lp-nodes/surface'
-import { quizBrandForIdentity } from '@/lib/lp-nodes/quiz-brand'
+import { markColors, type Palette } from '@/lib/lp-nodes/palette'
+import { quizBrandForPage } from '@/lib/lp-nodes/quiz-brand'
 import { iconFor } from './icons'
 
 export type NodeCtx = {
   surface: Surface
   look: Look
+  /** Colours, resolved from the brand with the identity as a fallback. */
+  palette: Palette
+  /** Shape only: faces, radii, and the geometry of the mark. */
   identity: LpIdentity
   brand: Record<string, unknown>
   align: 'left' | 'center'
@@ -518,7 +522,9 @@ const Logo = ({ el, ctx }: { el: LpElement; ctx: NodeCtx }) => {
   const brandDarkLogo = str(ctx.brand?.logoUrlDark)
   const chosenLogo = s.isDark ? brandDarkLogo || brandLogo : brandLogo
   const name = str(el.text) || str(ctx.brand?.displayName) || str(ctx.brand?.name) || identity.wordmark
-  const mark = identity.mark
+  // The shape is the identity's. The colours are the brand's, remapped by the
+  // role each path was playing rather than by its position in the file.
+  const mark = markColors(identity, ctx.palette, s.isDark)
 
   return (
     <Shell el={el} ctx={ctx} inline>
@@ -529,14 +535,14 @@ const Logo = ({ el, ctx }: { el: LpElement; ctx: NodeCtx }) => {
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
           <svg viewBox="0 0 40 40" width={30} height={30} aria-hidden="true" style={{ flexShrink: 0 }}>
             <path
-              d={mark.d}
-              fill={s.isDark ? mark.fillDark : mark.fill}
-              stroke={s.isDark ? mark.strokeDark : mark.stroke}
+              d={identity.mark.d}
+              fill={mark.fill}
+              stroke={mark.stroke}
               strokeWidth={mark.strokeWidth}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
-            <path d={mark.d2} fill={s.isDark ? mark.fill2Dark : mark.fill2} />
+            <path d={identity.mark.d2} fill={mark.fill2} />
           </svg>
           <span style={{ fontFamily: look.display, fontWeight: look.displayWeight, fontSize: 19, color: s.text, textTransform: look.wordmarkTransform as CSSProperties['textTransform'], letterSpacing: look.wordmarkTracking, whiteSpace: 'nowrap' }}>
             {name}
@@ -599,7 +605,7 @@ const FormNode = ({ el, ctx }: { el: LpElement; ctx: NodeCtx }) => {
   // derived against the card rather than against the section behind it.
   const contrasted = str(el.ground) === 'contrast'
   const card = contrasted
-    ? deriveSurface(s.isDark ? ctx.identity.surface : ctx.identity.surfaceDark, ctx.identity)
+    ? deriveSurface(s.isDark ? ctx.palette.surface : ctx.palette.surfaceDark, ctx.palette)
     : { bg: s.card, text: s.cardText, muted: s.cardMuted, line: s.line, isDark: s.isDark }
 
   // The form draws in the TEMPLATE's colours like everything else on the page.
@@ -607,8 +613,9 @@ const FormNode = ({ el, ctx }: { el: LpElement; ctx: NodeCtx }) => {
   // wrong inside a host that has already chosen a palette: a blue page with a
   // red form in the middle of it. The brand it belongs to is unchanged, so the
   // number it shows and the place the lead goes are still the brand's.
-  const quizBrand = quizBrandForIdentity(
+  const quizBrand = quizBrandForPage(
     (ctx.quizCtx?.brand ?? ctx.brand) as Record<string, unknown>,
+    ctx.palette,
     ctx.identity,
     card.bg,
     Boolean(card.isDark),

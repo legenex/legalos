@@ -30,6 +30,7 @@ import {
   type RenderGroup,
 } from '@/lib/lp-nodes/model'
 import { lookOf, surfaceForSection, type Surface } from '@/lib/lp-nodes/surface'
+import type { Palette } from '@/lib/lp-nodes/palette'
 import { ElementNode, type NodeCtx } from './ElementNode'
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -41,6 +42,7 @@ const sectionSpecName = (type: string): string => (sectionSpec(type)?.name ?? ty
 
 export type SectionNodeProps = {
   section: LpSection
+  palette: Palette
   identity: LpIdentity
   brand: Record<string, unknown>
   editable: boolean
@@ -311,13 +313,14 @@ const PADDING: Record<string, string> = {
 }
 
 export const SectionNode = ({
-  section, identity, brand, editable, selectedId, onSelect, quiz, quizCtx, quizDepLabel,
+  section, palette, identity, brand, editable, selectedId, onSelect, quiz, quizCtx, quizDepLabel,
 }: SectionNodeProps) => {
-  const surface = surfaceForSection(section, identity)
+  const surface = surfaceForSection(section, palette)
   const look = lookOf(identity)
   const ctx: NodeCtx = {
     surface,
     look,
+    palette,
     identity,
     brand,
     align: (str(section.props?.align) as 'left' | 'center') || (section.type === 'band' ? 'left' : 'left'),

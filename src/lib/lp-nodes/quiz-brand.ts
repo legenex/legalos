@@ -1,54 +1,52 @@
 /**
  * The colours a quiz wears when it is running inside a landing page.
  *
- * The form is the most prominent thing on a landing page, and it was the one
- * thing on it not obeying the rule the rest of the page follows. Every section,
- * heading, card and button takes its colour from the template's identity; the
- * embedded quiz took its colour from the SITE's brand, because that is what a
- * standalone quiz deployment correctly does. So a Plainpath page rendered
- * cornflower blue everywhere except the form in the middle of it, which came
- * out in the brand's red.
+ * A quiz on its own URL derives its palette from its brand's raw tokens. Inside
+ * a landing page it has to agree with the page around it, which has already
+ * resolved those same tokens into grounds, verified inks and a dark remap. The
+ * two would drift otherwise: the page's dark band and the quiz's idea of dark
+ * would be different colours, both defensible, neither matching.
  *
- * The split is the same one the rest of the system makes. The template identity
- * owns everything about how the page LOOKS - palette, faces, radii, marks. The
- * brand owns everything about WHO IS SPEAKING - the name, the phone number, the
- * legal text, the lead destination. So the quiz keeps the brand it belongs to
- * and borrows the identity's colours to draw with, which is what "the flow is
- * the quiz's, the appearance is the host's" was always supposed to mean.
+ * So the quiz is handed the page's resolved palette rather than the brand's raw
+ * one. It is still the brand's colour - the palette came from the brand - and
+ * the brand is otherwise untouched, so the number the quiz shows and the place
+ * the lead goes are unchanged. What it borrows from the identity is the faces,
+ * because those are the template's and the form should not be set in a
+ * different typeface to the copy beside it.
  *
- * This does not touch a standalone quiz deployment. A quiz served on its own URL
- * has no host identity to inherit and keeps using its brand's palette.
+ * A standalone quiz deployment does not come through here at all.
  */
 
 import { contrastRatio } from '@/lib/builder/page-lint'
 import { getSafeTextColor, onPrimaryText } from '@/lib/builder/color-system'
 import type { LpIdentity } from '@/lib/lp-identities'
+import type { Palette } from './palette'
 
 type BrandLike = Record<string, unknown> & { colors?: Record<string, unknown> }
 
 const ratio = (a: string, b: string): number => contrastRatio(a, b) ?? 0
 
 /**
- * Rebuild a brand's colour set from a template identity.
+ * Rebuild a brand's colour set from the page's resolved palette.
  *
- * `onDark` picks between the identity's two published states rather than
- * inventing a third: several of the four specify a lifted primary for dark
- * grounds precisely so buttons and links keep their contrast there.
+ * `onDark` picks the palette's lifted primary, which was raised until it read
+ * on the dark ground, so a button inside a form on a dark card keeps the same
+ * contrast as a button outside it.
  *
- * The ink is still verified against the surface the quiz will actually sit on,
- * because that surface is the host card and the identity's ink was chosen
- * against the identity's own page. Everything the brand owns that is not a
- * colour is passed through untouched.
+ * The ink is verified against the surface the quiz will actually sit on, which
+ * is the host card rather than the page behind it. Everything the brand owns
+ * that is not a colour passes through untouched.
  */
-export const quizBrandForIdentity = (
+export const quizBrandForPage = (
   brand: BrandLike | null | undefined,
+  palette: Palette,
   identity: LpIdentity,
   surface: string,
   onDark: boolean,
 ): BrandLike => {
   const base = (brand ?? {}) as BrandLike
-  const primary = onDark ? identity.primaryDark || identity.primary : identity.primary
-  const statedInk = onDark ? identity.surface : identity.ink
+  const primary = onDark ? palette.primaryDark || palette.primary : palette.primary
+  const statedInk = onDark ? palette.surface : palette.ink
   const ink = ratio(statedInk, surface) >= 4.5 ? statedInk : getSafeTextColor(surface).hex
 
   return {
@@ -56,16 +54,16 @@ export const quizBrandForIdentity = (
     colors: {
       ...(base.colors ?? {}),
       primary,
-      accent: identity.accent,
+      accent: palette.accent,
       background: surface,
       cardBg: surface,
       cta: primary,
-      ctaInk: ratio(identity.primaryInk, primary) >= 4.5 ? identity.primaryInk : onPrimaryText(primary),
+      ctaInk: ratio(palette.primaryInk, primary) >= 4.5 ? palette.primaryInk : onPrimaryText(primary),
       ink,
-      inkMuted: identity.inkMuted,
-      border: identity.line,
+      inkMuted: palette.inkMuted,
+      border: palette.line,
       onPrimary: onPrimaryText(primary),
-      textOnDark: identity.surface,
+      textOnDark: palette.surface,
     },
     typography: {
       ...((base.typography as Record<string, unknown>) ?? {}),

@@ -107,9 +107,9 @@ const Field = ({ field, value, onChange }) => {
  * and changing a background without naming a text colour re-derives the text
  * downstream rather than carrying the old one onto a new ground.
  */
-const ColorPanel = ({ section, identity, onChange }) => {
+const ColorPanel = ({ section, palette, onChange }) => {
   const chosen = section.colors || {}
-  const painted = surfaceForSection({ ...section, colors: undefined }, identity)
+  const painted = surfaceForSection({ ...section, colors: undefined }, palette)
   const inherited = { bg: painted.bg, text: painted.text, surface: painted.card, accent: painted.accentFill }
   const effective = (k) => chosen[k] || inherited[k] || '#000000'
 
@@ -136,10 +136,10 @@ const ColorPanel = ({ section, identity, onChange }) => {
         <span style={{ fontSize: 11, fontWeight: 600, color: T.text }}>Colours</span>
         {Object.keys(chosen).length > 0 ? (
           <button onClick={() => onChange(undefined)} style={{ background: 'none', border: 'none', color: T.primary, fontSize: 11, cursor: 'pointer' }}>
-            Back to the template
+            Back to the brand
           </button>
         ) : (
-          <span style={{ fontSize: 10.5, color: T.textLow }}>All from the template</span>
+          <span style={{ fontSize: 10.5, color: T.textLow }}>All from the brand</span>
         )}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
@@ -161,7 +161,7 @@ const ColorPanel = ({ section, identity, onChange }) => {
               <button
                 onClick={() => set(f.key, null)}
                 disabled={!overridden}
-                title="Back to the template colour"
+                title="Back to the brand colour"
                 style={{ width: 50, flexShrink: 0, padding: '4px 0', backgroundColor: 'transparent', border: `1px solid ${overridden ? T.border : 'transparent'}`, borderRadius: 5, color: overridden ? T.textMute : T.textLow, fontSize: 10, cursor: overridden ? 'pointer' : 'default' }}
               >
                 {overridden ? 'Reset' : 'Auto'}
@@ -225,7 +225,7 @@ const SectionWriter = ({ section, onApply }) => {
 
 // ---------------------------------------------------------------------------
 
-export const NodeInspector = ({ section, element, identity, splits, onChangeSection, onChangeElement, onApplyWrite, onDelete, onClose }) => {
+export const NodeInspector = ({ section, element, palette, splits, onChangeSection, onChangeElement, onApplyWrite, onDelete, onClose }) => {
   const [tab, setTab] = useState('content')
   useEffect(() => { setTab('content') }, [element?.id, section?.id])
 
@@ -309,14 +309,14 @@ export const NodeInspector = ({ section, element, identity, splits, onChangeSect
                 />
               ))}
               <div style={{ fontSize: 10, color: T.textLow, lineHeight: 1.55, paddingTop: 4 }}>
-                {TONES.find((t) => t.id === (section.tone || 'default'))?.desc}. The shape of this section follows what is inside it: a run of the same kind of element becomes a row.
+                {TONES.find((t) => t.id === (section.tone || 'default'))?.desc}, taken from the brand this page is previewed as. The shape of the section follows what is inside it: a run of the same kind of element becomes a row.
               </div>
               <Btn variant="danger" size="sm" icon={Trash2} onClick={() => onDelete(section.id)}>Delete this section</Btn>
             </div>
           ) : null}
 
           {tab === 'colour' ? (
-            <ColorPanel section={section} identity={identity} onChange={(colors) => onChangeSection({ ...section, colors })} />
+            <ColorPanel section={section} palette={palette} onChange={(colors) => onChangeSection({ ...section, colors })} />
           ) : null}
 
           {tab === 'ai' ? <SectionWriter section={section} onApply={onApplyWrite} /> : null}
