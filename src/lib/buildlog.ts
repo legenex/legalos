@@ -163,6 +163,126 @@ export const buildLogEvidenceId = (entry: BuildLogEntry, item: BuildLogItem, ev:
 
 export const ENTRIES: BuildLogEntry[] = [
   {
+    date: '2026-08-05',
+    title: 'A landing page is a tree of nodes, and a template is a structure',
+    summary:
+      'Two problems with one cause. You could delete a whole section and nothing smaller, and all four templates looked identical apart from colour. Both followed from sections storing copy under fixed names that thirteen subject-specific renderers read back by name.',
+    items: [
+      {
+        title: 'Every element on the page is its own thing',
+        status: 'shipped',
+        detail:
+          'A section held a bag of named keys - eyebrow, headline, steps - and one renderer per subject read them back. So "the third step" and "that button" did not exist as far as the page was concerned; they were properties of a section, and the only verbs were on the section. Sections and elements are now nodes, each with an id, a visibility flag and a position, so anything on the page can be hidden, reordered, deleted or added. Two levels and no more: a third would buy nesting nobody asked for and cost a tree editor to manage it. The one layout that genuinely wants two containers, a split, is done with a slot tag on the element instead, so the order in the tree is the order stored and there is no hidden container to reason about.',
+        files: ['src/lib/lp-nodes/model.ts', 'src/components/builder/lp/NodeTree.tsx', 'src/components/builder/lp/NodeInspector.tsx'],
+        evidence: [
+          {
+            label: 'Selecting one heading out of a page',
+            path: '/admin/landing-pages',
+            steps: ['Edit on MVA Pain First', 'click the headline in the preview'],
+          },
+        ],
+      },
+      {
+        title: 'Sections stopped knowing what they are about',
+        status: 'shipped',
+        detail:
+          'There is no how-it-works renderer any more, and no testimonials renderer. There is a band, and a band groups a run of same-type elements into a row: three step nodes draw a three-step row, and a fourth makes it four, without any renderer being told. Six layout containers replace the thirteen subjects, which is what lets four templates differ in structure while sharing one renderer, and what lets a fifth need no new component. A run that will not divide evenly widens by one where that helps, because four result cards in a three-column grid draw as three and a stranded fourth, and that reads as a mistake in the content rather than in the layout.',
+        files: ['src/components/builder/lp/nodes/SectionNode.tsx', 'src/components/builder/lp/nodes/ElementNode.tsx', 'src/components/builder/lp/render.tsx'],
+      },
+      {
+        title: 'Template B: a skeleton with no copy in it at all',
+        status: 'shipped',
+        detail:
+          'A template is now an identity plus a structure, and the structure is a list of node types with layout props and nothing written in them. Not a placeholder headline, not a sample step, nothing to delete before the page can be written. B puts the form centred above the fold, which is the departure that made the whole change necessary: the old renderer had exactly one hero and no way to say it. Picking a template and taking its structure are separate acts in the gallery, because the first repaints the page and the second replaces its sections and loses the copy.',
+        files: ['src/lib/lp-skeletons/index.ts'],
+        evidence: [
+          {
+            label: 'The skeleton, before anything is written',
+            path: '/admin/landing-pages',
+            steps: ['Blank LP'],
+          },
+        ],
+      },
+      {
+        title: 'A, C and D have their look but not their shape',
+        status: 'partial',
+        detail:
+          'Only B has a skeleton. The other three keep their identities, so a page assigned to one renders in its palette, faces and radii, and the gallery says plainly that its structure is not built rather than offering a button that would hand out a copy of B. Seeding three lookalikes and calling the job done is the exact failure this change exists to fix, so they are absent rather than approximated. The four reference layouts are agreed; A, C and D are the next piece of work.',
+        files: ['src/lib/lp-skeletons/index.ts'],
+      },
+      {
+        title: 'Pages already live keep rendering, and were not rewritten',
+        status: 'shipped',
+        detail:
+          'There are landing pages and deployments in the database in the old shape. Nothing was migrated in place: the conversion runs on read, every time, and a page is only stored as nodes once somebody saves it, so a page nobody opens keeps working without a migration having run. That makes determinism a correctness requirement rather than a nicety, and the ids are derived from the section id and the field they came from. A random id there would remount every node on each pass, lose the builder selection, and rewrite the whole tree on first save. The conversion also has to state what the old renderers were doing implicitly, alternating grounds by section type, so those grounds are explicit tones now and a converted page can be re-toned like any other.',
+        files: ['src/lib/lp-nodes/from-legacy.ts'],
+      },
+      {
+        title: 'Colours are still derived, now including copy inside cards',
+        status: 'shipped',
+        detail:
+          'Every colour a node paints with comes off a surface derived from the ground it actually sits on and checked before it is handed over. The part that was previously assumed is card copy: it was derived against the page and then drawn on the card, which are two different grounds and only one of them is what the words land on. A form card can now sit on the opposite ground to its section, which is what puts a pale card on a dark fold, and both sides are derived rather than one being inverted by hand. The four identity marks also render for the first time, in the header lockup and in the template gallery; the mark and the typography are the template identity, the name is the brand.',
+        files: ['src/lib/lp-nodes/surface.ts', 'src/components/builder/lp/nodes/icons.ts'],
+      },
+      {
+        title: 'Claude writes into the structure and cannot change it',
+        status: 'shipped',
+        detail:
+          'The old rewrite action returned a bag of named copy keys, which only made sense while a section was a bag of named copy keys. The model is now given the nodes, their ids and the exact fields each type accepts, and must answer with the same ids. Anything invented is dropped rather than merged and any field outside the element spec is discarded, so a generated section is structurally identical to the one that was laid out. The new-page wizard builds from the skeleton and fills it a section at a time on the same contract, which is what keeps "generated with Claude" and "built from template B" the same page rather than two.',
+        files: ['src/app/(app)/admin/(top)/landing-pages/actions.ts', 'src/components/builder/lp/LandingPagesApp.tsx'],
+      },
+      {
+        title: 'The preview answers about itself instead of about the window',
+        status: 'shipped',
+        detail:
+          'Found by opening it rather than by reading it. The builder shows the page in a pane about a third of the window wide, and the responsive rules were viewport media queries, so they reported a desktop and kept a two-column hero and three-across stats inside six hundred pixels, where the stats collided. They are container queries now, which means the preview and the live page behave the same way at the same content width. A preview that cannot be trusted at the width it is displayed at is not a preview.',
+        files: ['src/components/builder/lp/render.tsx'],
+      },
+      {
+        title: 'The builder was loading quiz names and nothing else',
+        status: 'shipped',
+        detail:
+          'The hero form runs the real quiz runtime rather than a drawing of one, but the landing-pages screen only ever loaded each quiz id and name, so the most important thing on the page drew as an empty card and the layout could not be judged. It loads the steps, nodes and custom fields now. This was not a regression from the node work; it has been true since the two were wired together, and it only became obvious with a template whose whole argument is where the form sits.',
+        files: ['src/app/(app)/admin/(top)/landing-pages/page.tsx'],
+      },
+    ],
+    verification: [
+      {
+        label: 'Typecheck',
+        state: 'verified',
+        detail: 'pnpm typecheck on the server, clean. Two errors it caught first: the public callsite missing a newly required prop, and an untyped prop on the ported quiz runtime.',
+      },
+      {
+        label: 'Driven in a browser',
+        state: 'verified',
+        detail:
+          'Playwright against os.legenex.com as the capture account: the converted page opens with 13 sections and 74 elements in the tree, clicking the headline in the preview selects it and opens its fields, the template gallery draws all four identity marks, and Blank LP produces skeleton B with 9 sections and 62 empty elements. Three bugs were found this way and fixed, none of which a typecheck could have seen.',
+      },
+      {
+        label: 'Public render',
+        state: 'verified',
+        detail:
+          'https://getwhatyoureowed.co/c/don-t-settle returns 200 and renders the converted page end to end with the real quiz in the hero, no placeholders, no console errors from the page itself.',
+      },
+      {
+        label: 'Skeletons A, C and D',
+        state: 'not-run',
+        detail: 'Not built. Those three templates carry their identity and no structure, and say so in the gallery.',
+      },
+      {
+        label: 'Reordering and deleting under load',
+        state: 'not-run',
+        detail:
+          'Move, hide, delete and add were exercised by hand on single nodes, not systematically across every element type, and no test covers them. The debounced save path is unchanged from before.',
+      },
+    ],
+    openIssues: [
+      'Skeletons A, C and D are not built. Their templates apply a look only.',
+      'Reordering is one step at a time with arrows. There is no drag, and no way to move an element from one section to another.',
+      'The funnel_* tables still have no committed migration (F001). Nothing here changes that: sections are a json column that already existed.',
+    ],
+  },
+  {
     date: '2026-08-04',
     title: 'Saving brand colours had no chance of working',
     summary:
