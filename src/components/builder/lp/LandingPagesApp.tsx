@@ -224,7 +224,9 @@ const TemplateGalleryModal = ({ open, onClose, onPickLook, onPickStructure, curr
             const isCurrent = t.id === currentTemplateId
             const mark = t.identity.mark
             return (
-              <div key={t.id} style={{ backgroundColor: T.bgElev, border: `2px solid ${isCurrent ? T.primary : T.border}`, borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+              // Tagged with its id so a capture job can drive a named card
+              // rather than guessing at a card from the text inside it.
+              <div key={t.id} data-template={t.id} style={{ backgroundColor: T.bgElev, border: `2px solid ${isCurrent ? T.primary : T.border}`, borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ height: 128, backgroundColor: s.bg, padding: 18, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                     <svg viewBox="0 0 40 40" width={24} height={24} aria-hidden="true">
