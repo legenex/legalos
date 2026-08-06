@@ -161,6 +161,8 @@ export async function saveQuizDeployment(args: { deployment: Record<string, unkn
     path: dep.path || '',
     render_mode: dep.renderMode || 'standalone',
     template_id: dep.templateId || 'default',
+    // Null rather than '' so "use the template's" is one value, not two.
+    progress_form: (dep.progressForm as string) || null,
     status: dep.status || 'draft',
     embed_preview_bg: dep.embedPreviewBg || '',
     destination_overrides: dep.destinationOverrides ?? null,

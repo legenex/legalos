@@ -19,7 +19,7 @@ import { genId, mkA, defaultLeadFormFields, VISIBLE_BY_DEFAULT } from './seed-da
 import { QuizFlowGrid } from './builder'
 import { NodeEditorModal, SettingsModal, AddStepModal } from './editors'
 import { QuizPreviewView, NodePreviewModal } from './preview'
-import { auditQuizTemplateColors } from './templates'
+import { auditQuizTemplateColors, resolveQuizTemplate, PROGRESS_FORM_LABELS } from './templates'
 import { brandShortName } from '../ui'
 import {
   moveStepBy, duplicateStep, duplicateNode, deleteStep,
@@ -511,7 +511,27 @@ const DeploymentEditor = ({ deployment, isDraft, quizzes, brands, onBrandSaved, 
                 </button>
               })}
             </div>
-            <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 6 }}>Brand colors still apply. The template controls layout, typography, button style, and overall feel. A <span style={{ color: T.warning }}>CHECK</span> / <span style={{ color: T.danger }}>LOW CONTRAST</span> tag means this template + the selected brand has a color overlap that hurts readability.</div>
+            <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 6 }}>Brand colours still apply. The template controls width, answers, typography and icon policy. A <span style={{ color: T.warning }}>CHECK</span> / <span style={{ color: T.danger }}>LOW CONTRAST</span> tag means this template plus the selected brand has a colour overlap that hurts readability.</div>
+          </div>
+
+          <div>
+            <Label>Progress</Label>
+            {/* What the template would show if nothing is overridden, named so
+                "Match the template" is a concrete choice rather than a blank. */}
+            <Select
+              value={draft.progressForm || ''}
+              onChange={(e) => update({ progressForm: e.target.value || null })}
+            >
+              <option value="">
+                Match the template ({PROGRESS_FORM_LABELS.find((p) => p.id === resolveQuizTemplate(draft.templateId).progress)?.label ?? 'template default'})
+              </option>
+              {PROGRESS_FORM_LABELS.map((p) => (
+                <option key={p.id} value={p.id}>{p.label} {'·'} from {p.from}</option>
+              ))}
+            </Select>
+            <div style={{ fontSize: 10.5, color: T.textLow, marginTop: 6, lineHeight: 1.5 }}>
+              Each template comes with its own way of showing progress. Change it here to borrow another one without changing anything else about the template: the width, the answers and the icons stay as they are.
+            </div>
           </div>
           {draft.renderMode === 'embed' && <>
             <div>

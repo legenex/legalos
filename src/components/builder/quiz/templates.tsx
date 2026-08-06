@@ -25,12 +25,12 @@
 
 import { ShieldCheck } from 'lucide-react'
 import { onPrimaryText, auditColorPairs } from '@/lib/builder/color-system'
-import { QUIZ_TEMPLATES, resolveQuizTemplate, templateMaxWidth } from '@/lib/quiz-templates/model'
+import { QUIZ_TEMPLATES, resolveQuizTemplate, templateMaxWidth, cleanProgressForm, PROGRESS_FORM_LABELS } from '@/lib/quiz-templates/model'
 import { quizTheme, QUIZ_FONTS } from '@/lib/quiz-templates/theme'
 import { QuizProgress } from '@/components/public/quiz/forms/progress'
 import { QuizAnswer, answerLayout } from '@/components/public/quiz/forms/answers'
 
-export { QUIZ_TEMPLATES, resolveQuizTemplate, answerLayout }
+export { QUIZ_TEMPLATES, resolveQuizTemplate, answerLayout, PROGRESS_FORM_LABELS }
 
 /**
  * Everything a template needs, for one brand.
@@ -40,8 +40,12 @@ export { QUIZ_TEMPLATES, resolveQuizTemplate, answerLayout }
  * computed separately, so there is exactly one answer to "what colour is this
  * card" no matter which of the two paths asks it.
  */
-const configFor = (templateId) => {
-  const spec = resolveQuizTemplate(templateId)
+const configFor = (templateId, progressOverride) => {
+  const base = resolveQuizTemplate(templateId)
+  // The override changes ONE axis. Everything else - width, answers, icons,
+  // faces - stays the template's, which is what keeps this a knob rather than
+  // a twenty-first template.
+  const spec = progressOverride ? { ...base, progress: progressOverride } : base
   const themeFor = (brand, hostSurface) => quizTheme(spec, brand, hostSurface)
   const squared = spec.answers === 'squared_rows' || spec.answers === 'document_stamps' || spec.answers === 'field_rows'
 
@@ -95,9 +99,10 @@ const configFor = (templateId) => {
 // and keeps twenty specs from being rebuilt on every render.
 const CACHE = new Map()
 
-export const getTemplateConfig = (templateId) => {
-  const key = typeof templateId === 'string' ? templateId : ''
-  if (!CACHE.has(key)) CACHE.set(key, configFor(key))
+export const getTemplateConfig = (templateId, progressForm) => {
+  const override = cleanProgressForm(progressForm)
+  const key = `${typeof templateId === 'string' ? templateId : ''}::${override ?? ''}`
+  if (!CACHE.has(key)) CACHE.set(key, configFor(templateId, override))
   return CACHE.get(key)
 }
 

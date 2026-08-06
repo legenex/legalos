@@ -359,3 +359,41 @@ export const resolveQuizTemplate = (id: unknown): QuizTemplate => {
 
 /** Max width in px for a template, or null when it runs full bleed. */
 export const templateMaxWidth = (t: QuizTemplate): number | null => (t.width[1] === 0 ? null : t.width[1])
+
+/**
+ * The progress forms, with the words the handoff uses for them.
+ *
+ * A deployment may override its template's form with any of these. That is a
+ * presentation choice rather than a new template: the layout, the answers and
+ * the icon policy all stay the template's, and only the way progress is drawn
+ * changes. Twenty templates times twenty forms is not four hundred templates,
+ * it is twenty templates and one knob.
+ */
+export const PROGRESS_FORM_LABELS: Array<{ id: ProgressForm; label: string; from: string }> = [
+  { id: 'rule_count', label: 'Thin rule + count', from: 'Editorial Inline' },
+  { id: 'rounded_encourage', label: 'Rounded bar + encouragement', from: 'Recovery Soft' },
+  { id: 'segmented_blocks', label: 'Segmented blocks + step NN/NN', from: 'Authority Console' },
+  { id: 'factor_rail', label: 'Factor status rail', from: 'Case Dossier' },
+  { id: 'bar_percent_chip', label: 'Bar + % chip', from: 'Direct Panel' },
+  { id: 'bar_percent_label', label: 'Bar + % label', from: 'Quiz First' },
+  { id: 'deadline_rail', label: 'Deadline rail + %', from: 'Deadline Timeline' },
+  { id: 'caps_thin_bar', label: 'Caps eyebrow + thin bar', from: 'Insurer Context' },
+  { id: 'dot_sequence', label: 'Dot sequence', from: 'Sixty Second' },
+  { id: 'answered_ticks', label: 'Answered count + ticks', from: 'Answer First' },
+  { id: 'route_breadcrumb', label: 'Bar + route breadcrumb', from: 'Case Router' },
+  { id: 'mono_hairline', label: 'Mono counter + hairline', from: 'Network Vetting' },
+  { id: 'header_count', label: 'Question count in header', from: 'Guided Conversation' },
+  { id: 'segment_ticks', label: 'Segment ticks', from: 'Incident Scene' },
+  { id: 'milestone_rail', label: 'Vertical milestone rail', from: 'Timeline Journey' },
+  { id: 'tab_status', label: 'Tab states + status chip', from: 'Case File Console' },
+  { id: 'edge_bar', label: 'Edge bar + step count', from: 'Fullscreen Focus' },
+  { id: 'card_diamonds', label: 'Card N of N + diamonds', from: 'Card Deck' },
+  { id: 'path_nodes', label: 'Path nodes + branch stubs', from: 'Decision Path' },
+  { id: 'item_count', label: 'Item count + step label', from: 'Evidence Checklist' },
+]
+
+const PROGRESS_IDS = new Set(PROGRESS_FORM_LABELS.map((p) => p.id))
+
+/** A stored override, or null when it is absent or not a form we know. */
+export const cleanProgressForm = (v: unknown): ProgressForm | null =>
+  typeof v === 'string' && PROGRESS_IDS.has(v as ProgressForm) ? (v as ProgressForm) : null

@@ -85,7 +85,9 @@ export function QuizRuntime({
 }) {
   const customFields = quiz.customFields?.length ? quiz.customFields : SEED_CUSTOM_FIELDS
   const templateId = deployment?.templateId || 'minimal'
-  const tc = getTemplateConfig(templateId)
+  // The deployment may override the template's progress treatment; everything
+  // else about the template is unchanged by it.
+  const tc = getTemplateConfig(templateId, deployment?.progressForm)
   // Both embed (iframe on someone else's site) and inline (a card inside one of
   // our own landing pages) drop the page chrome. They differ only in that an
   // embed also has to tell its parent frame how tall it is.

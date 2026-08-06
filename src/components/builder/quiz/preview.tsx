@@ -458,7 +458,7 @@ export const QuizPreviewView = ({ quiz, brand, deployment, onBackToBuilder, bran
   const C = effectiveBrand.colors
   const fontFamily = `"${effectiveBrand.typography.headlineFont}", sans-serif`
   const totalVisible = quiz.steps.filter((s, i) => i <= stepIdx).length
-  const tc = getTemplateConfig(effectiveDeployment?.templateId || 'minimal')
+  const tc = getTemplateConfig(effectiveDeployment?.templateId || 'minimal', effectiveDeployment?.progressForm)
   // Page-level palette for standalone chrome + body sections (verified
   // against the actual page bg, so the editorial cream page / any light brand
   // never renders white-on-white text below the card).

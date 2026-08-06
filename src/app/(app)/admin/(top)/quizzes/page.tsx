@@ -53,6 +53,7 @@ export default async function QuizzesPage() {
       path: r.path ?? '',
       renderMode: r.render_mode ?? 'standalone',
       templateId: r.template_id ?? 'default',
+      progressForm: r.progress_form ?? null,
       status: r.status ?? 'draft',
       embedPreviewBg: r.embed_preview_bg ?? '',
       destinationOverrides: r.destination_overrides ?? null,

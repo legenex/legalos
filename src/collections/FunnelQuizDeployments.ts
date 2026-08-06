@@ -30,6 +30,9 @@ export const FunnelQuizDeployments: CollectionConfig = {
     { name: 'path', type: 'text' },
     { name: 'render_mode', type: 'text', defaultValue: 'standalone' },
     { name: 'template_id', type: 'text', defaultValue: 'default' },
+    // Null means "use whatever the template chose". A deployment only stores a
+    // value here once someone has deliberately picked a different one.
+    { name: 'progress_form', type: 'text' },
     {
       name: 'status',
       type: 'select',
