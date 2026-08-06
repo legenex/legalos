@@ -20,6 +20,7 @@ import { QuizFlowGrid } from './builder'
 import { NodeEditorModal, SettingsModal, AddStepModal } from './editors'
 import { QuizPreviewView, NodePreviewModal } from './preview'
 import { auditQuizTemplateColors, resolveQuizTemplate, PROGRESS_FORM_LABELS } from './templates'
+import { TemplatePreview } from './TemplatePreview'
 import { brandShortName } from '../ui'
 import {
   moveStepBy, duplicateStep, duplicateNode, deleteStep,
@@ -493,7 +494,7 @@ const DeploymentEditor = ({ deployment, isDraft, quizzes, brands, onBrandSaved, 
           </div>
           <div>
             <Label>Visual Template</Label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
               {QUIZ_TEMPLATES.map((t) => {
                 const active = (draft.templateId || 'minimal') === t.id
                 // Color-overlap detector: flag any template that would render
@@ -501,10 +502,12 @@ const DeploymentEditor = ({ deployment, isDraft, quizzes, brands, onBrandSaved, 
                 const violations = brand ? auditQuizTemplateColors(t.id, brand) : []
                 const hasError = violations.some((v) => v.severity === 'error')
                 const hasWarn = violations.length > 0
-                return <button key={t.id} onClick={() => update({ templateId: t.id })} title={hasWarn ? violations.map((v) => v.message).join('\n') : undefined} style={{ padding: 12, backgroundColor: active ? T.bgElev2 : T.bgElev, border: `1px solid ${active ? T.primary : hasError ? T.danger : T.border}`, borderRadius: 8, cursor: 'pointer', textAlign: 'left', color: T.text, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                return <button key={t.id} onClick={() => update({ templateId: t.id })} title={hasWarn ? violations.map((v) => v.message).join('\n') : undefined} style={{ padding: 10, backgroundColor: active ? T.bgElev2 : T.bgElev, border: `1px solid ${active ? T.primary : hasError ? T.danger : T.border}`, borderRadius: 8, cursor: 'pointer', textAlign: 'left', color: T.text, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <TemplatePreview spec={resolveQuizTemplate(t.id)} brand={brand} progress={active ? draft.progressForm : null} />
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 14, height: 14, borderRadius: '50%', border: `2px solid ${active ? T.primary : T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{active && <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: T.primary }} />}</div>
+                    <div style={{ width: 14, height: 14, borderRadius: '50%', border: `2px solid ${active ? T.primary : T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{active && <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: T.primary }} />}</div>
                     <span style={{ fontSize: 12.5, fontWeight: 600 }}>{t.name}</span>
+                    <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 9, color: T.textLow }}>{t.code}</span>
                     {hasWarn && <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, letterSpacing: '0.04em', backgroundColor: hasError ? `${T.danger}22` : `${T.warning}22`, color: hasError ? T.danger : T.warning }}>{hasError ? 'LOW CONTRAST' : 'CHECK'}</span>}
                   </div>
                   <div style={{ fontSize: 11, color: T.textMute, lineHeight: 1.4 }}>{t.desc}</div>
