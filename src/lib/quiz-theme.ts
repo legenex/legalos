@@ -19,22 +19,32 @@
  */
 
 import { onPrimaryText } from './builder/color-system'
+import { QUIZ_TEMPLATES, LEGACY_TEMPLATE_IDS } from './quiz-templates/model'
 
 /** Template ids the quiz renderer knows. Anything else falls back to the default. */
-export const QUIZ_TEMPLATE_IDS = ['default', 'minimal', 'editorial', 'gradient', 'glass', 'compact'] as const
-export type QuizTemplateId = (typeof QUIZ_TEMPLATE_IDS)[number]
+export const QUIZ_TEMPLATE_IDS = QUIZ_TEMPLATES.map((t) => t.id)
+export type QuizTemplateId = string
+
+/**
+ * The six ids that shipped before the twenty.
+ *
+ * Still accepted, because they are stored on live deployments and a deployment
+ * is not rewritten just because the template set grew. They resolve forward to
+ * the nearest of the twenty on read.
+ */
+const LEGACY_IDS = Object.keys(LEGACY_TEMPLATE_IDS)
 
 const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
 
 const cleanTemplateId = (v: unknown): QuizTemplateId | undefined =>
-  typeof v === 'string' && (QUIZ_TEMPLATE_IDS as readonly string[]).includes(v)
-    ? (v as QuizTemplateId)
+  typeof v === 'string' && (QUIZ_TEMPLATE_IDS.includes(v) || LEGACY_IDS.includes(v))
+    ? v
     : undefined
 
 /** The template a deployment renders with. Its own id, or the safe default. */
 export const resolveQuizTemplateId = (
   deployment: { templateId?: string | null } | null | undefined,
-): QuizTemplateId => cleanTemplateId(deployment?.templateId) ?? 'minimal'
+): QuizTemplateId => cleanTemplateId(deployment?.templateId) ?? 'sq_editorial_inline'
 
 type SurfacedBrand = {
   colors: Record<string, string> & { primary: string }

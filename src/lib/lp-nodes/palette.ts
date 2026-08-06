@@ -64,17 +64,28 @@ export const atLightness = (source: string, lightness: number, maxSaturation = 1
   return hslToHex(h, Math.min(s, maxSaturation), Math.max(0, Math.min(1, lightness)))
 }
 
+export type PaletteFallback = Pick<
+  Palette,
+  'surface' | 'surfaceAlt' | 'surfaceDark' | 'primary' | 'primaryInk' | 'accent' | 'ink' | 'inkMuted' | 'line'
+>
+
 /**
- * Build the page palette from a brand, falling back to the template identity.
+ * Build a palette from a brand, falling back to a stated set where it is silent.
  *
  * Nothing here is verified against anything: this is the raw set of grounds and
- * hues. Verification happens in `deriveSurface`, once per section, against the
- * ground each colour will actually sit on, which is the only place it means
- * anything. A brand that states white ink on a white page - which one of ours
- * does - produces a readable page because of that step, not because of this one.
+ * hues. Verification happens in `deriveSurface`, against the ground each colour
+ * will actually sit on, which is the only place it means anything. A brand that
+ * states white ink on a white page - which one of ours does - produces a
+ * readable page because of that step, not because of this one.
+ *
+ * The fallback is a parameter rather than an identity because quizzes need this
+ * too. A standalone quiz has no template identity to fall back to, only the
+ * neutral set its own handoff draws in, and a second copy of this derivation
+ * would give two subtly different ideas of what a brand's dark ground is -
+ * which a landing page and the form embedded in it would then disagree about.
  */
-export const resolveLpPalette = (
-  identity: LpIdentity,
+export const paletteFrom = (
+  identity: PaletteFallback,
   brand: { colors?: Record<string, unknown> } | null | undefined,
 ): Palette => {
   const c = (brand?.colors ?? {}) as Record<string, unknown>
@@ -170,3 +181,9 @@ export const markColors = (
     strokeWidth: mark.strokeWidth,
   }
 }
+
+/** A template identity is one kind of fallback. */
+export const resolveLpPalette = (
+  identity: LpIdentity,
+  brand: { colors?: Record<string, unknown> } | null | undefined,
+): Palette => paletteFrom(identity, brand)

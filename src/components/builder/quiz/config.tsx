@@ -1,3 +1,4 @@
+import { QUIZ_TEMPLATES as SPEC_TEMPLATES } from '@/lib/quiz-templates/model'
 // @ts-nocheck
 /* eslint-disable */
 'use client'
@@ -121,11 +122,19 @@ export const REDIRECT_MODES = [
   { id: 'immediate', label: 'Immediate redirect on enter' },
 ]
 
-export const QUIZ_TEMPLATES = [
-  { id: 'default', name: 'Default (Plus Pattern)', desc: 'Classic Leadshook-style with outlined boxes and plus pattern. Familiar, trusted.' },
-  { id: 'minimal', name: 'Minimal Confidential', desc: 'Dark, professional, conservative. Best for legal/medical.' },
-  { id: 'editorial', name: 'Editorial Legal', desc: 'Newspaper-style with serif headlines. Trustworthy, classical.' },
-  { id: 'gradient', name: 'Bold Gradient', desc: 'Vibrant gradients, large display type. Maximum impact.' },
-  { id: 'glass', name: 'Glass Modern', desc: 'Frosted glass cards, airy and modern. Tech/SaaS feel.' },
-  { id: 'compact', name: 'Compact Above-Fold', desc: 'Dense, mobile-first. Maximum content above the fold.' },
-]
+/**
+ * The picker's list, taken from the template set rather than restated.
+ *
+ * It used to be six entries typed out here, which meant the list an operator
+ * chose from and the templates that actually existed were two separate facts
+ * that could disagree. Deriving it means adding a template makes it pickable,
+ * and removing one makes it unpickable, with nothing to keep in step.
+ */
+export const QUIZ_TEMPLATES = SPEC_TEMPLATES.map((t) => ({
+  id: t.id,
+  name: t.name,
+  desc: t.blurb,
+  code: t.code,
+  origin: t.origin,
+  use: t.use,
+}))
