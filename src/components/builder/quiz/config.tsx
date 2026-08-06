@@ -1,7 +1,8 @@
-import { QUIZ_TEMPLATES as SPEC_TEMPLATES } from '@/lib/quiz-templates/model'
 // @ts-nocheck
 /* eslint-disable */
 'use client'
+
+import { QUIZ_TEMPLATES as SPEC_TEMPLATES } from '@/lib/quiz-templates/model'
 
 // Ported verbatim: node category palette (with icons), question-type -> node-type
 // map, and the option lists used across the quiz builder UI.
