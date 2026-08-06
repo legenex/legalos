@@ -163,6 +163,169 @@ export const buildLogEvidenceId = (entry: BuildLogEntry, item: BuildLogItem, ev:
 
 export const ENTRIES: BuildLogEntry[] = [
   {
+    date: '2026-08-06',
+    title: 'Twenty quiz templates, and an honest account of how far they got',
+    summary:
+      'Twenty templates replacing six, built from the design handoff rather than described from it. The structure, the presentation split and the colour ownership are right; the pixel-level match to the reference designs is not there, and the twenty-four required component states are not built. Both are recorded here as open rather than folded into the summary, because the previews shipped today make it easy to believe more was finished than was.',
+    items: [
+      {
+        title: 'The twenty quiz templates from the handoff replace the six',
+        status: 'shipped',
+        detail:
+          'The six quiz templates were six hand-written bags of about twenty-five colour functions each. That is precisely why they could only differ in colour: the shape of a question card was identical in all six and there was nowhere in the structure to say otherwise. It is the same fault the landing-page templates had, found twice in the same codebase for the same reason. The handoff in quizzes/ describes twenty, and usefully it already decomposes each one along four axes - how wide it runs, how it shows progress, how it draws an answer, and what it does about icons - so the twenty are twenty short specs over shared renderers rather than twenty files that would drift apart the moment one was touched. Every one of the twenty uses a DIFFERENT progress form, which is what distinguishes them on screen; nineteen answer forms and fifteen icon policies fill the rest.',
+        files: ['src/lib/quiz-templates/model.ts', 'src/components/public/quiz/forms/progress.tsx', 'src/components/public/quiz/forms/answers.tsx'],
+        evidence: [
+          {
+            label: 'The twenty, drawn live',
+            path: '/admin/quizzes',
+            steps: ['Deployments', 'Edit', 'Render & Embed'],
+          },
+        ],
+      },
+      {
+        title: 'The specs were generated from the handoff, not retyped',
+        status: 'shipped',
+        detail:
+          'The twenty template definitions were extracted programmatically from the library page in the drop rather than transcribed by hand. That matters for a table of twenty rows times seven attributes: a hand-copied width or a mistyped progress form would be invisible until somebody noticed one template looking wrong, and there would be no way to tell whether the code or the handoff was the mistaken one. Generated, the code and the handoff cannot disagree without the extraction being wrong, which is one thing to check instead of a hundred and forty.',
+        files: ['src/lib/quiz-templates/model.ts'],
+      },
+      {
+        title: 'Presentation only, enforced by the signature',
+        status: 'shipped',
+        detail:
+          'The handoff states one rule outright: all twenty templates share the same quiz-deployment contract, presentation only, with questions, branching, consent, routing and webhooks living on the deployment. That is enforced here rather than merely intended. A progress form is handed a position, a total and some labels; an answer form is handed a label, an index and whether it is selected. Neither can read a quiz, because neither is given one. So a template may say that answers are lettered hairline rows, and it may not say what the answers are, where they lead, or what happens after the last one.',
+        files: ['src/components/public/quiz/forms/progress.tsx', 'src/components/public/quiz/forms/answers.tsx'],
+      },
+      {
+        title: 'Quizzes and landing pages now share one colour resolver',
+        status: 'shipped',
+        detail:
+          'The handoff draws all twenty templates in a neutral grey palette and says so deliberately, because a template shown in its own colours would advertise something the deployed quiz will not look like. That is the same conclusion the landing-page side reached independently the day before. Rather than writing a second derivation for quizzes, the landing-page palette resolver was generalised to take any fallback set, so both go through one function. Two derivations would have given a landing page and the quiz embedded inside it two subtly different ideas of what a brand’s dark ground is - both defensible, neither matching - and that shows up as a form that not quite agrees with the page around it.',
+        files: ['src/lib/lp-nodes/palette.ts', 'src/lib/quiz-templates/theme.ts'],
+      },
+      {
+        title: 'The twenty arrived without rewriting the runtime',
+        status: 'shipped',
+        detail:
+          'The preview engine and the public runtime call getTemplateConfig plus three render helpers and a colour audit, and nothing else. Keeping that surface unchanged meant the twenty could land behind the same seam the six sat behind, so neither the runtime nor the preview engine needed touching to receive them. The legacy keys those callers read are derived from the same theme the new renderers use rather than computed separately, so there is exactly one answer to what colour this card is no matter which of the two paths asks.',
+        files: ['src/components/builder/quiz/templates.tsx'],
+      },
+      {
+        title: 'The six old ids still work, and nothing was rewritten',
+        status: 'shipped',
+        detail:
+          'Three live standalone quiz deployments carry the id `default`, one of the six. Stored ids are not rewritten just because the template set grew: each old id resolves forward on read to whichever of the twenty is closest, which is a judgement rather than a fact and is written down in one table so it can be argued with rather than discovered in a diff. The visible consequence is real and worth stating plainly - those three deployments now render as Quiz First rather than as the old default template, so their appearance changed with this deploy.',
+        files: ['src/lib/quiz-templates/model.ts', 'src/lib/quiz-theme.ts'],
+      },
+      {
+        title: 'The picker offers the twenty because it is derived from them',
+        status: 'shipped',
+        detail:
+          'The template picker used to be six entries typed into a config file, which meant the list an operator chose from and the templates that actually existed were two separate facts free to disagree. It is derived from the template set now, so adding a template makes it pickable and removing one makes it unpickable with nothing to keep in step. Verified as twenty on screen rather than assumed.',
+        files: ['src/components/builder/quiz/config.tsx'],
+      },
+      {
+        title: 'A deployment can pick its own progress form',
+        status: 'shipped',
+        detail:
+          'Each template carries one progress treatment and that is what most distinguishes the twenty, so wanting Card Deck’s layout with Sixty Second’s dots was previously a request for a twenty-first template. It is a knob instead. The override moves exactly one axis - the width, the answers, the icons and the faces all stay the template’s - which is what stops twenty templates times twenty forms becoming four hundred things to reason about. Absent means whatever the template says, so nothing changes appearance until somebody chooses, and the picker names what that would be rather than offering a blank option.',
+        files: ['src/components/builder/quiz/QuizBuilderApp.tsx', 'src/collections/FunnelQuizDeployments.ts'],
+        evidence: [
+          {
+            label: 'Choosing a progress form',
+            path: '/admin/quizzes',
+            steps: ['Deployments', 'Edit', 'Render & Embed', 'Progress'],
+          },
+        ],
+      },
+      {
+        title: 'The migration is guarded on its own table existing',
+        status: 'shipped',
+        detail:
+          'Unusual, and deliberate. The six funnel_* tables are finding F001: they are declared on collections and created only by Payload’s dev auto-push, with no committed migration creating any of them. An unguarded ALTER would therefore fail the entire migration run on any database where that push has never happened, for a table this migration did not create and is not responsible for. The column is nullable so no existing row needs backfilling, and the DDL is retry-safe per house style. This does not fix F001; it declines to make it worse.',
+        files: ['src/migrations/20260806_120000_quiz_deployment_progress_form.ts', 'src/migrations/index.ts'],
+      },
+      {
+        title: 'The picker shows what each template actually draws',
+        status: 'shipped',
+        detail:
+          'Choosing among twenty templates from a name and a sentence is guesswork, and most of them nobody here has ever seen. Each card now renders a live miniature through the same progress and answer components the deployed quiz uses, in the brand’s own colours. A real render rather than a stored thumbnail on purpose: a screenshot goes stale the first time a template changes and then quietly lies about what is being chosen, which would matter most for exactly the templates least familiar. It is scaled rather than re-specified at small sizes, so a template whose answers are oversized looks oversized in its own card. The selected card also reflects the progress override, so the two controls on that tab agree about what they are producing.',
+        files: ['src/components/builder/quiz/TemplatePreview.tsx'],
+      },
+      {
+        title: 'Six preview cards clip their contents',
+        status: 'partial',
+        detail:
+          'Found by looking at the screen rather than reported. Sixty Second, Answer First, Case Router, Incident Scene, Fullscreen Focus and Card Deck are cut off at the preview window’s fixed height, and Case File Console’s tab row collides with its percent-complete chip. The templates themselves are unaffected - this is the miniature’s sizing, not the thing it is a miniature of - but a preview that crops the part which distinguishes a template is failing at the one job it has.',
+        files: ['src/components/builder/quiz/TemplatePreview.tsx'],
+      },
+      {
+        title: 'Pixel parity with the reference designs is NOT achieved',
+        status: 'open',
+        detail:
+          'Stated plainly because the previews could easily imply otherwise. What was built came from the handoff’s SPEC TABLE - four attributes per template - not from the twenty reference pages themselves, which carry the complete design: every measurement, weight, radius, letter-spacing and rule. So the result is structurally correct and dimensionally approximate. Closing it needs a different method than the one used so far: porting each template from its reference page’s actual CSS, then screenshotting the reference and our render at the same width and diffing them, one template at a time. The twenty pages are already unpacked, so the source is in hand and the work is a genuine pass through twenty designs rather than one change. One conflict has to be settled first, because it decides what the same even means: the reference pages are drawn in a neutral grey palette by design, and the brand owns colour by instruction. Those cannot both be literally true, so the target taken is identical in every respect except colour - geometry, type, spacing, weights, rules and states matched exactly, hues substituted.',
+        files: ['src/lib/quiz-templates/model.ts'],
+      },
+      {
+        title: 'The twenty-four component states are not built',
+        status: 'open',
+        detail:
+          'The handoff ships a second document specifying twenty-four states every one of the twenty templates must express, and it is an acceptance checklist rather than styling notes. Several do not exist anywhere in the quiz runtime today: network failure with a retry that keeps answers locally, resume for a returning visitor, multi-select where a none option clears the others, a validation error carrying text and an icon and a field ring rather than colour alone, a loading skeleton with inert controls, a respectful alternate completion for a non-qualifying answer set, and a redirect state with a manual fallback. Four field types are missing with them: ZIP with a five-digit numeric mask, multi-select, a split month/day/year date, and consent as a first-class field rather than a checkbox bolted to a form.',
+      },
+    ],
+    verification: [
+      {
+        label: 'Typecheck',
+        state: 'verified',
+        detail: 'pnpm typecheck on the server, clean, across every push in this piece of work.',
+      },
+      {
+        label: 'The live standalone quiz still runs',
+        state: 'verified',
+        detail:
+          'https://getwhatyoureowed.co/s/don-t-settle returns 200 with four answer buttons rendering through the new answer form, the real question text, and no page or console errors. That deployment is on a legacy template id, so it also exercises the forward mapping.',
+      },
+      {
+        label: 'The picker offers twenty, and progress offers twenty-one',
+        state: 'verified',
+        detail:
+          'Counted in the DOM after driving to the screen: twenty template names present, and the progress select carrying twenty-one options - the twenty forms plus Match the template, which correctly names the current template\'s own form. Three earlier attempts to verify this reported zero, every one of them because the probe was on the wrong tab; the picker is under Render & Embed, not Basics. Worth recording that the first three readings were wrong about the product rather than about the code.',
+      },
+      {
+        label: 'The previews render',
+        state: 'verified',
+        detail:
+          'All twenty miniatures draw, visibly distinct: the factor rail with its RECORDED stamps, the deadline rail running from accident to filing deadline, the vertical milestone rail, the four-tab case-file row, the card diamonds, the named path nodes. Six of them clip, which is logged above as a defect rather than left for someone else to notice.',
+      },
+      {
+        label: 'Pixel parity against the reference designs',
+        state: 'not-run',
+        detail:
+          'Not attempted and not achieved. No render has been diffed against any of the twenty reference pages. See the open item above for the method that would close it.',
+      },
+      {
+        label: 'Nineteen of the twenty templates in use',
+        state: 'not-run',
+        detail:
+          'Only the template on the live deployment has been seen running a real quiz end to end. The other nineteen have been seen only as miniatures in the picker, which exercises their progress and answer forms but not a full flow through contact, consent and completion.',
+      },
+      {
+        label: 'The twenty-four component states',
+        state: 'not-run',
+        detail: 'Not built, so not tested. Named individually in the open item above rather than summarised, because the list is the specification.',
+      },
+    ],
+    openIssues: [
+      'Pixel parity with the twenty reference designs is not achieved. What shipped is spec-derived, not ported from the reference CSS.',
+      'The twenty-four required component states are not implemented, nor are the four field types they depend on.',
+      'Six preview cards clip their contents, and Case File Console\'s tab row collides with its status chip.',
+      'The progress_form column was applied by hand with psql after pnpm payload migrate hung and had to be killed. The column exists and the migration is idempotent, but it is NOT recorded as applied - run pnpm payload migrate so the ledger matches the database.',
+      'Killing that migrate left the service stopped for a few minutes before it was noticed and restarted. Nothing about the deploy sequence catches that; a stop without a matching start is currently invisible until somebody loads a page.',
+      'Three live quiz deployments still carry the legacy id `default` and now render as Quiz First. They should be set explicitly rather than left on a forwarded id.',
+      'F001 is untouched: the six funnel_* tables still have no committed migration creating them. This work added a guarded column to one of them rather than fixing the underlying gap.',
+    ],
+  },
+  {
     date: '2026-08-05',
     title: 'A landing page is a tree of nodes, and a template is a structure',
     summary:
