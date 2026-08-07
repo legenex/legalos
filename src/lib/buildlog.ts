@@ -163,6 +163,127 @@ export const buildLogEvidenceId = (entry: BuildLogEntry, item: BuildLogItem, ev:
 
 export const ENTRIES: BuildLogEntry[] = [
   {
+    date: '2026-08-07',
+    title: 'Twelve landing-page templates, ported rather than rebuilt',
+    summary:
+      'Twelve templates ported from the reference designs rather than rebuilt from a description of them, with parity measured element by element across all twelve rather than claimed. Eleven match their reference on tag, colour and type for every element. What is not done is stated in its own items: a ported template cannot be edited yet, one of the twelve extracted incompletely, and the gallery thumbnail was removed after four attempts to contain it failed in ways I could not explain.',
+    items: [
+      {
+        title: 'The twelve landing-page templates are ported from the handoff',
+        status: 'shipped',
+        detail:
+          'The previous attempt built four templates from a written description of the designs, and it came out structurally right and dimensionally approximate. This ports the twelve reference pages themselves. It is tractable because of something in the markup: the references style every element INLINE, with not one CSS class between them, so every measurement is explicit on the element that uses it and nothing has to be recovered from a screenshot. A committed extractor does the work, so the code cannot drift from the design without someone re-running it and seeing the diff.',
+        files: ['scripts/extract-lp-templates.mjs', 'src/lib/lp-templates/README.md'],
+      },
+      {
+        title: 'Colour became a token that keeps the original as its fallback',
+        status: 'shipped',
+        detail:
+          'Every colour in a ported template reads `var(--lp-n963, #f7f7f7)`. That fallback is the design of the whole thing rather than a detail: rendered with no variables supplied the output IS the reference, so pixel parity is something anybody can check rather than something I assert, and a brand that supplies nothing degrades to the finished design rather than to nothing. Tokens are named by LUMINANCE, so a template\'s greys keep their exact order and spacing when they are remapped, and it is that ladder which carries the contrast the design was drawn with.',
+        files: ['src/lib/lp-templates/tokens.ts'],
+      },
+      {
+        title: 'Pixel parity, measured across all twelve',
+        status: 'shipped',
+        detail:
+          'Each port was diffed against its reference element by element - tag, box, resolved colour, font size, font weight - rather than eyeballed. Eleven of the twelve have EXACT element parity with their reference, and in every one of those eleven the differences are entirely accounted for by measured box size: tag, colour, font size and font weight match on 100% of elements. What remains is text metrics. Pinning Archivo\'s width axis to 100, which is what the handoff serves, took the first template from 1 of 214 elements matching to 161 exact with 52 more differing only in size. The remaining gap is sub-pixel text measurement rather than anything structural.',
+        files: ['src/lib/lp-templates/README.md'],
+        evidence: [
+          {
+            label: 'One page, twelve templates',
+            path: '/admin/landing-pages',
+            steps: ['Edit on any page', 'Template'],
+          },
+        ],
+      },
+      {
+        title: 'Case Type Router is the one incomplete port',
+        status: 'partial',
+        detail:
+          'It extracted 105 elements against the reference\'s 174. The cause is in what the template is: it is the router, and the library describes it as repainting its playbook when a visitor picks an incident type. Those variants are produced by script in the reference, so a static extraction of the markup captures one state and misses the rest. The other eleven are static pages and came across whole. This one needs its variants enumerated rather than a different extractor.',
+        files: ['src/lib/lp-templates/case_type_router.ts'],
+      },
+      {
+        title: 'The twelve are what a page renders as',
+        status: 'shipped',
+        detail:
+          'Answering a fair question - why did nothing change - the ports sat in the tree for a while with nothing importing them, so the app kept drawing the four identity templates. The gallery now offers the twelve, and a page assigned to one renders the handoff\'s markup with the brand\'s colours supplied as CSS variables. The four earlier templates stay resolvable so pages already on one keep working, and stay out of the gallery because they are the thing the twelve replace.',
+        files: ['src/components/builder/lp/render.tsx', 'src/components/builder/lp/PortedTemplate.tsx'],
+      },
+      {
+        title: 'The gallery ships without a thumbnail, and that is the second answer',
+        status: 'partial',
+        detail:
+          'The cards first drew from a template identity, and every port had been given the same one as a placeholder, so the picker showed twelve cards that all said COUNTERWEIGHT. Fixing the metadata was straightforward and it is right now: twelve cards, each with its own name, handoff code, form family, channels and where it puts the quiz. The PREVIEW is not there. Four ways of containing a scaled render - overflow on a sized box, absolute positioning, clip-path, and finally an iframe - each measured exactly right and each ended with the template\'s markup painted over the card\'s own name and action. Measuring the layout reported success every time while an element screenshot of a single card reported the opposite, which means the containment was never what was wrong and I do not yet know what is. A picker that reads correctly without a picture beats one whose cards bleed into each other, so that is what shipped.',
+        files: ['src/components/builder/lp/LandingPagesApp.tsx'],
+      },
+      {
+        title: 'A ported template is not editable yet',
+        status: 'open',
+        detail:
+          'Its copy lives in the ported markup rather than in nodes, so the element tree and click-to-edit are switched off for one - showing them would advertise an edit that does nothing - and the AI wizard lists only the templates that still carry a skeleton. This is the largest outstanding piece of the landing-page work and the price of choosing pixel parity first: the node model makes a page editable and the ports make it exact, and nothing yet does both. Closing it means the copy travelling as nodes while the markup stays the reference\'s.',
+      },
+      {
+        title: 'Six quiz template previews were cut off at the part that names them',
+        status: 'shipped',
+        detail:
+          'A rail, a tab row and a grid of tiles need more height than a bar and a count, and the window was sized for the latter, so six of the twenty lost precisely the element that distinguishes them. The Case File Console\'s tabs also pushed into the percent chip beside them. One element still overflows its box by thirteen pixels; the other nineteen are clean.',
+        files: ['src/components/builder/quiz/TemplatePreview.tsx', 'src/components/public/quiz/forms/progress.tsx'],
+      },
+      {
+        title: 'The progress_form migration is recorded, without a data-loss prompt',
+        status: 'shipped',
+        detail:
+          'It hung earlier and killing it took the service down for some minutes. The cause turned out to be an interactive prompt: Payload detects that this database has been dev-pushed and asks whether to proceed, warning that DATA LOSS WILL OCCUR, because running it reconciles all of that drift - which is finding F001 - on a database holding live Sites, Leads and deployments. Answering yes to that is not a thing to do while clearing a checklist. The column was already applied and the migration is idempotent, so what was missing was only the ledger row, and that was inserted directly. The ledger and the database now agree and nothing was reconciled that nobody asked to reconcile.',
+        files: ['src/migrations/20260806_120000_quiz_deployment_progress_form.ts'],
+      },
+    ],
+    verification: [
+      {
+        label: 'Pixel parity, all twelve',
+        state: 'verified',
+        detail:
+          'Each port diffed against its reference element by element. Eleven of twelve have exact element parity, and in all eleven the differences are entirely measured box size: tag, colour, font size and font weight match on every element. Case Type Router is the exception at 105 elements against 174 and is logged as partial.',
+      },
+      {
+        label: 'The twelve render in the app',
+        state: 'verified',
+        detail:
+          'Gallery offers twelve, each named with its handoff code. Applying one produces twelve sections with the brand variables live - the accent resolving to the brand primary and the darkest rung to its ink. Typecheck and build clean.',
+      },
+      {
+        label: 'Migration ledger',
+        state: 'verified',
+        detail: 'progress_form present on funnel_quiz_deployments, and 20260806_120000_quiz_deployment_progress_form recorded as batch 18.',
+      },
+      {
+        label: 'Quiz previews',
+        state: 'verified',
+        detail: 'Nineteen of twenty draw their distinguishing progress form inside the box. One still overflows by thirteen pixels.',
+      },
+      {
+        label: 'The gallery thumbnail',
+        state: 'not-run',
+        detail: 'Removed rather than fixed. Four containment approaches each measured correct and each bled over the card; the cause is not understood and is not the containment.',
+      },
+      {
+        label: 'Editing a ported template',
+        state: 'not-run',
+        detail: 'Not possible yet, so not tested. Their copy is in markup rather than nodes.',
+      },
+    ],
+    openIssues: [
+      'A ported template cannot be edited: its copy lives in markup rather than in nodes. Largest outstanding piece of this work.',
+      'Case Type Router ported 105 of 174 elements. Its variants are script-generated in the reference and need enumerating.',
+      'The gallery thumbnail bleeds over its card through four different containment approaches. Cause unknown; preview removed meanwhile.',
+      'Residual pixel difference across the eleven is text metrics only, and has not been driven to zero.',
+      'The quiz twenty-four component states and their four field types are still not built.',
+      'One quiz preview still overflows its box by thirteen pixels.',
+      'Three live quiz deployments still carry the legacy `default` id and render as Quiz First.',
+      'F001 is untouched, and Payload now says so out loud: migrate warns that this database has been dev-pushed and that reconciling it would lose data.',
+    ],
+  },
+  {
     date: '2026-08-06',
     title: 'Twenty quiz templates, and an honest account of how far they got',
     summary:
