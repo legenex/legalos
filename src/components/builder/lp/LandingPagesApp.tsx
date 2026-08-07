@@ -231,7 +231,12 @@ const TemplateGalleryModal = ({ open, onClose, onPickLook, onPickStructure, curr
                 {/* flexShrink:0 is load-bearing: this sits in a flex column,
                     and without it the fixed height collapses to nothing and the
                     preview silently disappears. */}
-                <div style={{ height: 190, flexShrink: 0, overflow: 'hidden', position: 'relative', backgroundColor: '#fff', borderBottom: `1px solid ${T.border}` }}>
+                {/* clip-path rather than overflow. The scaled render was
+                    painting straight through an overflow:hidden box that
+                    measured correctly - 190px tall, clipping computed - and
+                    over the metadata below it. clip-path is unconditional and
+                    does not care what the descendant's positioning is doing. */}
+                <div style={{ height: 190, flexShrink: 0, overflow: 'hidden', clipPath: 'inset(0)', isolation: 'isolate', position: 'relative', backgroundColor: '#fff', borderBottom: `1px solid ${T.border}` }}>
                   {/* Absolute, so it is out of flow and the fixed height above
                       actually governs. A transform does not shrink the box an
                       element occupies, so left in flow it pushed the card open
