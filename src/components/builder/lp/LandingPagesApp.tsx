@@ -20,7 +20,7 @@ import {
 } from '../ui'
 import {
   TEMPLATES, ANGLES, LivePreview, PREVIEW_BRAND_DEFAULT,
-  templateFor, templatePreviewSurface, templateLook, templatePalette,
+  templateFor, templatePreviewSurface, templateLook, templatePalette, GALLERY_TEMPLATES,
 } from './render'
 import { BrandQuickEdit } from '../brand/BrandQuickEdit'
 import { NodeTree } from './NodeTree'
@@ -218,7 +218,7 @@ const TemplateGalleryModal = ({ open, onClose, onPickLook, onPickStructure, curr
           <IconBtn icon={X} onClick={onClose} />
         </div>
         <div style={{ padding: 22, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
-          {TEMPLATES.map((t) => {
+          {GALLERY_TEMPLATES.map((t) => {
             const s = templatePreviewSurface(t, brand)
             const look = templateLook(t)
             const isCurrent = t.id === currentTemplateId
@@ -393,7 +393,7 @@ const AINewLPWizard = ({ open, onClose, onCreate }) => {
             <div>
               <Label>Template</Label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-                {TEMPLATES.map((t) => {
+                {GALLERY_TEMPLATES.map((t) => {
                   const s = templatePreviewSurface(t, null)
                   const usable = Boolean(t.skeleton)
                   return (

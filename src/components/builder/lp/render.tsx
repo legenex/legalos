@@ -26,6 +26,8 @@ import { isVisible, TONES } from '@/lib/lp-nodes/model'
 import { deriveSurface, groundFor, lookOf } from '@/lib/lp-nodes/surface'
 import { resolveLpPalette } from '@/lib/lp-nodes/palette'
 import { skeletonFor } from '@/lib/lp-skeletons'
+import { PORTED_TEMPLATES, PORTED_BY_SLUG, isPortedTemplate } from '@/lib/lp-templates'
+import { PortedTemplateView } from './PortedTemplate'
 import { SectionNode } from './nodes/SectionNode'
 import { T } from '../ui'
 
@@ -60,19 +62,47 @@ export const SECTION_TONES = TONES
  */
 const ANGLE_FOR_POSITION = { adversary: 'pain', clarity: 'community', authority: 'authority', direct: 'urgency' }
 
-export const TEMPLATES = LP_IDENTITIES.map((identity) => {
-  const skeleton = skeletonFor(identity.id)
-  return {
-    id: identity.id,
-    name: identity.name,
-    identity,
-    skeleton,
-    structure: skeleton ? skeleton.summary : null,
-    angleDefault: ANGLE_FOR_POSITION[identity.position] || 'pain',
-    blurb: `${identity.position} - ${identity.tagline}`,
-    hookExample: identity.tagline,
-  }
-})
+export const TEMPLATES = [
+  // The twelve ported from the handoff. These are what a page renders as, and
+  // they are pixel ports rather than reconstructions.
+  ...PORTED_TEMPLATES.map((t) => ({
+    id: t.slug,
+    name: t.name,
+    code: t.code,
+    family: t.family,
+    ported: true,
+    identity: getLpIdentity('a'),
+    skeleton: null,
+    structure: t.blurb,
+    angleDefault: 'pain',
+    blurb: t.blurb,
+    channels: t.channels,
+    quizPlacement: t.quiz,
+    ground: t.ground,
+    hookExample: t.blurb,
+  })),
+  // The four earlier identity templates. Kept resolvable so pages already
+  // assigned to one keep rendering, and kept out of the gallery because they
+  // are the thing the twelve replace.
+  ...LP_IDENTITIES.map((identity) => {
+    const skeleton = skeletonFor(identity.id)
+    return {
+      id: identity.id,
+      name: identity.name,
+      identity,
+      ported: false,
+      legacy: true,
+      skeleton,
+      structure: skeleton ? skeleton.summary : null,
+      angleDefault: ANGLE_FOR_POSITION[identity.position] || 'pain',
+      blurb: `${identity.position} - ${identity.tagline}`,
+      hookExample: identity.tagline,
+    }
+  }),
+]
+
+/** What the gallery offers: the twelve. */
+export const GALLERY_TEMPLATES = TEMPLATES.filter((t) => t.ported)
 
 export const templateFor = (templateId) =>
   TEMPLATES.find((t) => t.id === templateId) || TEMPLATES[0]
@@ -148,6 +178,22 @@ export const LivePreview = ({
   const template = templateFor(landingPage.templateId)
   const identity = template.identity || getLpIdentity(landingPage.templateId)
   const previewBrand = brand || PREVIEW_BRAND_DEFAULT
+
+  // A ported template renders the handoff's own markup. Its copy is not yet
+  // node-backed, so the element tree and the click-to-edit affordances are not
+  // offered for one - showing them would advertise an edit that does nothing.
+  if (isPortedTemplate(landingPage.templateId)) {
+    return (
+      <div
+        className={editable ? 'lp-preview-root' : 'lp-preview-root lp-public-root'}
+        style={editable
+          ? { borderRadius: 10, overflow: 'hidden', boxShadow: '0 8px 32px -12px rgba(0,0,0,0.4)', border: `1px solid ${T.border}` }
+          : { minHeight: '100vh' }}
+      >
+        <PortedTemplateView slug={landingPage.templateId} brand={previewBrand} />
+      </div>
+    )
+  }
 
   // Whatever shape the page is stored in comes out as nodes. Pages written
   // before the node model exist in the database and are converted on every
