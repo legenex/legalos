@@ -24,7 +24,7 @@ import {
 } from './render'
 import { BrandQuickEdit } from '../brand/BrandQuickEdit'
 import { NodeTree } from './NodeTree'
-import { PortedTemplateView, portedTemplateDocument } from './PortedTemplate'
+import { PortedTemplateView } from './PortedTemplate'
 import { NodeInspector } from './NodeInspector'
 import { treeIcon } from './nodes/icons'
 import {
@@ -231,21 +231,19 @@ const TemplateGalleryModal = ({ open, onClose, onPickLook, onPickStructure, curr
                 {/* flexShrink:0 is load-bearing: this sits in a flex column,
                     and without it the fixed height collapses to nothing and the
                     preview silently disappears. */}
-                {/* An iframe, because three CSS attempts at containing a
-                    scaled render - overflow on a sized box, absolute
-                    positioning, clip-path - each measured correct and each
-                    painted through the card anyway. An iframe clips because it
-                    is a separate document, not because of a property. */}
-                <div style={{ height: 190, flexShrink: 0, position: 'relative', backgroundColor: '#fff', borderBottom: `1px solid ${T.border}`, overflow: 'hidden' }}>
-                  <iframe
-                    title={`${t.name} preview`}
-                    tabIndex={-1}
-                    aria-hidden="true"
-                    scrolling="no"
-                    srcDoc={portedTemplateDocument(t.id, brand)}
-                    style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 594, border: 0, transform: 'scale(0.32)', transformOrigin: 'top left', pointerEvents: 'none' }}
-                  />
-                </div>
+                {/* No thumbnail here, deliberately, and this is the second
+                    honest answer rather than the first one that worked.
+                    Four containment approaches - overflow on a sized box,
+                    absolute positioning, clip-path, and finally an iframe -
+                    each measured exactly right and each ended with the
+                    template's own markup painting over this card's name and
+                    action. Measuring the layout kept reporting success while
+                    an element screenshot kept showing otherwise, so whatever
+                    is wrong is not the containment, and shipping a picker
+                    whose cards bleed into each other is worse than shipping
+                    one that reads correctly without a picture. The preview
+                    belongs here and will come back once the cause is actually
+                    understood; see the build log. */}
                 <div style={{ padding: 13, display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 13.5, fontWeight: 700, color: T.text }}>{t.name}</span>
