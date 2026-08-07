@@ -218,7 +218,7 @@ const TemplateGalleryModal = ({ open, onClose, onPickLook, onPickStructure, curr
           </div>
           <IconBtn icon={X} onClick={onClose} />
         </div>
-        <div style={{ padding: 22, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
+        <div style={{ padding: 22, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, alignItems: 'start' }}>
           {GALLERY_TEMPLATES.map((t) => {
             const isCurrent = t.id === currentTemplateId
             return (
@@ -228,7 +228,10 @@ const TemplateGalleryModal = ({ open, onClose, onPickLook, onPickStructure, curr
                 {/* A real render of the template, shrunk. The cards used to draw
                     an identity's wordmark, which made all twelve identical: the
                     ports have no identity of their own, they ARE the design. */}
-                <div style={{ height: 190, overflow: 'hidden', position: 'relative', backgroundColor: '#fff', borderBottom: `1px solid ${T.border}` }}>
+                {/* flexShrink:0 is load-bearing: this sits in a flex column,
+                    and without it the fixed height collapses to nothing and the
+                    preview silently disappears. */}
+                <div style={{ height: 190, flexShrink: 0, overflow: 'hidden', position: 'relative', backgroundColor: '#fff', borderBottom: `1px solid ${T.border}` }}>
                   <div style={{ width: 1280, transform: 'scale(0.32)', transformOrigin: 'top left', pointerEvents: 'none' }}>
                     <PortedTemplateView slug={t.id} brand={brand} />
                   </div>
