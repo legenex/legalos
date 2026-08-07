@@ -24,7 +24,7 @@ import {
 } from './render'
 import { BrandQuickEdit } from '../brand/BrandQuickEdit'
 import { NodeTree } from './NodeTree'
-import { PortedTemplateView } from './PortedTemplate'
+import { PortedTemplateView, portedTemplateDocument } from './PortedTemplate'
 import { NodeInspector } from './NodeInspector'
 import { treeIcon } from './nodes/icons'
 import {
@@ -231,20 +231,20 @@ const TemplateGalleryModal = ({ open, onClose, onPickLook, onPickStructure, curr
                 {/* flexShrink:0 is load-bearing: this sits in a flex column,
                     and without it the fixed height collapses to nothing and the
                     preview silently disappears. */}
-                {/* clip-path rather than overflow. The scaled render was
-                    painting straight through an overflow:hidden box that
-                    measured correctly - 190px tall, clipping computed - and
-                    over the metadata below it. clip-path is unconditional and
-                    does not care what the descendant's positioning is doing. */}
-                <div style={{ height: 190, flexShrink: 0, overflow: 'hidden', clipPath: 'inset(0)', isolation: 'isolate', position: 'relative', backgroundColor: '#fff', borderBottom: `1px solid ${T.border}` }}>
-                  {/* Absolute, so it is out of flow and the fixed height above
-                      actually governs. A transform does not shrink the box an
-                      element occupies, so left in flow it pushed the card open
-                      to the full height of a landing page. */}
-                  <div style={{ position: 'absolute', top: 0, left: 0, width: 1280, transform: 'scale(0.32)', transformOrigin: 'top left', pointerEvents: 'none' }}>
-                    <PortedTemplateView slug={t.id} brand={brand} />
-                  </div>
-                  <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', boxShadow: 'inset 0 -34px 26px -18px rgba(0,0,0,0.22)' }} />
+                {/* An iframe, because three CSS attempts at containing a
+                    scaled render - overflow on a sized box, absolute
+                    positioning, clip-path - each measured correct and each
+                    painted through the card anyway. An iframe clips because it
+                    is a separate document, not because of a property. */}
+                <div style={{ height: 190, flexShrink: 0, position: 'relative', backgroundColor: '#fff', borderBottom: `1px solid ${T.border}`, overflow: 'hidden' }}>
+                  <iframe
+                    title={`${t.name} preview`}
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    scrolling="no"
+                    srcDoc={portedTemplateDocument(t.id, brand)}
+                    style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 594, border: 0, transform: 'scale(0.32)', transformOrigin: 'top left', pointerEvents: 'none' }}
+                  />
                 </div>
                 <div style={{ padding: 13, display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>

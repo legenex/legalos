@@ -44,3 +44,27 @@ export const PortedTemplateView = ({ slug, brand, className = '' }) => {
     </div>
   )
 }
+
+/**
+ * A ported template as a complete, standalone HTML document.
+ *
+ * For thumbnails. Three attempts to contain a scaled render with CSS - overflow
+ * on a sized box, absolute positioning, then clip-path - all measured correct
+ * and all painted straight through the card anyway. An iframe cannot do that:
+ * isolation is structural rather than a property the content might defeat.
+ *
+ * It also means a template's markup cannot reach the admin's own styles, or be
+ * reached by them, which is worth having regardless of the clipping.
+ */
+export const portedTemplateDocument = (slug, brand) => {
+  const template = PORTED_BY_SLUG[slug]
+  if (!template) return ''
+  const palette = resolveLpPalette(getLpIdentity('a'), brand)
+  const vars = Object.entries(templateStyle(template, palette))
+    .map(([k, v]) => `${k}:${v}`)
+    .join(';')
+  return `<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="${TEMPLATE_FONTS_HREF}">
+<style>*,*::before,*::after{box-sizing:border-box}html,body{margin:0}body{${vars}}</style>
+</head><body>${template.html}</body></html>`
+}
