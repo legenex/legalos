@@ -232,7 +232,11 @@ const TemplateGalleryModal = ({ open, onClose, onPickLook, onPickStructure, curr
                     and without it the fixed height collapses to nothing and the
                     preview silently disappears. */}
                 <div style={{ height: 190, flexShrink: 0, overflow: 'hidden', position: 'relative', backgroundColor: '#fff', borderBottom: `1px solid ${T.border}` }}>
-                  <div style={{ width: 1280, transform: 'scale(0.32)', transformOrigin: 'top left', pointerEvents: 'none' }}>
+                  {/* Absolute, so it is out of flow and the fixed height above
+                      actually governs. A transform does not shrink the box an
+                      element occupies, so left in flow it pushed the card open
+                      to the full height of a landing page. */}
+                  <div style={{ position: 'absolute', top: 0, left: 0, width: 1280, transform: 'scale(0.32)', transformOrigin: 'top left', pointerEvents: 'none' }}>
                     <PortedTemplateView slug={t.id} brand={brand} />
                   </div>
                   <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', boxShadow: 'inset 0 -34px 26px -18px rgba(0,0,0,0.22)' }} />
