@@ -101,8 +101,19 @@ export const TEMPLATES = [
   }),
 ]
 
-/** What the gallery offers: the twelve. */
+/** What the gallery offers: the twelve ports. */
 export const GALLERY_TEMPLATES = TEMPLATES.filter((t) => t.ported)
+
+/**
+ * Templates the AI wizard can build into.
+ *
+ * The wizard instantiates a SKELETON and writes copy into its nodes, so it can
+ * only use a template that has one. The twelve ports do not: their copy lives
+ * in the ported markup rather than in nodes, which is exactly the gap that
+ * makes them un-editable today. Filtering here rather than showing twelve
+ * disabled cards keeps the wizard honest about what it can actually do.
+ */
+export const SKELETON_TEMPLATES = TEMPLATES.filter((t) => t.skeleton)
 
 export const templateFor = (templateId) =>
   TEMPLATES.find((t) => t.id === templateId) || TEMPLATES[0]

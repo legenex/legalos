@@ -20,10 +20,11 @@ import {
 } from '../ui'
 import {
   TEMPLATES, ANGLES, LivePreview, PREVIEW_BRAND_DEFAULT,
-  templateFor, templatePreviewSurface, templateLook, templatePalette, GALLERY_TEMPLATES,
+  templateFor, templatePreviewSurface, templateLook, templatePalette, GALLERY_TEMPLATES, SKELETON_TEMPLATES,
 } from './render'
 import { BrandQuickEdit } from '../brand/BrandQuickEdit'
 import { NodeTree } from './NodeTree'
+import { PortedTemplateView } from './PortedTemplate'
 import { NodeInspector } from './NodeInspector'
 import { treeIcon } from './nodes/icons'
 import {
@@ -209,59 +210,45 @@ const TemplateGalleryModal = ({ open, onClose, onPickLook, onPickStructure, curr
   if (!open) return null
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 110, backgroundColor: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 960, maxHeight: '88vh', backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 1180, maxHeight: '90vh', backgroundColor: T.bg, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: 22, borderBottom: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>Templates</div>
-            <div style={{ fontSize: 11.5, color: T.textMute, marginTop: 2 }}>A template is a look and a structure. The colours are the brand&apos;s, so these are drawn in the brand you are previewing as. Taking the look repaints this page; taking the structure replaces its sections.</div>
+            <div style={{ fontSize: 11.5, color: T.textMute, marginTop: 2 }}>Twelve templates, ported from the design handoff. Each preview is a real render in the brand you are previewing as, so what you see is what the page becomes.</div>
           </div>
           <IconBtn icon={X} onClick={onClose} />
         </div>
         <div style={{ padding: 22, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
           {GALLERY_TEMPLATES.map((t) => {
-            const s = templatePreviewSurface(t, brand)
-            const look = templateLook(t)
             const isCurrent = t.id === currentTemplateId
-            const mark = t.identity.mark
             return (
               // Tagged with its id so a capture job can drive a named card
               // rather than guessing at a card from the text inside it.
               <div key={t.id} data-template={t.id} style={{ backgroundColor: T.bgElev, border: `2px solid ${isCurrent ? T.primary : T.border}`, borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ height: 128, backgroundColor: s.bg, padding: 18, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                    <svg viewBox="0 0 40 40" width={24} height={24} aria-hidden="true">
-                      <path d={mark.d} fill={s.isDark ? mark.fillDark : mark.fill} stroke={s.isDark ? mark.strokeDark : mark.stroke} strokeWidth={mark.strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
-                      <path d={mark.d2} fill={s.isDark ? mark.fill2Dark : mark.fill2} />
-                    </svg>
-                    <span style={{ fontFamily: look.display, fontWeight: look.displayWeight, fontSize: 18, color: s.text, textTransform: look.wordmarkTransform, letterSpacing: look.wordmarkTracking }}>{t.identity.wordmark}</span>
+                {/* A real render of the template, shrunk. The cards used to draw
+                    an identity's wordmark, which made all twelve identical: the
+                    ports have no identity of their own, they ARE the design. */}
+                <div style={{ height: 190, overflow: 'hidden', position: 'relative', backgroundColor: '#fff', borderBottom: `1px solid ${T.border}` }}>
+                  <div style={{ width: 1280, transform: 'scale(0.32)', transformOrigin: 'top left', pointerEvents: 'none' }}>
+                    <PortedTemplateView slug={t.id} brand={brand} />
                   </div>
-                  <div style={{ fontFamily: look.body, fontSize: 12.5, color: s.muted, lineHeight: 1.45 }}>{t.identity.tagline}</div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    {[s.accentFill, s.card, s.text].map((c, i) => (
-                      <span key={i} style={{ width: 16, height: 16, borderRadius: look.radiusPill === '999px' ? 8 : 3, backgroundColor: c, border: `1px solid ${s.line}` }} />
-                    ))}
-                  </div>
+                  <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', boxShadow: 'inset 0 -34px 26px -18px rgba(0,0,0,0.22)' }} />
                 </div>
-                <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{t.name}</span>
+                <div style={{ padding: 13, display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 13.5, fontWeight: 700, color: T.text }}>{t.name}</span>
+                    <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 9, color: T.textLow }}>{t.code}</span>
+                    <Pill color={T.purple}>{String(t.family).toUpperCase()} FORM</Pill>
                     {isCurrent && <Pill color={T.primary}>CURRENT</Pill>}
                   </div>
-                  <div style={{ fontSize: 11, color: T.textMute, lineHeight: 1.5, flex: 1 }}>
-                    {t.structure || 'Structure not built yet. The look applies; the shape stays as this page already has it.'}
+                  <div style={{ fontSize: 11, color: T.textMute, lineHeight: 1.5, flex: 1 }}>{t.blurb}</div>
+                  <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 9, color: T.textLow, lineHeight: 1.6 }}>
+                    <div>CHANNELS {'·'} {t.channels}</div>
+                    <div>QUIZ {'·'} {t.quizPlacement}</div>
                   </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <Btn variant="secondary" size="sm" onClick={() => onPickLook(t.id)}>Use this look</Btn>
-                    {t.skeleton ? (
-                      confirming === t.id ? (
-                        <Btn variant="danger" size="sm" icon={Check} onClick={() => { onPickStructure(t.id); onClose() }}>Replace, losing copy</Btn>
-                      ) : (
-                        <Btn variant="ghost" size="sm" icon={Layers} onClick={() => setConfirming(t.id)}>Use this structure</Btn>
-                      )
-                    ) : (
-                      <Pill color={T.warning}>NO STRUCTURE YET</Pill>
-                    )}
-                  </div>
+                  <Btn variant={isCurrent ? 'secondary' : 'primary'} size="sm" onClick={() => { onPickLook(t.id); onClose() }}>
+                    {isCurrent ? 'Currently applied' : 'Use this template'}
+                  </Btn>
                 </div>
               </div>
             )
@@ -288,7 +275,7 @@ const TemplateGalleryModal = ({ open, onClose, onPickLook, onPickStructure, curr
  * template's shape is the failure this whole change is about.
  */
 const AINewLPWizard = ({ open, onClose, onCreate }) => {
-  const withStructure = TEMPLATES.filter((t) => t.skeleton)
+  const withStructure = SKELETON_TEMPLATES
   const [step, setStep] = useState(1)
   const [name, setName] = useState('')
   const [templateId, setTemplateId] = useState(withStructure[0]?.id || TEMPLATES[0].id)
@@ -393,7 +380,7 @@ const AINewLPWizard = ({ open, onClose, onCreate }) => {
             <div>
               <Label>Template</Label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-                {GALLERY_TEMPLATES.map((t) => {
+                {SKELETON_TEMPLATES.map((t) => {
                   const s = templatePreviewSurface(t, null)
                   const usable = Boolean(t.skeleton)
                   return (
