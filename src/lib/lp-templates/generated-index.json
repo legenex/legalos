@@ -1,0 +1,74 @@
+[
+  {
+    "slug": "editorial_investigation_v2",
+    "file": "LP01-Editorial-Investigation.html",
+    "tokens": 20,
+    "bytes": 36062
+  },
+  {
+    "slug": "human_recovery_story",
+    "file": "LP02-Human-Recovery-Story.html",
+    "tokens": 28,
+    "bytes": 37243
+  },
+  {
+    "slug": "authority_network",
+    "file": "LP03-Authority-Network.html",
+    "tokens": 33,
+    "bytes": 48881
+  },
+  {
+    "slug": "case_value_dossier",
+    "file": "LP04-Case-Value-Dossier.html",
+    "tokens": 29,
+    "bytes": 49512
+  },
+  {
+    "slug": "split_screen_direct",
+    "file": "LP05-Split-Screen-Direct.html",
+    "tokens": 19,
+    "bytes": 23924
+  },
+  {
+    "slug": "quiz_first",
+    "file": "LP06-Quiz-First.html",
+    "tokens": 21,
+    "bytes": 16919
+  },
+  {
+    "slug": "deadline_signal",
+    "file": "LP07-Deadline-Signal.html",
+    "tokens": 25,
+    "bytes": 24368
+  },
+  {
+    "slug": "insurer_vs_claimant",
+    "file": "LP08-Insurer-vs-Claimant.html",
+    "tokens": 22,
+    "bytes": 24192
+  },
+  {
+    "slug": "sixty_second_check",
+    "file": "LP09-60-Second-Check.html",
+    "tokens": 22,
+    "bytes": 12517
+  },
+  {
+    "slug": "answer_first",
+    "file": "LP10-Answer-First.html",
+    "tokens": 19,
+    "bytes": 14527
+  },
+  {
+    "slug": "case_type_router",
+    "file": "LP11-Case-Type-Router.html",
+    "tokens": 40,
+    "bytes": 29794
+  },
+  {
+    "slug": "network_authority",
+    "file": "LP12-Network-Authority.html",
+    "tokens": 43,
+    "bytes": 27817
+  }
+]
