@@ -27,7 +27,7 @@ const SAMPLE = ['Auto / Motorcycle Accident', 'Commercial / Semi Accident']
  * @param brand     whose colours to draw it in
  * @param progress  an override, when the deployment has chosen one
  */
-export const TemplatePreview = ({ spec, brand, progress = null, height = 132 }) => {
+export const TemplatePreview = ({ spec, brand, progress = null, height = 178 }) => {
   const shown = progress ? { ...spec, progress } : spec
   const theme = quizTheme(shown, brand)
   const s = theme.surface
@@ -49,9 +49,12 @@ export const TemplatePreview = ({ spec, brand, progress = null, height = 132 }) 
         // The miniature is a real render at real sizes, shrunk. Scaling rather
         // than re-specifying every size is what keeps it honest: a template
         // whose answers are oversized looks oversized here too.
-        transform: 'scale(0.82)',
+        // Scaled down further and given more room than the first pass: six
+        // of the twenty draw a rail, a tab row or a grid of tiles, and those
+        // were being cut off at exactly the part that distinguishes them.
+        transform: 'scale(0.7)',
         transformOrigin: 'top left',
-        width: '122%',
+        width: '143%',
       }}
     >
       <QuizProgress form={shown.progress} theme={theme} index={1} total={5} />

@@ -229,12 +229,14 @@ export const QuizProgress = ({ form, theme, index, total, labels = [], note }: P
     case 'tab_status':
       return (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: 2, flex: 1, minWidth: 0 }}>
+          {/* The tab row scrolls rather than pushing into the status chip
+              beside it, which is what it did at narrow widths. */}
+          <div style={{ display: 'flex', gap: 2, flex: 1, minWidth: 0, overflow: 'hidden' }}>
             {(labels.length ? labels : ['Incident', 'Medical', 'Legal', 'Contact']).map((l, i) => (
               <span key={i} style={{ padding: '6px 12px', fontFamily: fonts.utility, fontSize: 10.5, letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap', color: i === index ? s.text : s.muted, borderBottom: `2px solid ${i === index ? s.accentFill : 'transparent'}`, backgroundColor: i === index ? s.card : 'transparent' }}>{l}</span>
             ))}
           </div>
-          <span style={{ ...capsLabel, padding: '3px 8px', border: `1px solid ${s.line}`, borderRadius: 999 }}>{percent}% complete</span>
+          <span style={{ ...capsLabel, padding: '3px 8px', border: `1px solid ${s.line}`, borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap' }}>{percent}% complete</span>
         </div>
       )
 
