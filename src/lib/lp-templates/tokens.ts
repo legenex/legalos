@@ -30,9 +30,9 @@ const mix = (a: string, b: string, t: number): string => {
   const rb = parseHex(b)
   if (!ra || !rb) return a
   const k = Math.max(0, Math.min(1, t))
-  // Named rather than indexed: parseHex returns a tuple type, not an array.
+  // parseHex returns { r, g, b }, so the channels are read by name.
   const ch = (x: number, y: number): string => Math.round(x + (y - x) * k).toString(16).padStart(2, '0')
-  return `#${ch(ra[0], rb[0])}${ch(ra[1], rb[1])}${ch(ra[2], rb[2])}`
+  return `#${ch(ra.r, rb.r)}${ch(ra.g, rb.g)}${ch(ra.b, rb.b)}`
 }
 
 /**
